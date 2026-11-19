@@ -221,3 +221,86 @@ describe("反弹受压 / 回调有撑进入策略", () => {
     expect(buildPlans(a).flat.action).toBe("条件不满足，不做。");
   });
 });
+
+/** 所有打法（六种类型按真实会出现的分数 + 过渡态的两种打架）× 现价在 EMA20 下方 / EMA20 和 MA60 之间 / MA60 上方。 */
+function everyPlay(): { name: string; a: Analysis }[] {
+  const CASES: [string, number, "反弹受压" | "回调有撑" | null][] = [
+    ["横盘震荡", -0.4, null], ["横盘震荡", 0, null], ["横盘震荡", 0.4, null],
+    ["健康上涨", 0.8, null], ["极度超买", 0.8, null], ["健康下跌", -0.8, null], ["极度超卖", -0.8, null],
+    ["过渡态（排列或方向不一致）", -0.4, null], ["过渡态（排列或方向不一致）", 0, null], ["过渡态（排列或方向不一致）", 0.4, null],
+    ["过渡态（排列或方向不一致）", 0.4, "反弹受压"], ["过渡态（排列或方向不一致）", -0.4, "回调有撑"],
+  ];
+  return CASES.flatMap(([trend, score, conflict]) => [150.96, 195, 230].map((close) => {
+    const a = structuredClone(bear);
+    a.trend = trend;
+    a.close = close;
+    a.lean = { ...a.lean, score, conflict };
+    a.drops = a.drops.map((d) => (d.period === 20 ? { ...d, tomorrow: 190 } : d)); // MA20 抵扣价在 EMA20 和 MA60 之间
+    return { name: `${trend}${conflict ? `·${conflict}` : ""} ${score} @${close}`, a };
+  }));
+}
+const LABEL_ORDER = ["时机", "盈亏", "止损", "失效", "仓位"];
+
+describe("每份计划都有止损和失效（判断错了的标志）", () => {
+  for (const { name, a } of everyPlay()) {
+    test(name, () => {
+      const plans = buildPlans(a);
+      for (const k of ["flat", "holding", "profit", "loss"] as const) {
+        const items = plans[k].items;
+        const stop = items.find((i) => i.label === "止损");
+        const wrong = items.find((i) => i.label === "失效");
+        expect({ k, stop: !!stop, wrong: !!wrong }).toEqual({ k, stop: true, wrong: true });
+        expect(wrong!.text).toMatch(/\d+\.\d{2}/); // 失效要带价位
+        expect(items.some((i) => i.label === "离场")).toBe(false); // 硬离场就叫止损，不另起一条
+        // 顺序：时机 → 盈亏 → …… → 止损 → 失效 → 仓位
+        const idx = LABEL_ORDER.map((l) => items.findIndex((i) => i.label === l)).filter((i) => i >= 0);
+        expect(idx).toEqual([...idx].sort((x, y) => x - y));
+        expect(items.at(-1)!.label === "仓位" || items.at(-1)!.label === "失效").toBe(true);
+        expect(items.find((i) => i.label === "盈亏")?.text ?? "").not.toMatch(/离场条件|离场底线/);
+      }
+    });
+  }
+});
+
+describe("所有打法：价位相对现价说对", () => {
+  for (const { name, a } of everyPlay()) {
+    test(name, () => {
+      const p = buildPlans(a);
+      const o = buildOutlook(a);
+      const texts = [...Object.values(p).flatMap((x) => [x.action, ...x.items.map((i) => i.text)]), ...Object.values(o.effect).map((e) => e.text)];
+      for (const t of texts) {
+        for (const m of t.matchAll(/(站上|反弹到|高于|回踩到|跌破)[^。；，：]*?(\d+\.\d{2})/g)) {
+          const price = Number(m[2]);
+          const up = ["站上", "反弹到", "高于"].includes(m[1]);
+          expect({ t, ok: up ? price > a.close : price < a.close }).toEqual({ t, ok: true });
+        }
+      }
+    });
+  }
+});
+
+describe("止损和失效的内容来自 playbooks", () => {
+  const at = (trend: string, score: number) => {
+    const a = structuredClone(bear);
+    a.trend = trend;
+    a.lean = { ...a.lean, score, conflict: null };
+    return buildPlans(a);
+  };
+  const item = (p: ReturnType<typeof buildPlans>[keyof ReturnType<typeof buildPlans>], l: string) => p.items.find((i) => i.label === l)!.text;
+  test("横盘：止损是 20/60 死叉；空仓埋伏还要防假突破", () => {
+    const p = at("横盘震荡", 0);
+    expect(item(p.holding, "止损")).toContain("死叉");
+    expect(item(p.flat, "止损")).toContain("假突破");
+  });
+  test("健康上涨：碰到 MA60 不算，60 线组拐头或 20/60 双死叉才走", () => {
+    const s = item(at("健康上涨", 0.8).holding, "止损");
+    expect(s).toContain("双死叉");
+    expect(s).toContain("不算");
+  });
+  test("健康下跌：站上 MA20 抵扣价 + 20/60 双金叉，下跌判断失效；空仓进场后跌回 EMA20 下方就走", () => {
+    const p = at("健康下跌", -0.8);
+    expect(item(p.flat, "失效")).toContain("212.21");
+    expect(item(p.flat, "失效")).toContain("双金叉");
+    expect(item(p.flat, "止损")).toMatch(/跌回 EMA20/);
+  });
+});
