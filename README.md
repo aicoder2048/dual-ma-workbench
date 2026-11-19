@@ -11,7 +11,7 @@
 | 部分 | 位置 | 作用 |
 |---|---|---|
 | Skill | `.agents/skills/dual-moving-averages/` | 方法论（SKILL.md + references）和分析脚本 `dma_analyze.py`。Claude Code、Pi 都能直接用 |
-| 工作台 | `app/` | 三栏网页：左「自选股」、中「分析师」、右「均线参谋」。基于 Pi SDK（`@earendil-works/pi-coding-agent`） |
+| 工作台 | `app/` | 三栏网页：左「自选股」、中「分析师」、右「均线参谋」。AI 部分基于 Pi SDK |
 
 工作台的主要功能：
 
@@ -23,7 +23,7 @@
 
 ## 运行
 
-需要：[uv](https://docs.astral.sh/uv/)（Python 脚本）、[Bun](https://bun.sh)（工作台）、Pi（`npm i -g @earendil-works/pi-coding-agent`，并登录 Codex 订阅）。
+需要：[uv](https://docs.astral.sh/uv/)（Python 脚本）和 [Bun](https://bun.sh)（工作台）。
 
 ```bash
 cp .env.example .env          # 填入 POLYGON_API_KEY；没有也能用 yfinance
@@ -31,6 +31,27 @@ cd app && bun install
 bun start                     # http://127.0.0.1:5178
 bun test                      # 单元测试，不调用模型
 ```
+
+### 依赖 Pi 吗？
+
+只有 AI 功能依赖 Pi，而且依赖的是 Pi 的 SDK，不是 `pi` 命令行。
+
+| 部分 | 依赖 Pi | 说明 |
+|---|---|---|
+| Skill 和 Python 脚本 | 不依赖 | 可以单独运行；Claude Code、Pi 都能加载这个 skill |
+| 工作台：图表、三步报告、自选股、设置 | 不依赖 | 没有 Pi 也能打开页面，正常使用 |
+| 工作台：分析师、均线参谋、AI 生成的问法 | 依赖 Pi SDK | `bun install` 自动安装 `@earendil-works/pi-coding-agent`，不需要另外装 |
+
+用 Codex 订阅（默认模型）时，还要先登录一次：
+
+```bash
+npm i -g @earendil-works/pi-coding-agent   # 只为登录用
+pi                                         # 在 pi 里登录 Codex；授权存在 ~/.pi/agent/auth.json
+```
+
+选 DeepSeek 时不用登录 Codex，在 `.env` 里填 `DEEPSEEK_API_KEY` 就行。
+
+想换掉 Pi 的话，只需要重写 `app/src/agents/host.ts`（创建会话、转发流式事件、注册工具）。工具、提示词、引用校验和前端都和 harness 无关。
 
 只用 skill 的命令行脚本：
 
