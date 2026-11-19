@@ -102,3 +102,7 @@ uv run .agents/skills/dual-moving-averages/scripts/dma_analyze.py NVDA --source 
 .agents/skills/dual-moving-averages/   skill：SKILL.md、references/、scripts/、tests/
 app/                                   工作台（说明见 app/README.md）
 ```
+
+## 许可证
+
+[MIT](LICENSE)。只用于学习和复盘，不是投资建议。
