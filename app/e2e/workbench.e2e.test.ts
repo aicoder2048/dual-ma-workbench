@@ -132,7 +132,7 @@ describe("朗读", () => {
     await addAdvisorAnswer(page, "抵扣价是要扣掉的收盘价 [[S:article#2.3]]。");
     const btn = page.locator("#advisor-thread .speak");
     await btn.click();
-    await page.waitForFunction(() => document.querySelector("#advisor-thread .speak")?.textContent?.includes("停止"));
+    await page.waitForFunction(() => document.querySelector("#advisor-thread .speak")?.textContent?.includes("暂停"));
     await page.waitForFunction(() => document.querySelector("#advisor-thread .speak")?.textContent?.includes("朗读"), null, { timeout: 15_000 });
     expect(ttsCalls.at(-1)).toEqual({ text: "抵扣价是要扣掉的收盘价。", voice: "zh-CN-XiaoxiaoNeural" });
     expect(await btn.textContent()).not.toContain("失败");
@@ -465,6 +465,38 @@ describe("修正：抽屉条件、图表缩放", () => {
     await page.click(".range-btn[data-range='1w']");
     const week = (await range())!;
     expect(week.to - week.from).toBeLessThan(12);
+    await page.close();
+  }, 30_000);
+});
+
+describe("朗读：暂停和继续", () => {
+  test("朗读中可以暂停、继续、停止", async () => {
+    const { page, errors } = await open();
+    await addAdvisorAnswer(page, "这是一段要朗读的回答。");
+    const main = page.locator("#advisor-thread .speak");
+    const stop = page.locator("#advisor-thread .speak-stop");
+    const audioPaused = () => page.evaluate(async () => (await import("/speech.js")).speechState());
+    expect(await stop.isVisible()).toBe(false);
+    const at = (await main.boundingBox())!; // 点之前的位置
+    await main.click();
+    await page.waitForFunction(() => document.querySelector("#advisor-thread .speak")?.textContent?.includes("暂停"));
+    expect(await stop.isVisible()).toBe(true);
+    // 主按钮不挪位置：在开始朗读的同一个地方再点，就是暂停（不会点到停止）
+    const moved = (await main.boundingBox())!;
+    expect(Math.abs(moved.x + moved.width - (at.x + at.width))).toBeLessThan(2);
+    await page.mouse.click(at.x + at.width / 2, at.y + at.height / 2); // 暂停
+    expect(await main.textContent()).toContain("继续");
+    expect(await audioPaused()).toBe("paused");
+    await page.waitForTimeout(400);
+    expect(await audioPaused()).toBe("paused"); // 暂停期间不会自己往下播
+    await main.click(); // 继续
+    expect(await main.textContent()).toContain("暂停");
+    expect(await audioPaused()).toBe("playing");
+    await stop.click();
+    expect(await main.textContent()).toContain("朗读");
+    expect(await stop.isVisible()).toBe(false);
+    expect(await audioPaused()).toBe("idle");
+    expect(errors).toEqual([]);
     await page.close();
   }, 30_000);
 });

@@ -91,8 +91,8 @@ export async function initSettings({ onDataSourceChange }) {
     if (!btn) return;
     const id = `preview-${btn.dataset.preview}`;
     if (speakingId() === id) return stopSpeaking();
-    speak(id, PREVIEW[btn.dataset.preview], view.settings[btn.dataset.preview], (on, error) => {
-      btn.textContent = on ? "停止" : error ? "试听失败" : "试听";
+    speak(id, PREVIEW[btn.dataset.preview], view.settings[btn.dataset.preview], (state, error) => {
+      btn.textContent = state !== "idle" ? "停止" : error ? "试听失败" : "试听";
       if (error) $("sp-status").textContent = error;
     });
   });

@@ -3,7 +3,7 @@ import { installAttachments } from "./attach.js";
 import { enhance } from "./blocks.js";
 import { renderRich } from "./cite.js";
 import { currentSettings } from "./settings.js";
-import { speak, speakingId, stopSpeaking } from "./speech.js";
+import { pauseSpeaking, resumeSpeaking, speak, speakingId, speechState, stopSpeaking } from "./speech.js";
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -192,25 +192,31 @@ export class Panel {
 
 let speakSeq = 0;
 
-/** 每条回答右上角的「朗读」开关。声音按 agent 取设置里的选择。 */
+/** 每条回答右上角的朗读控件：朗读 → 暂停 ⇄ 继续，旁边「停止」。声音按 agent 取设置里的选择。 */
 function speakButton(agent, text) {
   const id = `say-${++speakSeq}`;
-  const btn = document.createElement("button");
-  btn.type = "button";
-  btn.className = "speak";
-  const paint = (on, error = null) => {
-    btn.setAttribute("aria-pressed", String(on));
-    btn.classList.toggle("failed", Boolean(error));
-    btn.textContent = on ? "■ 停止" : error ? "⚠ 朗读失败" : "▶ 朗读";
-    btn.title = on ? "停止朗读" : error ?? "朗读这条回答（微软 Edge 在线语音）";
+  const wrap = document.createElement("span");
+  wrap.className = "speak-ctl";
+  // 「停止」放在左边：主按钮（朗读 → 暂停 → 继续）一直在原位，在同一个地方再点一下就是暂停，不会误点到停止
+  wrap.innerHTML = `<button type="button" class="speak-stop" title="停止朗读" hidden>■ 停止</button><button type="button" class="speak"></button>`;
+  const [stop, main] = wrap.querySelectorAll("button");
+  const LOOK = { idle: ["▶ 朗读", "朗读这条回答（微软 Edge 在线语音）"], playing: ["⏸ 暂停", "暂停朗读"], paused: ["▶ 继续", "从暂停的地方接着读"] };
+  const paint = (state, error = null) => {
+    const [label, title] = LOOK[state];
+    main.textContent = error ? "⚠ 朗读失败" : label;
+    main.title = error ?? title;
+    main.setAttribute("aria-pressed", String(state !== "idle"));
+    main.classList.toggle("failed", Boolean(error));
+    stop.hidden = state === "idle";
   };
-  paint(false);
-  btn.addEventListener("click", () => {
-    if (speakingId() === id) return stopSpeaking();
+  paint("idle");
+  main.addEventListener("click", () => {
+    if (speakingId() === id) return speechState() === "playing" ? pauseSpeaking() : resumeSpeaking();
     const s = currentSettings();
     speak(id, text, agent === "analyst" ? s?.voiceAnalyst : s?.voiceAdvisor, paint);
   });
-  return btn;
+  stop.addEventListener("click", () => speakingId() === id && stopSpeaking());
+  return wrap;
 }
 
 function renderAssistant(el, body, entry, agent) {

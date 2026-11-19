@@ -40,15 +40,20 @@ export function speechChunks(text, max = 160) {
 }
 
 // ---------- 浏览器：一次只播一段回答 ----------
-let current = null; // { id, stop }
+// 一次朗读的状态：idle（没在读）→ playing ⇄ paused → idle；出错也回到 idle 并带上原因。
+let current = null; // { id, stop, pause, resume, state }
 
-/** 正在播的回答 id（没有则 null）。 */
+/** 正在读（或暂停中）的回答 id，没有则 null。 */
 export const speakingId = () => current?.id ?? null;
+/** 当前朗读状态：idle / playing / paused。 */
+export const speechState = () => current?.state ?? "idle";
 
 export function stopSpeaking() {
   current?.stop();
   current = null;
 }
+export const pauseSpeaking = () => current?.pause();
+export const resumeSpeaking = () => current?.resume();
 
 /** 把失败原因说成人话。404 = 页面比服务端新：服务端还没有语音接口。 */
 async function ttsError(res) {
@@ -57,14 +62,15 @@ async function ttsError(res) {
 }
 
 /**
- * 朗读一段回答。onState(playing, error) 在开始、结束（含被打断）时回调；出错时 error 是原因。
- * 下一段在当前段播放时就去取，段与段之间几乎没有停顿。
+ * 朗读一段回答。onState(state, error) 在状态变化时回调：playing / paused / idle；出错时 idle + 原因。
+ * 下一段在当前段播放时就去取，段与段之间几乎没有停顿。暂停时还没开始播的段，等继续再播。
  */
 export function speak(id, markdown, voice, onState = () => {}) {
   stopSpeaking();
   const chunks = speechChunks(speechText(markdown));
   if (!chunks.length) return;
   let stopped = false;
+  let wake = null; // 暂停时，等待"继续"的回调
   const audio = new Audio();
   const urls = [];
   const fetchChunk = (i) => fetch("/api/tts", { method: "POST", body: JSON.stringify({ text: chunks[i], voice }) })
@@ -74,17 +80,30 @@ export function speak(id, markdown, voice, onState = () => {}) {
       urls.push(url);
       return url;
     });
+  const set = (state, error = null) => { me.state = state; onState(state, error); };
   const me = {
     id,
+    state: "playing",
     stop(error = null) {
       stopped = true;
       audio.pause();
+      wake?.();
       urls.forEach((u) => URL.revokeObjectURL(u));
-      onState(false, error);
+      set("idle", error);
+    },
+    pause() {
+      if (me.state !== "playing") return;
+      audio.pause();
+      set("paused");
+    },
+    resume() {
+      if (me.state !== "paused") return;
+      set("playing");
+      if (wake) { const w = wake; wake = null; w(); } else if (audio.src) audio.play();
     },
   };
   current = me;
-  onState(true);
+  set("playing");
 
   (async () => {
     let next = fetchChunk(0);
@@ -93,11 +112,13 @@ export function speak(id, markdown, voice, onState = () => {}) {
       if (stopped) return;
       next = i + 1 < chunks.length ? fetchChunk(i + 1) : null;
       next?.catch(() => {}); // 出错在轮到它时再处理
+      if (me.state === "paused") await new Promise((ok) => { wake = ok; }); // 段与段之间暂停：等继续
+      if (stopped) return;
       audio.src = url;
       await audio.play();
       await new Promise((ok, fail) => { audio.onended = ok; audio.onerror = () => fail(new Error("音频播放失败")); });
     }
-    if (current === me) { current = null; onState(false); }
+    if (current === me) { current = null; set("idle"); }
   })().catch((err) => {
     if (current === me) { current = null; me.stop(err.message); }
   });
