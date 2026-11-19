@@ -226,6 +226,8 @@ def drop_off(df: pd.DataFrame, n: int) -> dict:
         "count": len(future),
         "first_low": first_low,
         "ma_flat_change_pct": (ma_flat / ma_now - 1) * 100,
+        # 未来每天要扣的那根 K 线（日期 + 收盘价），网页画底扣价小图用
+        "path": [{"date": str(d.date()), "close": float(v)} for d, v in future.items()],
     }
 
 

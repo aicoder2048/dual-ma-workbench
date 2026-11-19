@@ -25,10 +25,16 @@
 **Goal**: 报告改成图 + 表 + 短句；脚本输出底扣价路径（日期 + 价格）。
 **Success Criteria**: 每个图有读数或表格；报告句子 ≤ 40 字（不计引用）；引用全部通过校验。
 **Tests**: pytest（底扣价路径与 drop_off 一致）；bun test（STE 句长、推演结果、引用校验）。
-**Status**: Not Started
+**Status**: Complete
 
 ## Stage C: agent 回答的 STE 写法与可视化块
 **Goal**: 提示词加入 STE 规则和可视化词汇；前端渲染表格、Mermaid、dma-chart、dma-drops。
 **Success Criteria**: 真实提问时回答出现表格或图，引用仍全部通过。
 **Tests**: 代码块解析单测；一次真实对话冒烟。
+**Status**: Not Started
+
+## Stage D: 配置（用户 2026-11-18 追加）
+**Goal**: 设置面板：大模型（默认 openai-codex/gpt-6.1-sol，可选 deepseek/deepseek-flash，标明按量计费）；市场数据（默认 Polygon/Massive，可选 yfinance）。
+**Success Criteria**: 切换后新的提问用新模型、新的取数用新数据源；设置存在 data/settings.json，重启后保留；anthropic/* 仍被拒绝。
+**Tests**: 模型白名单单测；设置读写与校验单测；Analyzer 带数据源参数、缓存按数据源区分。
 **Status**: Not Started

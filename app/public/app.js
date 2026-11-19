@@ -4,6 +4,7 @@ import { createChart } from "./chart.js";
 import { installCitationHandlers, loadSourceIndex, renderInline } from "./cite.js";
 import { initAsofInput, initSplitters } from "./layout.js";
 import { initSelection } from "./selection.js";
+import { installTips, stepVisuals } from "./viz.js";
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -159,8 +160,9 @@ export function showAnalysis(data, asof = null) {
   const v = $("verdict");
   v.hidden = false;
   v.style.setProperty("--stance", `var(--${r.stance === "bullish" ? "up" : r.stance === "bearish" ? "down" : "neutral"})`);
-  v.innerHTML = `<b></b><p>规则初判（脚本阈值算的，需结合图形复核）。点标签可以看出处或数据。</p>`;
-  renderInline(v.querySelector("b"), `${SHORT_TREND(a.trend)} [[D:趋势初判]] → ${a.strategy} [[S:article#4]]`, data.facts);
+  v.innerHTML = `<b></b><p>规则初判：脚本按阈值算出，要结合图形复核。点标签看出处或数据。</p>`;
+  const play = r.visual.trendTable.find((row) => row.current)?.play ?? a.strategy;
+  renderInline(v.querySelector("b"), `${SHORT_TREND(a.trend)} [[D:趋势初判]] → ${play} [[S:article#4]]`, data.facts);
 
   chartApi?.setData(data.chart);
 
@@ -171,8 +173,10 @@ export function showAnalysis(data, asof = null) {
     const sec = document.createElement("section");
     sec.className = "card step";
     sec.dataset.step = s.key;
-    sec.innerHTML = `<h2>${i + 1}. ${s.title} <span>${s.subtitle}</span></h2><ul></ul>`;
-    const ul = sec.querySelector("ul");
+    sec.innerHTML = `<div class="step-head"><span class="no">${i + 1}</span><h2>${s.title}</h2><span>${s.subtitle}</span></div>
+      <div class="step-viz">${stepVisuals(s.key, r.visual)}</div>
+      <p class="points-title">要点（规则生成，点标签看出处）</p><ul class="points"></ul>`;
+    const ul = sec.querySelector(".points");
     for (const item of s.items) {
       const li = document.createElement("li");
       renderInline(li, item, data.facts);
@@ -273,6 +277,7 @@ function takeSelection() { const s = pendingSelection; setSelection(null); retur
 // ---------- 启动 ----------
 async function main() {
   initTheme();
+  installTips();
   initSplitters();
   asofUi = initAsofInput();
   await loadSourceIndex(); // 先有原文目录，再回放对话记录，否则原文引用会被误判为找不到

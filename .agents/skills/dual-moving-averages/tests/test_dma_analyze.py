@@ -87,3 +87,11 @@ def test_json_analysis_matches_markdown_numbers(json_out, tmp_path):
     assert a["trend"] in dma.STRATEGY
     assert isinstance(a["lines"][0]["above"], bool)
     assert [d["period"] for d in a["drops"]] == list(dma.PERIODS)
+
+
+def test_drop_off_path_lists_future_deductions(rising):
+    # 未来第 k 天扣的是倒数第 n-k+1 根；路径长度 = 推演天数，均值与 drop_off 一致
+    d = dma.drop_off(rising, 20)
+    assert len(d["path"]) == min(20, dma.PROJECT_DAYS)
+    assert d["path"][0] == {"date": str(rising.index[-20].date()), "close": 181.0}
+    assert sum(p["close"] for p in d["path"]) / len(d["path"]) == pytest.approx(d["mean"])

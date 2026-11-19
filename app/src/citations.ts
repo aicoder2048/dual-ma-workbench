@@ -6,6 +6,7 @@
  *
  * 服务端在回答结束后调用 validateCitations，把不存在的编号标出来，前端显示成红色。
  */
+import { project } from "./report.ts";
 import type { SourceLibrary } from "./sources.ts";
 
 export type CitationKind = "S" | "D";
@@ -50,6 +51,7 @@ export interface Analysis {
   drops: {
     period: number; tomorrow: number; mean: number; max: number; below: number; count: number;
     first_low: number | null; ma_flat_change_pct: number; direction: string;
+    path: { date: string; close: number }[];
   }[];
 }
 
@@ -95,6 +97,13 @@ export function buildFacts(a: Analysis): Facts {
     put(`扣${n}.价平变化`, `价格不变时 ${d.count} 天后 MA${n} 的变化`, pct(d.ma_flat_change_pct));
     put(`扣${n}.首次扣低`, `MA${n} 第几天首次扣到低于现价`, d.first_low ? `第 ${d.first_low} 天` : `${n} 天内都不会`);
   }
+  // 价格保持不变时的推演（MA 由底扣价推出；EMA 用精确公式）
+  const p = project(a);
+  for (const [k, v] of [...Object.entries(p.ma), ...Object.entries(p.ema)]) {
+    put(`推演.${k}`, `价格不变 ${p.days} 天后的 ${k}`, `${f2(v.now)} → ${f2(v.after)}`);
+  }
+  put("推演.排列.MA", `价格不变 ${p.days} 天后的 MA 排列`, `${p.arrNow.ma} → ${p.arrAfter.ma}`);
+  put("推演.排列.EMA", `价格不变 ${p.days} 天后的 EMA 排列`, `${p.arrNow.ema} → ${p.arrAfter.ema}`);
   return facts;
 }
 
