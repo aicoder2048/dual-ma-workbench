@@ -53,10 +53,11 @@ beforeAll(async () => {
   browser = await chromium.launch({ channel: "chrome", args: ["--autoplay-policy=no-user-gesture-required"] });
 });
 
+// 本机 Chrome 关闭要 10 秒左右，超过 bun 钩子默认的 5 秒
 afterAll(async () => {
   await browser?.close();
   server?.stop(true);
-});
+}, 30_000);
 
 /** 打开工作台，等模糊判断卡片出来。errors 收集页面里没接住的异常。 */
 async function open(setup?: (p: Page) => Promise<void>) {
@@ -74,7 +75,7 @@ async function addAdvisorAnswer(page: Page, text: string) {
   await page.evaluate(async (text) => {
     const { panels } = await import("/app.js");
     panels.advisor.history([
-      { role: "user", text: "底扣价是什么？" },
+      { role: "user", text: "抵扣价是什么？" },
       { role: "assistant", text, tools: [], checks: [], book: null },
     ]);
   }, text);
@@ -112,12 +113,12 @@ describe("设置", () => {
 describe("朗读", () => {
   test("点「朗读」：用鸿雁的声音读去掉引用的文字，读完按钮复原", async () => {
     const { page, errors } = await open();
-    await addAdvisorAnswer(page, "底扣价是要扣掉的收盘价 [[S:article#2.3]]。");
+    await addAdvisorAnswer(page, "抵扣价是要扣掉的收盘价 [[S:article#2.3]]。");
     const btn = page.locator("#advisor-thread .speak");
     await btn.click();
     await page.waitForFunction(() => document.querySelector("#advisor-thread .speak")?.textContent?.includes("停止"));
     await page.waitForFunction(() => document.querySelector("#advisor-thread .speak")?.textContent?.includes("朗读"), null, { timeout: 15_000 });
-    expect(ttsCalls.at(-1)).toEqual({ text: "底扣价是要扣掉的收盘价。", voice: "zh-CN-XiaoxiaoNeural" });
+    expect(ttsCalls.at(-1)).toEqual({ text: "抵扣价是要扣掉的收盘价。", voice: "zh-CN-XiaoxiaoNeural" });
     expect(await btn.textContent()).not.toContain("失败");
     expect(errors).toEqual([]);
     await page.close();
