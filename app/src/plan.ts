@@ -11,7 +11,10 @@ import type { Analysis } from "./citations.ts";
 export type Position = "flat" | "holding";
 export interface PlanItem { label: string; text: string }
 export interface Plan { action: string; items: PlanItem[] }
-export interface Outlook { verdict: string; change: string; forYou: Record<Position, string> }
+export type EffectTag = "支持" | "调整时机" | "不变";
+/** 看方向对上面策略的影响：支持原做法、调整执行时机，或方向不明、策略不变。 */
+export interface Effect { tag: EffectTag; text: string }
+export interface Outlook { verdict: string; change: string; effect: Record<Position, Effect> }
 
 const f2 = (x: number) => x.toFixed(2);
 
@@ -109,10 +112,19 @@ const PLAYS: Record<string, Record<Position, (l: L) => Plan>> = {
 
 const short = (t: string) => t.replace("（排列或方向不一致）", "");
 
-export function buildPlans(a: Analysis): Record<Position, Plan> {
+/** 只按趋势类型定的打法（还没加看方向给的时机）。 */
+function basePlans(a: Analysis): Record<Position, Plan> {
   const play = PLAYS[short(a.trend)] ?? PLAYS["过渡态"];
   const l = levels(a);
   return { flat: play.flat(l), holding: play.holding(l) };
+}
+
+/** 打法 + 第一行"时机"：来自看方向（buildOutlook 的 effect），两处说的是同一句话。 */
+export function buildPlans(a: Analysis): Record<Position, Plan> {
+  const base = basePlans(a);
+  const { effect } = buildOutlook(a);
+  const withTiming = (pos: Position): Plan => ({ ...base[pos], items: [{ label: "时机", text: effect[pos].text }, ...base[pos].items] });
+  return { flat: withTiming("flat"), holding: withTiming("holding") };
 }
 
 /** 抵扣价路径里第一次高于现价是第几天（1 起）。偏多时，从那天起回调容易让 MA 拐头。 */
@@ -123,6 +135,8 @@ const firstHigh = (path: { close: number }[], close: number) => {
 
 export function buildOutlook(a: Analysis): Outlook {
   const l = levels(a);
+  const base = basePlans(a);
+  const act = (pos: Position) => `「${base[pos].action.replace(/。$/, "")}」`;
   const d20 = a.drops.find((d) => d.period === 20)!;
   const after = `价格不变 ${a.lean.after.days} 天后，模糊判断是${a.lean.after.label}。`;
   if (a.lean.score <= -0.25) {
@@ -133,10 +147,11 @@ export function buildOutlook(a: Analysis): Outlook {
         : `逆风：价格不涨的话，MA20 还要向下 ${turn - 1} 天。${after}`,
       change: turn === null ? `想提前转向，${BUY_TURN(l)}`
         : `第 ${turn} 天起 MA20 扣低值，价格不跌就会拐头向上。更早的信号是收盘站上 EMA20 ${l.p(l.ema20)}。`,
-      forYou: {
-        flat: turn === null ? `进场条件短期内不会出现，不用盯盘。收盘站上 ${f2(l.ema20)} 时再来看。`
-          : `第 ${turn} 天前不用急。之后看 MA20 能不能拐头向上。`,
-        holding: `逆风期间，反弹到 EMA20 ${f2(l.ema20)} 附近是减仓机会，不要指望很快涨回来。`,
+      effect: {
+        flat: { tag: "支持", text: turn === null
+          ? `支持${act("flat")}：20 天内进场条件都不会出现，不用盯盘；收盘站上 ${f2(l.ema20)} 再来看。`
+          : `支持${act("flat")}：第 ${turn} 天前不会转向，不用急；之后看 MA20 能不能拐头向上。` },
+        holding: { tag: "支持", text: `支持${act("holding")}：逆风还会持续，反弹到 EMA20 ${f2(l.ema20)} 附近就执行，不要等涨回成本。` },
       },
     };
   }
@@ -148,17 +163,21 @@ export function buildOutlook(a: Analysis): Outlook {
         : `顺风：未来 ${high - 1} 天 MA20 扣低值，价格不跌就继续向上。${after}`,
       change: high === null ? `要转向，收盘得先跌破 EMA20 ${l.p(l.ema20)}，再跌破 MA20 抵扣价 ${l.p(l.drop20)}。`
         : `第 ${high} 天起 MA20 扣高值，那时一回调就容易拐头向下。先盯 EMA20 ${l.p(l.ema20)}。`,
-      forYou: {
-        flat: high === null ? `回调到 MA20 ${f2(l.ma20)} 附近有支撑，是等回调买的窗口。`
-          : `第 ${high} 天前回调有 MA20 托着，是买点窗口；之后再买要更小心。`,
-        holding: high === null ? `拿着。收盘跌破 EMA20 ${f2(l.ema20)} 才需要警惕。`
-          : `拿着。第 ${high} 天后回调更容易破位，盯住 EMA20 ${f2(l.ema20)}。`,
+      effect: high === null ? {
+        flat: { tag: "支持", text: `支持${act("flat")}：未来 ${d20.path.length} 天回调都有 MA20 托着，回踩 ${f2(l.ma20)} 附近就是机会。` },
+        holding: { tag: "支持", text: `支持${act("holding")}：顺风还在，收盘跌破 EMA20 ${f2(l.ema20)} 才需要警惕。` },
+      } : {
+        flat: { tag: "调整时机", text: `调整时机：第 ${high} 天前回调有 MA20 托着，是买点窗口；之后再买要更小心。` },
+        holding: { tag: "调整时机", text: `调整时机：第 ${high} 天后 MA20 扣高值，回调更容易破位；那时把离场价收紧到 EMA20 ${f2(l.ema20)}。` },
       },
     };
   }
   return {
     verdict: `没有明确方向：几条线方向不一致。${after}`,
     change: a.lean.flips[0] ? `${a.lean.flips[0].text}，方向才会清楚。` : "等均线理顺，方向才会清楚。",
-    forYou: { flat: "不做，等方向出来。", holding: "不加仓，减到心态稳得住。" },
+    effect: {
+      flat: { tag: "不变", text: `方向不明，${act("flat")}不变，等方向出来。` },
+      holding: { tag: "不变", text: `方向不明，${act("holding")}不变：不加仓，减到心态稳得住。` },
+    },
   };
 }

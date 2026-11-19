@@ -359,7 +359,7 @@ describe("三步报告：每一步先给结论", () => {
   test("定策略：空仓 / 持仓切换，做法跟着变；看方向的「对你」也跟着变；刷新后记住", async () => {
     const { page } = await open();
     const plan = page.locator('[data-step="strategy"] .answer');
-    const forYou = page.locator('[data-step="direction"] .for-you');
+    const forYou = page.locator('[data-step="direction"] .effect');
     expect(await plan.textContent()).toContain("不抢反弹");
     const flatForYou = await forYou.textContent();
     await page.click('[data-pos="holding"]');
@@ -429,3 +429,42 @@ describe("抽屉：总结和 K 线图滚上去以后还能拉回来", () => {
 });
 
 
+
+describe("修正：抽屉条件、图表缩放", () => {
+  test("总结一滚出视野就出现提示条（K 线图还露着也一样）", async () => {
+    const { page } = await open();
+    await page.waitForSelector("#chart canvas");
+    await page.evaluate(() => {
+      const s = document.getElementById("center-scroll")!;
+      const v = document.getElementById("verdict")!;
+      s.scrollTop = v.offsetTop + v.offsetHeight + 10; // 刚好滚过总结
+    });
+    await page.waitForSelector("#peek", { state: "visible" });
+    expect(await page.evaluate(() => {
+      const c = document.querySelector(".chart-card")!.getBoundingClientRect();
+      const s = document.getElementById("center-scroll")!.getBoundingClientRect();
+      return c.bottom > s.top; // K 线图还在视野里
+    })).toBe(true);
+    await page.close();
+  }, 30_000);
+
+  test("⌘ 或 Ctrl + 滚轮缩放图表；「1 周」只看最近 5 根左右", async () => {
+    const { page } = await open();
+    await page.waitForSelector("#chart canvas");
+    await page.evaluate(() => document.getElementById("chart")!.scrollIntoView({ block: "start" }));
+    const range = () => page.evaluate(async () => (await import("/app.js")).getChart().chart.timeScale().getVisibleLogicalRange());
+    const before = (await range())!;
+    const box = (await page.locator("#chart").boundingBox())!;
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 3);
+    await page.keyboard.down("Control");
+    await page.mouse.wheel(0, -400);
+    await page.keyboard.up("Control");
+    await page.waitForTimeout(200);
+    const zoomed = (await range())!;
+    expect(zoomed.to - zoomed.from).toBeLessThan(before.to - before.from);
+    await page.click(".range-btn[data-range='1w']");
+    const week = (await range())!;
+    expect(week.to - week.from).toBeLessThan(12);
+    await page.close();
+  }, 30_000);
+});

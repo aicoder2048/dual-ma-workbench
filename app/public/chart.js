@@ -16,7 +16,7 @@ export function createChart(box, legendEl) {
     rightPriceScale: { scaleMargins: { top: 0.06, bottom: 0.24 } },
     timeScale: { rightOffset: 4 },
     crosshair: { mode: 0 },
-    // 滚轮只滚页面，不缩放图表（误触太多）；按住拖动平移、拖价格轴缩放、触控板双指捏合仍可用
+    // 滚轮只滚页面，不缩放图表（误触太多）；缩放用 ⌘/Ctrl + 滚轮（见下方 wheel 处理），按住拖动平移
     handleScroll: { mouseWheel: false, pressedMouseMove: true, horzTouchDrag: true, vertTouchDrag: false },
     handleScale: { mouseWheel: false, pinch: true, axisPressedMouseMove: true },
   });
@@ -79,7 +79,8 @@ export function createChart(box, legendEl) {
   chart.subscribeCrosshairMove((param) => showReadout(param.time));
 
   // ---------- 范围按钮：固定时长看斜率（文章 2.4：短期看 1 年） ----------
-  const RANGES = [["6m", "半年", 6], ["1y", "1 年", 12], ["all", "全部", null]];
+  // [键, 按钮, 往回看几天]
+  const RANGES = [["1w", "1 周", 7], ["1m", "1 月", 31], ["6m", "半年", 183], ["1y", "1 年", 365], ["all", "全部", null]];
   let rangeKey = "1y";
   const tools = document.createElement("div");
   tools.className = "chart-tools";
@@ -93,11 +94,11 @@ export function createChart(box, legendEl) {
   const applyRange = () => {
     tools.querySelectorAll(".range-btn").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.range === rangeKey)));
     if (!data?.candles.length) return;
-    const months = RANGES.find(([k]) => k === rangeKey)[2];
+    const days = RANGES.find(([k]) => k === rangeKey)[2];
     const last = data.candles.at(-1).time;
-    if (!months) { chart.timeScale().fitContent(); return; }
+    if (!days) { chart.timeScale().fitContent(); return; }
     const from = new Date(last);
-    from.setMonth(from.getMonth() - months);
+    from.setDate(from.getDate() - days);
     const first = data.candles.find((c) => c.time >= from.toISOString().slice(0, 10))?.time ?? data.candles[0].time;
     chart.timeScale().setVisibleRange({ from: first, to: last });
   };
@@ -107,6 +108,18 @@ export function createChart(box, legendEl) {
     if (b.dataset.range !== "reset") rangeKey = b.dataset.range;
     applyRange();
   });
+
+  // ---------- ⌘ / Ctrl + 滚轮缩放（触控板捏合也会带 ctrlKey）；只滚轮就让页面滚 ----------
+  box.addEventListener("wheel", (e) => {
+    if (!(e.ctrlKey || e.metaKey)) return;
+    e.preventDefault();
+    const ts = chart.timeScale();
+    const r = ts.getVisibleLogicalRange();
+    if (!r) return;
+    const span = r.to - r.from;
+    const next = Math.min(Math.max(span * Math.exp(e.deltaY / 300), 5), (data?.candles.length ?? 500) + 10);
+    ts.setVisibleLogicalRange({ from: r.to - next, to: r.to }); // 以最右边（最新一天）为锚
+  }, { passive: false });
 
   // ---------- 门槛线：模糊判断里"什么会改变判断"的价位 ----------
   let levels = [];
@@ -132,8 +145,9 @@ export function createChart(box, legendEl) {
   help.hidden = true;
   help.innerHTML = `
     <p><b>悬停读数</b>：鼠标停在某天，上方显示那天的收盘和 6 条线。用来看"那次回调碰到了哪条线、守没守住"。</p>
-    <p><b>固定范围</b>（半年 / 1 年 / 全部）：均线的斜率（几点钟方向）只有在同样长的时间里比才不失真，所以要固定时长、用对数坐标。
-      <b>1 年</b>（默认）判断现在是几点钟、属于哪种趋势；<b>全部</b>看大周期和横盘有多长（"横有多长，竖有多高"）；<b>半年</b>看最近的细节，比如这次回调比上次深还是浅。</p>
+    <p><b>缩放</b>：按住 ⌘（或 Ctrl）滚轮，或触控板双指捏合，以最新一天为准放大缩小；按住拖动可以左右平移。只滚轮时滚动的是页面。</p>
+    <p><b>固定范围</b>（1 周 / 1 月 / 半年 / 1 年 / 全部）：均线的斜率（几点钟方向）只有在同样长的时间里比才不失真，所以要固定时长、用对数坐标。
+      <b>1 年</b>（默认）判断现在是几点钟、属于哪种趋势；<b>全部</b>看大周期和横盘有多长（"横有多长，竖有多高"）；<b>半年</b>看最近的细节，比如这次回调比上次深还是浅；<b>1 周、1 月</b>看最近几根 K 线怎么走。</p>
     <p><b>画线</b>：点「画线」，再点图上一处，就在那个价位画一条横线，刷新后还在。常画的是前高、前低、自己的成本价、"跌破就重新看"的价位。
       图上的<b>虚线门槛线</b>是自动画的：价格过了它，20 线组才会拐头（先 EMA20，后 MA20），判断才值得改。</p>
     <p><b>看量</b>：底部的量柱，黄色是超过 50 日均量 2 倍的大量。看两种情况：横盘末期突然放量，是要变盘的信号；

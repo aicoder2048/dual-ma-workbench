@@ -23,7 +23,7 @@ export function initDrawer() {
     close();
     const el = targets[key]();
     const placeholder = document.createElement("div");
-    placeholder.style.height = `${el.offsetHeight}px`;
+    placeholder.style.height = `${el.getBoundingClientRect().height}px`; // 带小数，收起后滚动位置一点不差
     el.replaceWith(placeholder);
     body.appendChild(el);
     drawer.style.maxHeight = `${scroller.clientHeight - drawer.offsetTop - 8}px`; // 不盖住下面的输入区
@@ -39,15 +39,13 @@ export function initDrawer() {
   drawer.querySelector(".drawer-close").addEventListener("click", close);
   document.addEventListener("keydown", (e) => e.key === "Escape" && close());
 
-  // 两块都滚出了视野（在上方）才显示提示条。滚动时每帧最多算一次。
+  // 总结（第一块）一滚出视野就显示提示条；K 线图还露着也一样，用户随时能把两块拉回来。滚动时每帧最多算一次。
   let queued = false;
   const update = () => {
     queued = false;
-    const top = scroller.getBoundingClientRect().top;
-    const gone = Object.values(targets).every((get) => {
-      const el = get();
-      return el.isConnected && scroller.contains(el) && el.offsetHeight > 0 && el.getBoundingClientRect().bottom <= top + 1;
-    });
+    const v = targets.verdict();
+    const gone = scroller.contains(v) && v.offsetHeight > 0
+      && v.getBoundingClientRect().bottom <= scroller.getBoundingClientRect().top + 1;
     peek.hidden = !open && !gone;
   };
   scroller.addEventListener("scroll", () => {

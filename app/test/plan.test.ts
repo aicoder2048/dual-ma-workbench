@@ -48,12 +48,25 @@ describe("看方向：给出结论，而不只是图", () => {
     expect(o.verdict).toContain("逆风");
     expect(o.verdict).toContain("20 天");
     expect(o.change).toContain("183.08");
-    expect(o.forYou.flat).toMatch(/不用|等/);
+    expect(o.effect.flat.tag).toBe("支持");
+    expect(o.effect.flat.text).toContain("不抢反弹");
   });
   test("偏多、MA20 第 5 天开始扣高值：顺风还有 4 天，之后回调容易拐头", () => {
     const o = buildOutlook(bullish());
     expect(o.verdict).toContain("顺风");
     expect(o.change).toContain("第 5 天");
-    expect(o.forYou.holding).toBeTruthy();
+    expect(o.effect.flat.tag).toBe("调整时机");
+    expect(o.effect.flat.text).toContain("第 5 天");
+  });
+});
+
+describe("看方向和定策略互相引用", () => {
+  test("每份计划都带一行「时机（来自看方向）」，和看方向的影响一致", () => {
+    const plans = buildPlans(bear);
+    const o = buildOutlook(bear);
+    for (const pos of ["flat", "holding"] as const) {
+      const timing = plans[pos].items.find((i) => i.label === "时机");
+      expect(timing?.text).toBe(o.effect[pos].text);
+    }
   });
 });

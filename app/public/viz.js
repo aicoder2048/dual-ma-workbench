@@ -266,7 +266,7 @@ export function planAnswer(plans, p, close) {
       <div class="pos-row"><span class="ak">你现在</span><div class="pos-seg" role="group" aria-label="有没有仓位">${seg}</div></div>
       ${cost}
       <b class="big">${esc(plan.action)}</b>
-      <ul class="plan-items">${plan.items.map((i) => `<li><span class="pl">${esc(i.label)}</span>${esc(i.text)}</li>`).join("")}</ul>
+      <ul class="plan-items">${plan.items.map((i) => `<li${i.label === "时机" ? ' class="timing"' : ""}><span class="pl">${i.label === "时机" ? "时机 · 来自看方向" : esc(i.label)}</span>${esc(i.text)}</li>`).join("")}</ul>
     </div>`;
 }
 
@@ -275,7 +275,7 @@ export function outlookAnswer(o, pos) {
   return `<div class="answer">
       <span class="ak">结论</span><b class="big">${esc(o.verdict)}</b>
       <p><span class="pl">会变吗</span>${esc(o.change)}</p>
-      <p class="for-you"><span class="pl">对你（${POS[pos]}）</span>${esc(o.forYou[pos])}</p>
+      <p class="effect"><span class="pl">对上面的策略（${POS[pos]}）：${esc(o.effect[pos].tag)}</span>${esc(o.effect[pos].text)}</p>
     </div>`;
 }
 
