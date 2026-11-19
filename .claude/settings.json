@@ -1,0 +1,6 @@
+{
+  "enabledPlugins": {
+    "watch@claude-video": true,
+    "mattpocock-skills@claude-plugins-official": true
+  }
+}

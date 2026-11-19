@@ -1,0 +1,12 @@
+# secrets
+.env
+.env.*
+.claude/settings.local.json
+
+# python
+__pycache__/
+*.pyc
+.venv/
+
+# os
+.DS_Store
