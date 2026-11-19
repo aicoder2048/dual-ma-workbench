@@ -111,7 +111,7 @@ describe("每种趋势类型的浮盈 / 浮亏都不自相矛盾", () => {
   };
   const txt = (p: { action: string; items: { text: string }[] }) => [p.action, ...p.items.map((i) => i.text)].join("｜");
   // 只遍历真实数据里会出现的组合：classify 只在分数 ≥ 0.6 时给上涨一侧、≤ -0.6 时给下跌一侧，
-  // 横盘和过渡态可以配任何分数（看方向分三档：≤ -0.25、中间、≥ 0.25）。打架只出现在过渡态。
+  // 横盘和过渡态可以配任何分数（看方向分三档：≤ -0.25、中间、≥ 0.25）。打架的打法只用在过渡态。
   const SCORES: Record<string, number[]> = { 健康上涨: [0.8], 极度超买: [0.8], 健康下跌: [-0.8], 极度超卖: [-0.8] };
   const CASES: [string, number, "反弹受压" | "回调有撑" | null][] = [
     ...TRENDS.flatMap((t) => (SCORES[t] ?? [-0.4, 0, 0.4]).map((s): [string, number, null] => [t, s, null])),
@@ -189,6 +189,31 @@ describe("反弹受压 / 回调有撑进入策略", () => {
     expect(sell).toContain("现在");
     expect(sell).not.toMatch(/^反弹到/);
     expect(p.holding.items[0].text).toContain("现在");
+  });
+  test("横盘带冲突：还按横盘打（页面上的趋势类型也是横盘）", () => {
+    const a = conflict("回调有撑");
+    a.trend = "横盘震荡";
+    expect(buildPlans(a).flat.action).toBe("基本不做，等埋伏信号。");
+    expect(buildOutlook(a).effect.flat.text).not.toContain("回调");
+  });
+  test("价位相对现价说对：「站上 / 反弹到 X」的 X 在现价上方，「回踩到 / 跌破 X」的 X 在现价下方", () => {
+    // MA60 212.35、EMA60 203.13、EMA20 183.08：现价分别在 EMA20 下方、EMA20 和 MA60 之间、MA60 上方
+    for (const kind of ["反弹受压", "回调有撑"] as const) for (const close of [150.96, 195, 230]) {
+      const a = conflict(kind);
+      a.close = close;
+      a.drops = a.drops.map((d) => (d.period === 20 ? { ...d, tomorrow: 190 } : d)); // MA20 抵扣价在 EMA20 和 MA60 之间
+      const p = buildPlans(a);
+      const o = buildOutlook(a);
+      const texts = [...Object.values(p).flatMap((x) => [x.action, ...x.items.map((i) => i.text)]), ...Object.values(o.effect).map((e) => e.text)];
+      for (const t of texts) {
+        for (const m of t.matchAll(/(站上|反弹到|高于|回踩到|跌破)[^。；，]*?(\d+\.\d{2})/g)) {
+          const price = Number(m[2]);
+          const up = ["站上", "反弹到", "高于"].includes(m[1]);
+          expect({ kind, close, t, ok: up ? price > close : price < close }).toEqual({ kind, close, t, ok: true });
+        }
+        expect(t).not.toContain("））"); // 括号不套括号
+      }
+    }
   });
   test("没有冲突的过渡态，打法不变", () => {
     const a = conflict("反弹受压");
