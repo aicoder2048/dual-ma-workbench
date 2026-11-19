@@ -22,7 +22,7 @@
 **Goal**: 把 SKILL.md、references/、主学习文章（带视频时间戳）、底扣价笔记、TA01/TA15、memo 切成带稳定编号的片段；提供搜索、读取、引用校验。
 **Success Criteria**: 每个片段有唯一编号、标题、来源文件和行号；校验函数能找出不存在的编号。
 **Tests**: bun test：切片编号稳定、搜索命中、引用解析与校验。
-**Status**: Not Started
+**Status**: Complete
 
 ## Stage 3: 服务骨架 + 三栏页面（不接 AI）
 **Goal**: Bun 服务 + 静态前端。左栏自选股增删和趋势标签；中栏图表和规则版三步报告（带引用）；右栏空壳；亮/暗主题。
