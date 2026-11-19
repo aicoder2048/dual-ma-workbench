@@ -5,7 +5,7 @@ import { installCitationHandlers, loadSourceIndex, renderInline } from "./cite.j
 import { initAsofInput, initSplitters } from "./layout.js";
 import { initSelection } from "./selection.js";
 import { initAskMenu, selectionLabel } from "./askmenu.js";
-import { initDrawer, updatePeek } from "./drawer.js";
+import { collapseDrawer, initDrawer, updatePeek } from "./drawer.js";
 import { resolveTicker } from "./names.js";
 import { applyRemoteSettings, initSettings, openSettings } from "./settings.js";
 import { installTips, leanCard, leanName, outlookAnswer, planAnswer, pnlText, stanceOf, stepVisuals, trendAnswer } from "./viz.js";
@@ -134,6 +134,7 @@ export async function loadAnalysis(ticker, asof) {
 
 /** 渲染一份分析结果（HTTP 拿到的，或分析师工具推过来的）。 */
 export function showAnalysis(data, asof = null) {
+  collapseDrawer(); // 下面要重新渲染三步卡片：抽屉里不能留着旧的
   const a = data.analysis;
   state.ticker = a.label;
   state.asof = asof;

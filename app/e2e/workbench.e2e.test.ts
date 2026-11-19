@@ -500,3 +500,56 @@ describe("朗读：暂停和继续", () => {
     await page.close();
   }, 30_000);
 });
+
+describe("抽屉：五块，滚过哪块就出现哪块的按钮", () => {
+  const shown = (page: Page) => page.evaluate(() =>
+    [...document.querySelectorAll<HTMLButtonElement>("#peek [data-peek]")].filter((b) => !b.hidden).map((b) => b.dataset.peek));
+  const scrollPast = (page: Page, sel: string) => page.evaluate(async (sel) => {
+    const s = document.getElementById("center-scroll")!;
+    const el = document.querySelector<HTMLElement>(sel)!;
+    s.scrollTop += el.getBoundingClientRect().top - s.getBoundingClientRect().top + 4; // 刚好把这一块的开头滚出视野
+    await new Promise((ok) => requestAnimationFrame(() => requestAnimationFrame(ok)));
+  }, sel);
+
+  test("按顺序往下读，每读到一块，它的按钮就出现（最后一块也行）", async () => {
+    const { page, errors } = await open();
+    await page.waitForSelector("#chart canvas");
+    expect(await page.isVisible("#peek")).toBe(false);
+    await scrollPast(page, "#verdict");
+    expect(await shown(page)).toEqual(["verdict"]);
+    await scrollPast(page, ".chart-card");
+    expect(await shown(page)).toEqual(["verdict", "chart"]);
+    await scrollPast(page, '[data-step="big_picture"]');
+    expect(await shown(page)).toEqual(["verdict", "chart", "big_picture"]);
+    await scrollPast(page, '[data-step="strategy"]');
+    expect(await shown(page)).toEqual(["verdict", "chart", "big_picture", "strategy"]);
+    await scrollPast(page, '[data-step="direction"]');
+    expect(await shown(page)).toEqual(["verdict", "chart", "big_picture", "strategy", "direction"]);
+    expect(errors).toEqual([]);
+    await page.close();
+  }, 30_000);
+
+  test("抽屉里的定策略照样能用（切持仓），收起后放回原处", async () => {
+    const { page } = await open();
+    await scrollPast(page, '[data-step="direction"]');
+    await page.click('#peek [data-peek="strategy"]');
+    await page.click('#drawer [data-pos="holding"]');
+    expect(await page.locator('#drawer [data-step="strategy"] .answer').textContent()).toContain("反弹再减仓");
+    await page.click("#drawer .drawer-close");
+    expect(await page.locator('#steps [data-step="strategy"]').count()).toBe(1);
+    await page.click('[data-pos="flat"]'); // 还原，别影响其他测试
+    await page.close();
+  }, 30_000);
+
+  test("抽屉开着时换股票：抽屉收起，不留下过期的内容", async () => {
+    const { page, errors } = await open();
+    await scrollPast(page, '[data-step="direction"]');
+    await page.click('#peek [data-peek="big_picture"]');
+    await page.evaluate(async () => (await import("/app.js")).loadAnalysis("TSLA", null));
+    await page.waitForFunction(() => document.getElementById("ticker")!.textContent === "TSLA");
+    expect(await page.isVisible("#drawer")).toBe(false);
+    expect(await page.locator('[data-step="big_picture"]').count()).toBe(1);
+    expect(errors).toEqual([]);
+    await page.close();
+  }, 30_000);
+});
