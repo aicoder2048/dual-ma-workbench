@@ -55,6 +55,15 @@ beforeAll(async () => {
     library: SourceLibrary.load(),
     publicDir: resolve(import.meta.dir, "../public"),
     settings: new SettingsStore(join(dir, "s.json")),
+    // 假清单：不读本机 pi 的登录
+    catalog: { list: async () => [
+      { id: "openai-codex/gpt-6.1-sol", provider: "openai-codex", name: "GPT-6.1 Sol", billing: "订阅", verified: true, image: true,
+        thinking: ["minimal", "low", "medium", "high", "xhigh", "max"] },
+      { id: "openai-codex/gpt-6.1-terra", provider: "openai-codex", name: "GPT-6.1 Terra", billing: "订阅", verified: false, image: true,
+        thinking: ["low", "medium", "high"] },
+      { id: "deepseek/deepseek-flash", provider: "deepseek", name: "DeepSeek Flash", billing: "按量计费", verified: true, image: true,
+        thinking: ["off", "low", "high", "max"] },
+    ] },
     tts: new Speaker(async (text, voice) => { ttsCalls.push({ text, voice }); return new Uint8Array(MP3); }),
   });
   // WebSocket 替身：记下浏览器发来的消息；连上就告诉两个面板"空闲"，输入框才可用
@@ -111,6 +120,55 @@ describe("设置", () => {
     await expect(page.isVisible("#settings-panel")).resolves.toBe(true);
     expect(await page.inputValue("select[name=voiceAnalyst]")).toBe("zh-CN-YunxiNeural");
     expect(await page.inputValue("select[name=voiceAdvisor]")).toBe("zh-CN-XiaoxiaoNeural");
+    expect(errors).toEqual([]);
+    await page.close();
+  }, 30_000);
+
+  test("模型从 pi 动态列出，按 provider 分组；思考程度两个下拉，默认都是 medium", async () => {
+    const { page, errors } = await open();
+    await page.click("#settings-btn");
+    const ids = await page.$$eval("select[name=model] option", (os) => os.map((o) => (o as HTMLOptionElement).value));
+    expect(ids).toEqual(["openai-codex/gpt-6.1-sol", "openai-codex/gpt-6.1-terra", "deepseek/deepseek-flash"]);
+    expect(await page.$$eval("select[name=model] optgroup", (gs) => gs.map((g) => g.getAttribute("label")))).toEqual(["openai-codex · 订阅", "deepseek · 按量计费"]);
+    expect(await page.inputValue("select[name=model]")).toBe("openai-codex/gpt-6.1-sol");
+    expect(await page.inputValue("select[name=thinkingAnalyst]")).toBe("medium");
+    expect(await page.inputValue("select[name=thinkingAdvisor]")).toBe("medium");
+    expect(errors).toEqual([]);
+    await page.close();
+  }, 30_000);
+
+  test("选按量计费的模型要先确认；取消不切，确认才切；它没有 medium 时写明实际用 low", async () => {
+    const { page, errors } = await open();
+    await page.click("#settings-btn");
+    await page.selectOption("select[name=model]", "deepseek/deepseek-flash");
+    await page.waitForSelector("#sp-confirm", { state: "visible" });
+    expect(await page.textContent("#sp-confirm")).toContain("按量计费");
+    await page.click("#sp-confirm-no");
+    expect(await page.inputValue("select[name=model]")).toBe("openai-codex/gpt-6.1-sol");
+    expect((await (await page.request.get(`${base}/api/settings`)).json()).settings.model).toBe("openai-codex/gpt-6.1-sol");
+
+    await page.selectOption("select[name=model]", "deepseek/deepseek-flash");
+    await page.click("#sp-confirm-yes");
+    await page.waitForFunction(() => document.querySelector("[data-model-badge]")?.textContent === "deepseek-flash");
+    expect(await page.textContent("#settings-panel")).toContain("没有 medium，实际用 low");
+    // 订阅模型不用确认
+    await page.selectOption("select[name=model]", "openai-codex/gpt-6.1-sol");
+    await page.waitForFunction(() => document.querySelector("[data-model-badge]")?.textContent === "gpt-6.1-sol");
+    expect(errors).toEqual([]);
+    await page.close();
+  }, 30_000);
+
+  test("分析师的思考程度改成 high：保存，刷新后还是 high", async () => {
+    const { page, errors } = await open();
+    await page.click("#settings-btn");
+    await page.selectOption("select[name=thinkingAnalyst]", "high");
+    await page.waitForFunction(() => document.getElementById("sp-status")?.textContent?.includes("已保存"));
+    await page.reload();
+    await page.waitForSelector(".lean-label");
+    await page.click("#settings-btn");
+    expect(await page.inputValue("select[name=thinkingAnalyst]")).toBe("high");
+    await page.selectOption("select[name=thinkingAnalyst]", "medium"); // 复位，别影响别的用例
+    await page.waitForFunction(() => document.getElementById("sp-status")?.textContent?.includes("已保存"));
     expect(errors).toEqual([]);
     await page.close();
   }, 30_000);

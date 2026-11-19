@@ -2,7 +2,8 @@ import { describe, expect, test } from "bun:test";
 import { Analyzer } from "../src/analyze.ts";
 import { buildFacts, type Analysis } from "../src/citations.ts";
 import { assistantText, type ServerEvent } from "../src/agents/host.ts";
-import { assertAllowedModel, parseModelSpec, resolveThinking } from "../src/agents/model.ts";
+import { ModelRuntime } from "@earendil-works/pi-coding-agent";
+import { parseModelSpec, resolveModel, thinkingFor } from "../src/agents/model.ts";
 import { DEFAULT_SETTINGS, SettingsStore } from "../src/settings.ts";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -19,18 +20,19 @@ const library = SourceLibrary.load();
 const fakeAnalyzer = () =>
   new Analyzer(async (args) => JSON.stringify({ analysis: { ...analysis, label: args[0] }, chart: { candles: [], volume: [], lines: {}, drops: [] } }));
 
-describe("模型守卫", () => {
-  test("清单内放行，anthropic 拒绝", () => {
-    expect(() => assertAllowedModel("openai-codex/gpt-6.1-sol")).not.toThrow();
-    expect(() => assertAllowedModel("anthropic/claude-opus-5-5")).toThrow(/按量计费/);
+describe("模型", () => {
+  test("用的时候按模型取思考程度：DeepSeek flash 没有 medium 就用 low，Codex 照用 medium", async () => {
+    const rt = await ModelRuntime.create();
+    expect(thinkingFor(resolveModel(rt, "deepseek/deepseek-flash"), "medium")).toBe("low");
+    expect(thinkingFor(resolveModel(rt, "openai-codex/gpt-6.1-sol"), "medium")).toBe("medium");
+  });
+  test("Pi 目录里没有的模型：说清楚，提示去 pi 登录", async () => {
+    const rt = await ModelRuntime.create();
+    expect(() => resolveModel(rt, "openai-codex/no-such-model")).toThrow(/找不到模型/);
   });
   test("解析 provider/model", () => {
     expect(parseModelSpec("openai-codex/gpt-6.1-sol")).toEqual({ provider: "openai-codex", id: "gpt-6.1-sol" });
     expect(() => parseModelSpec("gpt-6.1-sol")).toThrow();
-  });
-  test("思考强度", () => {
-    expect(resolveThinking(undefined, "low")).toBe("low");
-    expect(() => resolveThinking("max", "low")).toThrow();
   });
 });
 

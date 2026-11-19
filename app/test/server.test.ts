@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { Analyzer, normalizeAsof, normalizeTicker, type Runner } from "../src/analyze.ts";
 import { bookOf, buildFacts, validateCitations, type Analysis } from "../src/citations.ts";
+import type { ModelCatalog } from "../src/agents/catalog.ts";
 import { createHandler } from "../src/http.ts";
 import { buildReport } from "../src/report.ts";
 import { DEFAULT_SETTINGS, SettingsStore } from "../src/settings.ts";
@@ -129,29 +130,75 @@ describe("HTTP", () => {
   });
 });
 
-describe("HTTP 设置", () => {
-  const dir = mkdtempSync(join(tmpdir(), "set-"));
-  const handler = createHandler({
-    analyzer: new Analyzer(fakeRunner()), watchlist: new Watchlist(join(dir, "w.json")), library,
-    publicDir: resolve(import.meta.dir, "../public"), settings: new SettingsStore(join(dir, "s.json")),
-  });
-  const call = (method: string, body?: unknown) =>
-    handler(new Request("http://x/api/settings", { method, body: body ? JSON.stringify(body) : undefined }));
+/** 假清单：Codex（订阅）、DeepSeek flash（按量，没有 medium）、一个 anthropic（按量）。 */
+const fakeCatalog = (): ModelCatalog => ({
+  list: async () => [
+    { id: "openai-codex/gpt-6.1-sol", provider: "openai-codex", name: "GPT-6.1 Sol", billing: "订阅", verified: true, image: true,
+      thinking: ["minimal", "low", "medium", "high", "xhigh", "max"] },
+    { id: "deepseek/deepseek-flash", provider: "deepseek", name: "DeepSeek Flash", billing: "按量计费", verified: true, image: true,
+      thinking: ["off", "low", "high", "max"] },
+    { id: "anthropic/claude-x", provider: "anthropic", name: "Claude X", billing: "按量计费", verified: false, image: true,
+      thinking: ["off", "low", "medium", "high"] },
+  ],
+});
 
-  test("GET 返回当前设置、可选模型（含计费方式）和数据源", async () => {
-    const b = await (await call("GET")).json();
+describe("HTTP 设置", () => {
+  const handler = () => {
+    const dir = mkdtempSync(join(tmpdir(), "set-"));
+    return createHandler({
+      analyzer: new Analyzer(fakeRunner()), watchlist: new Watchlist(join(dir, "w.json")), library,
+      publicDir: resolve(import.meta.dir, "../public"), settings: new SettingsStore(join(dir, "s.json")),
+      catalog: fakeCatalog(),
+    });
+  };
+  const call = (h: ReturnType<typeof handler>, method: string, body?: unknown) =>
+    h(new Request("http://x/api/settings", { method, body: body ? JSON.stringify(body) : undefined }));
+
+  test("GET：当前设置、Pi 里登录过的全部模型、七档思考程度、实际用的档位", async () => {
+    const b = await (await call(handler(), "GET")).json();
     expect(b.settings).toEqual(DEFAULT_SETTINGS);
+    expect(b.models.map((m: any) => m.id)).toEqual(["openai-codex/gpt-6.1-sol", "deepseek/deepseek-flash", "anthropic/claude-x"]);
+    expect(b.thinkingLevels).toEqual(["off", "minimal", "low", "medium", "high", "xhigh", "max"]);
+    expect(b.effective).toEqual({ analyst: "medium", advisor: "medium" });
     expect(b.voices.map((v: any) => v.label)).toEqual(["云希", "云扬", "云健", "晓晓", "晓伊", "晓臻"]);
-    expect(b.models.map((m: any) => m.billing)).toEqual(["订阅", "按量计费"]);
     expect(b.dataSources.map((d: any) => d.id)).toEqual(["polygon", "yfinance"]);
     expect(JSON.stringify(b)).not.toContain("sk-"); // 不返回 key
   });
   test("PUT 切数据源", async () => {
-    const b = await (await call("PUT", { dataSource: "yfinance" })).json();
+    const b = await (await call(handler(), "PUT", { dataSource: "yfinance" })).json();
     expect(b.settings.dataSource).toBe("yfinance");
   });
-  test("PUT 非法模型返回 400", async () => {
-    expect((await call("PUT", { model: "anthropic/claude-opus-5-5" })).status).toBe(400);
+  test("切到 DeepSeek：它没有 medium，实际用 low", async () => {
+    const b = await (await call(handler(), "PUT", { model: "deepseek/deepseek-flash" })).json();
+    expect(b.settings.model).toBe("deepseek/deepseek-flash");
+    expect(b.effective).toEqual({ analyst: "low", advisor: "low" });
+  });
+  test("anthropic 不挡，能选", async () => {
+    expect((await call(handler(), "PUT", { model: "anthropic/claude-x" })).status).toBe(200);
+  });
+  test("清单外（没在 pi 里登录）的模型拒绝，提示去 pi 登录", async () => {
+    const res = await call(handler(), "PUT", { model: "openrouter/some-model" });
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toMatch(/pi/);
+  });
+  test("分析师、鸿雁的思考程度分开设；非法档位拒绝", async () => {
+    const h = handler();
+    const b = await (await call(h, "PUT", { thinkingAnalyst: "high", thinkingAdvisor: "low" })).json();
+    expect(b.settings).toMatchObject({ thinkingAnalyst: "high", thinkingAdvisor: "low" });
+    expect(b.effective).toEqual({ analyst: "high", advisor: "low" });
+    expect((await call(h, "PUT", { thinkingAnalyst: "extreme" })).status).toBe(400);
+  });
+  test("当前模型不在清单里（在 pi 里退出了登录）：照样返回，实际档位未知", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "set-"));
+    const s = new SettingsStore(join(dir, "s.json"));
+    s.update({ model: "openrouter/gone" });
+    const h2 = createHandler({
+      analyzer: new Analyzer(fakeRunner()), watchlist: new Watchlist(join(dir, "w.json")), library,
+      publicDir: resolve(import.meta.dir, "../public"), settings: s, catalog: fakeCatalog(),
+    });
+    const b = await (await call(h2, "GET")).json();
+    expect(b.settings.model).toBe("openrouter/gone");
+    expect(b.effective).toBeNull();
   });
 });
 
@@ -180,24 +227,5 @@ describe("/api/tts", () => {
     expect((await post({ text: "hi", voice: "en-US-GuyNeural" })).status).toBe(400);
     expect((await post({ text: "  ", voice: "zh-CN-YunxiNeural" })).status).toBe(400);
     expect((await post({ text: "啊".repeat(2001), voice: "zh-CN-YunxiNeural" })).status).toBe(400);
-  });
-});
-
-describe("设置：模型凭据来自 Pi", () => {
-  const dir = mkdtempSync(join(tmpdir(), "dma-auth-"));
-  const handler = createHandler({
-    analyzer: new Analyzer(fakeRunner()), watchlist: new Watchlist(join(dir, "w.json")), library,
-    publicDir: resolve(import.meta.dir, "../public"), settings: new SettingsStore(join(dir, "s.json")),
-    hasAuth: async (provider) => provider === "openai-codex", // Pi 只登录了 Codex
-  });
-  const call = (method: string, body?: unknown) =>
-    handler(new Request("http://x/api/settings", { method, body: body ? JSON.stringify(body) : undefined }));
-
-  test("没有 deepseek 凭据：标为不可用，切换被拒绝，并提示去 pi 登录", async () => {
-    const b = await (await call("GET")).json();
-    expect(b.models.find((m: any) => m.id === "deepseek/deepseek-flash").ready).toBe(false);
-    const res = await call("PUT", { model: "deepseek/deepseek-flash" });
-    expect(res.status).toBe(400);
-    expect((await res.json()).error).toMatch(/pi/);
   });
 });

@@ -4,8 +4,8 @@ import { extname, resolve } from "node:path";
 import { explainError, type Analyzer } from "./analyze.ts";
 import { buildFacts } from "./citations.ts";
 import { buildReport } from "./report.ts";
-import { piAuthedProviders } from "./agents/model.ts";
-import { DATA_OPTIONS, MODEL_OPTIONS, modelReadiness, SettingsStore, VOICE_OPTIONS } from "./settings.ts";
+import { nearestThinking, piCatalog, THINKING_LEVELS, type ModelCatalog } from "./agents/catalog.ts";
+import { DATA_OPTIONS, SettingsStore, VOICE_OPTIONS } from "./settings.ts";
 import type { SourceLibrary } from "./sources.ts";
 import { Speaker } from "./tts.ts";
 import type { Watchlist } from "./watchlist.ts";
@@ -18,8 +18,8 @@ export interface Deps {
   settings: SettingsStore;
   /** 语音合成；不传就用微软 Edge 在线语音。 */
   tts?: Speaker;
-  /** provider 有没有凭据；不传就问 Pi（pi 里的登录或 .env 的 key）。 */
-  hasAuth?: (provider: string) => Promise<boolean>;
+  /** 可选模型；不传就从 Pi 读（pi 里登录过的 provider 的模型）。 */
+  catalog?: ModelCatalog;
 }
 
 const json = (data: unknown, status = 200) =>
@@ -35,18 +35,20 @@ const MIME: Record<string, string> = {
 export function createHandler(deps: Deps) {
   const { analyzer, watchlist, library, publicDir, settings } = deps;
   const tts = deps.tts ?? new Speaker();
-  const hasAuth = deps.hasAuth ?? (async (p: string) => (await piAuthedProviders()).has(p));
-  /** 每个模型有没有凭据（每次现查）。 */
-  const readiness = async () => {
-    const providers = [...new Set(MODEL_OPTIONS.map((m) => m.id.split("/")[0]))];
-    const ok = new Map(await Promise.all(providers.map(async (p) => [p, await hasAuth(p)] as const)));
-    return modelReadiness((p) => ok.get(p) ?? false);
-  };
+  const catalog = deps.catalog ?? piCatalog();
+  /** effective：两个 agent 实际用的思考程度（模型不支持想要的档位时取最近的）；当前模型不在清单里时是 null。 */
   const settingsView = async () => {
-    const ready = await readiness();
+    const models = await catalog.list();
+    const s = settings.get();
+    const current = models.find((m) => m.id === s.model);
     return {
-      settings: settings.get(),
-      models: MODEL_OPTIONS.map((m) => ({ ...m, ready: ready[m.id] })),
+      settings: s,
+      models,
+      thinkingLevels: THINKING_LEVELS,
+      effective: current ? {
+        analyst: nearestThinking(s.thinkingAnalyst, current.thinking),
+        advisor: nearestThinking(s.thinkingAdvisor, current.thinking),
+      } : null,
       dataSources: DATA_OPTIONS,
       voices: VOICE_OPTIONS,
     };
@@ -76,11 +78,11 @@ export function createHandler(deps: Deps) {
       if (req.method === "PUT") {
         const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
         const patch: Record<string, unknown> = {};
-        if ("model" in body) patch.model = body.model;
-        for (const k of ["dataSource", "voiceAnalyst", "voiceAdvisor", "autoSpeak"]) if (k in body) patch[k] = body[k];
-        const ready = await readiness();
-        if (typeof patch.model === "string" && ready[patch.model] === false) {
-          return fail(MODEL_OPTIONS.find((m) => m.id === patch.model)!.authHint);
+        for (const k of ["model", "thinkingAnalyst", "thinkingAdvisor", "dataSource", "voiceAnalyst", "voiceAdvisor", "autoSpeak"]) {
+          if (k in body) patch[k] = body[k];
+        }
+        if ("model" in patch && !(await catalog.list()).some((m) => m.id === patch.model)) {
+          return fail(`${patch.model} 不能用：它的 provider 还没在 pi 里登录。在终端运行 pi，输入 /login 登录后刷新页面。`);
         }
         settings.update(patch);
         return json(await settingsView());
