@@ -30,7 +30,7 @@
 
 需要：[uv](https://docs.astral.sh/uv/)（Python 脚本）和 [Bun](https://bun.sh)（工作台）。
 
-装了 [just](https://github.com/casey/just) 的话，常用命令都在 `justfile` 里：`just setup`、`just start`、`just test`、`just analyze NVDA`、`just replay TSLA 2021-04-14`、`just report NVDA`。`just` 列出全部。
+装了 [just](https://github.com/casey/just) 的话，`just goose` 启动工作台。
 
 ```bash
 cp .env.example .env          # 填入 POLYGON_API_KEY；没有也能用 yfinance
