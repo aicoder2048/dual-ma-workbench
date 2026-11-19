@@ -7,7 +7,6 @@
 import type { Analyzer } from "./analyze.ts";
 import { bookOf, buildFacts } from "./citations.ts";
 import { AgentHost, type AgentName, type ImageContent, type ServerEvent, type Suggestion, type TranscriptUser } from "./agents/host.ts";
-import { resolveThinking } from "./agents/model.ts";
 import { advisorContext, advisorPrompt, analystContext, analystPrompt, type PageView, type Selection } from "./agents/prompts.ts";
 import { ruleSuggestions, Suggester } from "./agents/suggest.ts";
 import { analyzeTool, FactsRegistry, sourceTools, suggestTool } from "./agents/tools.ts";
@@ -69,14 +68,14 @@ export class Workbench {
       name: "analyst", library,
       systemPrompt: () => analystPrompt(library),
       tools: [analyzeTool({ analyzer, registry: this.registry, emit }), ...sourceTools(library), suggestTool("analyst", emit)],
-      thinking: resolveThinking(process.env.DMA_THINKING, "medium"), modelSpec,
+      thinking: () => this.settings.get().thinkingAnalyst, modelSpec,
       emit, factsBook: () => this.registry.book(), toolLabel: label,
     });
     this.advisor = new AgentHost({
       name: "advisor", library,
       systemPrompt: () => advisorPrompt(library),
       tools: [...sourceTools(library), suggestTool("advisor", emit)],
-      thinking: resolveThinking(process.env.DMA_THINKING, "low"), modelSpec,
+      thinking: () => this.settings.get().thinkingAdvisor, modelSpec,
       emit, factsBook: () => this.advisorBook, toolLabel: label,
     });
   }

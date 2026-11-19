@@ -1,35 +1,13 @@
 /**
- * 工作台设置：大模型、市场数据源。存在 data/settings.json，界面右上角的设置面板修改。
+ * 工作台设置：大模型和思考程度、市场数据源、语音。存在 data/settings.json，界面右上角的设置面板修改。
  *
- * 大模型只允许清单里的两个（显式白名单）：
- *   - openai-codex/gpt-6.1-sol：Codex 订阅（默认）
- *   - deepseek/deepseek-flash：DeepSeek API，按量计费；key 只用 pi 里登录时存的那个（~/.pi/agent/auth.json）
- * anthropic/* 不在清单里，一律拒绝（第三方 harness 用它走 API 按量计费）。
+ * 大模型从 pi 动态读（agents/catalog.ts）：在 pi 里登录过的 provider 的模型都能选。
+ * 这里只校验格式；能不能用（登录了没有、在不在 Pi 的目录里）由清单判断。
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
+import { DEFAULT_MODEL, isThinking, type Thinking } from "./agents/catalog.ts";
 import { PROJECT_ROOT } from "./sources.ts";
-
-export interface ModelOption {
-  id: string;
-  label: string;
-  billing: "订阅" | "按量计费";
-  note: string;
-  /** 没有凭据时告诉用户怎么办。 */
-  authHint: string;
-}
-
-export const MODEL_OPTIONS: ModelOption[] = [
-  {
-    id: "openai-codex/gpt-6.1-sol", label: "Codex · gpt-6.1-sol", billing: "订阅", note: "Codex 订阅，不额外花钱。需要先在 pi 里登录 Codex。",
-    authHint: "没有 Codex 登录：先在终端运行 pi，在里面登录 Codex，再回来刷新。",
-  },
-  {
-    id: "deepseek/deepseek-flash", label: "DeepSeek · deepseek-flash", billing: "按量计费",
-    note: "DeepSeek 官方 API，按 token 计费（预充值）。需要先在 pi 里登录 DeepSeek（填入你的 API key），这里用的就是 pi 存的那个 key。",
-    authHint: "还没在 pi 里登录 DeepSeek：在终端运行 pi，在里面登录 deepseek，再回来刷新页面。",
-  },
-];
 
 export type DataSource = "polygon" | "yfinance";
 
@@ -49,7 +27,11 @@ export const VOICE_OPTIONS: { id: string; label: string; gender: "男" | "女"; 
 ];
 
 export interface Settings {
+  /** provider/model，如 openai-codex/gpt-6.1-sol。 */
   model: string;
+  /** 想要的思考程度；模型不支持时实际用最近的一档（nearestThinking）。 */
+  thinkingAnalyst: Thinking;
+  thinkingAdvisor: Thinking;
   dataSource: DataSource;
   voiceAnalyst: string;
   voiceAdvisor: string;
@@ -58,7 +40,7 @@ export interface Settings {
 }
 
 export const DEFAULT_SETTINGS: Settings = {
-  model: MODEL_OPTIONS[0].id, dataSource: "polygon",
+  model: DEFAULT_MODEL, thinkingAnalyst: "medium", thinkingAdvisor: "medium", dataSource: "polygon",
   voiceAnalyst: "zh-CN-YunxiNeural", voiceAdvisor: "zh-CN-XiaoxiaoNeural", autoSpeak: false,
 };
 
@@ -67,7 +49,7 @@ export function sourceArg(s: DataSource): "auto" | "yfinance" {
   return s === "yfinance" ? "yfinance" : "auto";
 }
 
-const validModel = (m: unknown): m is string => MODEL_OPTIONS.some((o) => o.id === m);
+export const validModel = (m: unknown): m is string => typeof m === "string" && /^[^/\s]+\/\S+$/.test(m);
 const validSource = (s: unknown): s is DataSource => DATA_OPTIONS.some((o) => o.id === s);
 export const validVoice = (v: unknown): v is string => VOICE_OPTIONS.some((o) => o.id === v);
 
@@ -75,25 +57,31 @@ export class SettingsStore {
   private current: Settings;
   private listeners = new Set<(s: Settings, prev: Settings) => void>();
 
-  constructor(private file = resolve(PROJECT_ROOT, "data/settings.json")) {
+  /** initial：没写过的字段用它（如 pi 的默认模型），再没有用 DEFAULT_SETTINGS。 */
+  constructor(private file = resolve(PROJECT_ROOT, "data/settings.json"), initial: Partial<Settings> = {}) {
+    this.defaults = { ...DEFAULT_SETTINGS, ...initial };
     this.current = this.read();
   }
+  private readonly defaults: Settings;
 
   private read(): Settings {
-    if (!existsSync(this.file)) return { ...DEFAULT_SETTINGS };
+    const d = this.defaults;
+    if (!existsSync(this.file)) return { ...d };
     let raw: Partial<Settings> = {};
     try {
       raw = JSON.parse(readFileSync(this.file, "utf8"));
     } catch {
-      return { ...DEFAULT_SETTINGS };
+      return { ...d };
     }
     // 手改成非法值的字段回到默认，合法字段保留
     return {
-      model: validModel(raw.model) ? raw.model : DEFAULT_SETTINGS.model,
-      dataSource: validSource(raw.dataSource) ? raw.dataSource : DEFAULT_SETTINGS.dataSource,
-      voiceAnalyst: validVoice(raw.voiceAnalyst) ? raw.voiceAnalyst : DEFAULT_SETTINGS.voiceAnalyst,
-      voiceAdvisor: validVoice(raw.voiceAdvisor) ? raw.voiceAdvisor : DEFAULT_SETTINGS.voiceAdvisor,
-      autoSpeak: typeof raw.autoSpeak === "boolean" ? raw.autoSpeak : DEFAULT_SETTINGS.autoSpeak,
+      model: validModel(raw.model) ? raw.model : d.model,
+      thinkingAnalyst: isThinking(raw.thinkingAnalyst) ? raw.thinkingAnalyst : d.thinkingAnalyst,
+      thinkingAdvisor: isThinking(raw.thinkingAdvisor) ? raw.thinkingAdvisor : d.thinkingAdvisor,
+      dataSource: validSource(raw.dataSource) ? raw.dataSource : d.dataSource,
+      voiceAnalyst: validVoice(raw.voiceAnalyst) ? raw.voiceAnalyst : d.voiceAnalyst,
+      voiceAdvisor: validVoice(raw.voiceAdvisor) ? raw.voiceAdvisor : d.voiceAdvisor,
+      autoSpeak: typeof raw.autoSpeak === "boolean" ? raw.autoSpeak : d.autoSpeak,
     };
   }
 
@@ -104,7 +92,10 @@ export class SettingsStore {
   /** 校验全部通过才写入；任何一个字段不合法就整体拒绝。 */
   update(patch: Partial<Settings>): Settings {
     if (patch.model !== undefined && !validModel(patch.model)) {
-      throw new Error(`模型不在可选清单里：${patch.model}`);
+      throw new Error(`模型格式应为 provider/model：${patch.model}`);
+    }
+    for (const k of ["thinkingAnalyst", "thinkingAdvisor"] as const) {
+      if (patch[k] !== undefined && !isThinking(patch[k])) throw new Error(`思考程度不合法：${patch[k]}`);
     }
     if (patch.dataSource !== undefined && !validSource(patch.dataSource)) {
       throw new Error(`数据源不合法：${patch.dataSource}`);
@@ -126,12 +117,4 @@ export class SettingsStore {
   onChange(cb: (s: Settings, prev: Settings) => void) {
     this.listeners.add(cb);
   }
-}
-
-/** provider（如 "deepseek"）在 pi 里登录过没有（见 agents/model.ts 的 piAuthedProviders）。 */
-export type HasAuth = (provider: string) => boolean;
-
-/** 给界面看的：每个模型有没有可用凭据（不返回 key 本身）。 */
-export function modelReadiness(hasAuth: HasAuth) {
-  return Object.fromEntries(MODEL_OPTIONS.map((o) => [o.id, hasAuth(o.id.split("/")[0])]));
 }

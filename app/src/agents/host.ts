@@ -15,7 +15,8 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import { validateCitations, type CitationCheck, type FactsBook } from "../citations.ts";
 import { PROJECT_ROOT, type SourceLibrary } from "../sources.ts";
-import { resolveModel, type Thinking } from "./model.ts";
+import { resolveModel, thinkingFor } from "./model.ts";
+import type { Thinking } from "./catalog.ts";
 
 export type AgentName = "analyst" | "advisor";
 
@@ -66,7 +67,8 @@ export interface AgentHostOptions {
   library: SourceLibrary;
   systemPrompt: () => string;
   tools: ToolDefinition[];
-  thinking: Thinking;
+  /** 设置里想要的思考程度（每次提问前现取；模型不支持时用最近的一档）。 */
+  thinking: () => Thinking;
   /** 当前设置的模型（provider/id）。每次提问前对照，变了就就地切换。 */
   modelSpec: () => string;
   emit: (event: ServerEvent) => void;
@@ -108,11 +110,12 @@ export class AgentHost {
       },
     });
     this.services = services;
+    const model = resolveModel(services.modelRuntime, this.opts.modelSpec());
     const { session } = await createAgentSessionFromServices({
       services,
       sessionManager: SessionManager.inMemory(PROJECT_ROOT),
-      model: resolveModel(services.modelRuntime, this.opts.modelSpec()),
-      thinkingLevel: this.opts.thinking,
+      model,
+      thinkingLevel: thinkingFor(model, this.opts.thinking()),
       customTools: this.opts.tools,
       noTools: "builtin",
       tools: this.opts.tools.map((t) => t.name),
@@ -138,11 +141,14 @@ export class AgentHost {
     let modelUsed = this.opts.modelSpec();
     try {
       const session = await this.ensureSession();
-      // 设置里换了模型：就地切换，保留对话上下文；只改本会话，不写 Pi 的全局默认
+      // 设置里换了模型或思考程度：就地切换，保留对话上下文；只改本会话，不写 Pi 的全局默认
       const spec = this.opts.modelSpec();
+      const model = resolveModel(this.services!.modelRuntime, spec);
       if (session.model && `${session.model.provider}/${session.model.id}` !== spec) {
-        await session.setModel(resolveModel(this.services!.modelRuntime, spec), { persist: false });
+        await session.setModel(model, { persist: false });
       }
+      const level = thinkingFor(model, this.opts.thinking());
+      if (session.thinkingLevel !== level) session.setThinkingLevel(level, { persist: false });
       modelUsed = spec;
       let current = "";
       const argsById = new Map<string, any>(); // 结束事件不带参数，按调用 id 记下来

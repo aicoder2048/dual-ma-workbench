@@ -49,9 +49,9 @@ npm install -g --ignore-scripts @earendil-works/pi-coding-agent   # pi 命令行
 
 ![在 pi 里用 /model 选 gpt-6.1-sol，按 Ctrl+S 设为默认](docs/images/pi-model.png)
 
-列表里的 `[anthropic]` 模型不要选：在 pi 这种第三方 harness 里用，走的是 Anthropic API 按量计费，不是 Claude 订阅。
+列表里的 `[anthropic]` 模型不要设成默认：在 pi 这种第三方 harness 里用，走的是 Anthropic API 按量计费，不是 Claude 订阅。
 
-工作台只用到第 1 件（登录）。它自己只认两个模型（Codex 和 DeepSeek，见[模型和计费](#模型和计费)），在右上角「设置」里切换，不跟随 pi 的默认模型。第 2 件改的是 pi 的全局默认（`~/.pi/agent/settings.json`），以后在任何目录直接开 `pi` 都不会落到 anthropic 上。
+工作台用到的是第 1 件（登录）：你在 pi 里登录过哪些 provider，设置里就列出它们的模型（见[模型和计费](#模型和计费)）。第 2 件改的是 pi 的全局默认（`~/.pi/agent/settings.json`）：工作台第一次启动、还没选过模型时，用它当初始值；以后工作台在自己的设置里选，不再跟随 pi。
 
 ### 3. 启动
 
@@ -86,14 +86,13 @@ uv run .agents/skills/dual-moving-averages/scripts/dma_analyze.py TSLA --asof 20
 
 ## 模型和计费
 
-右上角「设置」里选：
+右上角「设置」里选。列表从 pi 动态读：你在 pi 里登录过的 provider（[第 2 步](#2-安装后第一步在-pi-里登录设置模型)），它们的模型都能选，按 provider 分组。
 
-| 模型 | 计费 | 说明 |
-|---|---|---|
-| `openai-codex/gpt-6.1-sol`（默认） | 订阅 | 需要先在 `pi` 里登录 Codex（[第 2 步](#2-安装后第一步在-pi-里登录设置模型)） |
-| `deepseek/deepseek-flash` | **按量计费** | 需要先在 `pi` 里登录 DeepSeek |
-
-只允许这两个。`anthropic/*` 在第三方 harness 里会走 API 按量计费，工作台一律拒绝。
+- **计费按登录方式推断**：Pi 标明是订阅的登录（如 Codex、Copilot）标"订阅"；API key 标"**按量计费**"；其他标"未知"。不是订阅的，选它时要先确认一次。只是推断，以各家账单为准。
+- **已验证**：`openai-codex/gpt-6.1-sol`（订阅，默认）和 `deepseek/deepseek-flash`（按量计费）实测过引用格式和工具调用。其他模型标"未验证"，回答里的引用可能标红；不能看图的模型会标出来。
+- `anthropic/*` 能选，但一律标按量计费、不会被当成默认：在第三方 harness 里它走 API 计费，用 Claude Pro 登录也一样。没选过模型时用 pi 的默认模型，但只在它是订阅时才用。
+- 在 pi 里新登录了 provider：刷新页面就能看到它的模型。pi 更新了模型目录本身（新模型上架）：要重启工作台。
+- **思考程度**：分析师、鸿雁分开设，默认都是 medium。模型不支持某一档时用最近的一档（两边一样近取低的，例如 DeepSeek flash 没有 medium，实际用 low），设置里会写明。
 
 ## 市场数据
 

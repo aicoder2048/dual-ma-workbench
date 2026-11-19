@@ -55,6 +55,15 @@ beforeAll(async () => {
     library: SourceLibrary.load(),
     publicDir: resolve(import.meta.dir, "../public"),
     settings: new SettingsStore(join(dir, "s.json")),
+    // 假清单：不读本机 pi 的登录
+    catalog: { list: async () => [
+      { id: "openai-codex/gpt-6.1-sol", provider: "openai-codex", name: "GPT-6.1 Sol", billing: "订阅", verified: true, image: true,
+        thinking: ["minimal", "low", "medium", "high", "xhigh", "max"] },
+      { id: "openai-codex/gpt-6.1-terra", provider: "openai-codex", name: "GPT-6.1 Terra", billing: "订阅", verified: false, image: true,
+        thinking: ["low", "medium", "high"] },
+      { id: "deepseek/deepseek-flash", provider: "deepseek", name: "DeepSeek Flash", billing: "按量计费", verified: true, image: true,
+        thinking: ["off", "low", "high", "max"] },
+    ] },
     tts: new Speaker(async (text, voice) => { ttsCalls.push({ text, voice }); return new Uint8Array(MP3); }),
   });
   // WebSocket 替身：记下浏览器发来的消息；连上就告诉两个面板"空闲"，输入框才可用
@@ -115,19 +124,84 @@ describe("设置", () => {
     await page.close();
   }, 30_000);
 
-  test("服务端是旧版本（没有语音选项）时，设置照样能打开，并提示重启", async () => {
+  test("模型从 pi 动态列出，按 provider 分组；思考程度两个下拉，默认都是 medium", async () => {
+    const { page, errors } = await open();
+    await page.click("#settings-btn");
+    const ids = await page.$$eval("select[name=model] option", (os) => os.map((o) => (o as HTMLOptionElement).value));
+    expect(ids).toEqual(["openai-codex/gpt-6.1-sol", "openai-codex/gpt-6.1-terra", "deepseek/deepseek-flash"]);
+    expect(await page.$$eval("select[name=model] optgroup", (gs) => gs.map((g) => g.getAttribute("label")))).toEqual(["openai-codex · 订阅", "deepseek · 按量计费"]);
+    expect(await page.inputValue("select[name=model]")).toBe("openai-codex/gpt-6.1-sol");
+    expect(await page.inputValue("select[name=thinkingAnalyst]")).toBe("medium");
+    expect(await page.inputValue("select[name=thinkingAdvisor]")).toBe("medium");
+    expect(errors).toEqual([]);
+    await page.close();
+  }, 30_000);
+
+  test("选按量计费的模型要先确认；取消不切，确认才切；它没有 medium 时写明实际用 low", async () => {
+    const { page, errors } = await open();
+    await page.click("#settings-btn");
+    await page.selectOption("select[name=model]", "deepseek/deepseek-flash");
+    await page.waitForSelector("#sp-confirm", { state: "visible" });
+    expect(await page.textContent("#sp-confirm")).toContain("按量计费");
+    await page.click("#sp-confirm-no");
+    expect(await page.inputValue("select[name=model]")).toBe("openai-codex/gpt-6.1-sol");
+    expect((await (await page.request.get(`${base}/api/settings`)).json()).settings.model).toBe("openai-codex/gpt-6.1-sol");
+
+    await page.selectOption("select[name=model]", "deepseek/deepseek-flash");
+    // 确认框开着时，服务端广播设置（比如自己上一次保存的回声）：确认框不能被冲掉
+    const current = (await (await page.request.get(`${base}/api/settings`)).json()).settings;
+    const marker = { type: "status", agent: "analyst", busy: true };
+    for (const ws of sockets) { ws.send(JSON.stringify({ type: "settings", settings: current })); ws.send(JSON.stringify(marker)); }
+    await page.waitForSelector("#analyst-chips.dim", { state: "attached" });
+    await page.waitForTimeout(300); // 重新取设置是异步的
+    expect(await page.isVisible("#sp-confirm")).toBe(true);
+    await page.click("#sp-confirm-yes");
+    await page.waitForFunction(() => document.getElementById("sp-status")?.textContent?.includes("已切换到"));
+    for (const ws of sockets) ws.send(JSON.stringify({ type: "settings", settings: { ...current, model: "deepseek/deepseek-flash" } }));
+    await page.waitForTimeout(300);
+    expect(await page.textContent("#sp-status")).toContain("已切换到");
+    await page.waitForFunction(() => document.querySelector("[data-model-badge]")?.textContent === "deepseek-flash");
+    expect(await page.textContent("#settings-panel")).toContain("没有 medium，实际用 low");
+    // 订阅模型不用确认
+    await page.selectOption("select[name=model]", "openai-codex/gpt-6.1-sol");
+    await page.waitForFunction(() => document.querySelector("[data-model-badge]")?.textContent === "gpt-6.1-sol");
+    expect(errors).toEqual([]);
+    await page.close();
+  }, 30_000);
+
+  test("分析师的思考程度改成 high：保存，刷新后还是 high", async () => {
+    const { page, errors } = await open();
+    await page.click("#settings-btn");
+    await page.selectOption("select[name=thinkingAnalyst]", "high");
+    await page.waitForFunction(() => document.getElementById("sp-status")?.textContent?.includes("已保存"));
+    await page.reload();
+    await page.waitForSelector(".lean-label");
+    await page.click("#settings-btn");
+    expect(await page.inputValue("select[name=thinkingAnalyst]")).toBe("high");
+    await page.selectOption("select[name=thinkingAnalyst]", "medium"); // 复位，别影响别的用例
+    await page.waitForFunction(() => document.getElementById("sp-status")?.textContent?.includes("已保存"));
+    expect(errors).toEqual([]);
+    await page.close();
+  }, 30_000);
+
+  test("服务端是旧版本（pull 了新页面、旧进程还在跑）：设置照样能打开，提示重启，不显示 undefined", async () => {
     const { page, errors } = await open(async (p) => {
-      await p.route("**/api/settings", async (route) => {
-        const res = await route.fetch();
-        const body = await res.json();
-        delete body.voices;
-        body.settings = { model: body.settings.model, dataSource: body.settings.dataSource };
-        await route.fulfill({ response: res, json: body });
-      });
+      // main 上旧服务端真实返回的样子：两个写死的模型，没有 provider、思考程度、effective
+      await p.route("**/api/settings", (route) => route.fulfill({ json: {
+        settings: { model: "openai-codex/gpt-6.1-sol", dataSource: "polygon", voiceAnalyst: "zh-CN-YunxiNeural", voiceAdvisor: "zh-CN-XiaoxiaoNeural", autoSpeak: false },
+        models: [
+          { id: "openai-codex/gpt-6.1-sol", label: "Codex · gpt-6.1-sol", billing: "订阅", note: "", authHint: "", ready: true },
+          { id: "deepseek/deepseek-flash", label: "DeepSeek · deepseek-flash", billing: "按量计费", note: "", authHint: "", ready: true },
+        ],
+        dataSources: [{ id: "polygon", label: "Polygon / Massive", note: "" }, { id: "yfinance", label: "yfinance", note: "" }],
+        voices: [{ id: "zh-CN-YunxiNeural", label: "云希", gender: "男", note: "" }],
+      } }));
     });
     await page.click("#settings-btn");
     await expect(page.isVisible("#settings-panel")).resolves.toBe(true);
-    expect(await page.textContent("#settings-panel")).toContain("重启");
+    const text = await page.textContent("#settings-panel");
+    expect(text).toContain("重启");
+    expect(text).not.toContain("undefined");
     expect(errors).toEqual([]);
     await page.close();
   }, 30_000);

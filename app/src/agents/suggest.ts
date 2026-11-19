@@ -15,7 +15,7 @@ import { factsForPrompt, type Analysis, type Facts } from "../citations.ts";
 import { PROJECT_ROOT } from "../sources.ts";
 import { assistantText, type Suggestion } from "./host.ts";
 import { DEFAULT_SETTINGS } from "../settings.ts";
-import { resolveModel } from "./model.ts";
+import { resolveModel, thinkingFor } from "./model.ts";
 import { INTENTS } from "./tools.ts";
 
 export interface SuggestionSet {
@@ -109,9 +109,10 @@ export class Suggester {
         systemPrompt: PROMPT, appendSystemPrompt: [],
       },
     });
+    const model = resolveModel(services.modelRuntime, this.modelSpec());
     const { session } = await createAgentSessionFromServices({
       services, sessionManager: SessionManager.inMemory(PROJECT_ROOT),
-      model: resolveModel(services.modelRuntime, this.modelSpec()), thinkingLevel: "low", noTools: "all",
+      model, thinkingLevel: thinkingFor(model, "low"), noTools: "all",
     });
     try {
       await session.prompt(

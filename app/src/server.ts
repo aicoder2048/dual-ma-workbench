@@ -8,14 +8,18 @@ import { Analyzer } from "./analyze.ts";
 import { codeFingerprint } from "./build.ts";
 import { createHandler } from "./http.ts";
 import { PROJECT_ROOT, SOURCE_DOCS, SourceLibrary } from "./sources.ts";
-import { MODEL_OPTIONS, SettingsStore } from "./settings.ts";
+import { initialModel, piCatalog, piDefaultModel } from "./agents/catalog.ts";
+import { SettingsStore } from "./settings.ts";
 import { Watchlist } from "./watchlist.ts";
 import { Workbench, type Client } from "./workbench.ts";
 
 const PORT = Number(process.env.PORT ?? 5178);
 const HOST = "127.0.0.1";
 
-const settings = new SettingsStore();
+// 没设置过模型时：用 pi 的默认模型（能用、不是 anthropic），否则 Codex
+const catalog = piCatalog();
+const models = await catalog.list();
+const settings = new SettingsStore(undefined, { model: initialModel(models, piDefaultModel()) });
 const analyzer = new Analyzer(undefined, undefined, () => settings.get().dataSource);
 const library = SourceLibrary.load();
 const workbench = new Workbench(analyzer, library, { settings });
@@ -25,6 +29,7 @@ const handler = createHandler({
   library,
   publicDir: resolve(import.meta.dir, "../public"),
   settings,
+  catalog,
 });
 
 // 启动时的指纹：服务端代码 + 启动时读进来的文件（引用库）。页面每次连上来都重算一次，变了就提醒重启
@@ -64,9 +69,9 @@ const server = Bun.serve<WsData, never>({
   },
 });
 const s = settings.get();
-const opt = MODEL_OPTIONS.find((m) => m.id === s.model)!;
+const billing = models.find((m) => m.id === s.model)?.billing ?? "没在 pi 里登录";
 console.log(`归雁 · 双均线工作台：http://${server.hostname}:${server.port}`);
-console.log(`模型：${s.model}（${opt.billing}）· 数据：${s.dataSource}`);
+console.log(`模型：${s.model}（${billing}）· 思考：分析师 ${s.thinkingAnalyst}、鸿雁 ${s.thinkingAdvisor} · 数据：${s.dataSource}`);
 
 // 退出：关掉服务，退出码 0，终端里不留报错。
 function shutdown() {

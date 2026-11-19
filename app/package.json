@@ -12,6 +12,7 @@
     "e2e": "bun test ./e2e/"
   },
   "dependencies": {
+    "@earendil-works/pi-ai": "^1.5.2",
     "@earendil-works/pi-coding-agent": "^1.5.2",
     "typebox": "^1.4.7"
   },

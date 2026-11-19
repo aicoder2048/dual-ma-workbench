@@ -3,23 +3,34 @@ import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Analyzer } from "../src/analyze.ts";
-import { assertAllowedModel } from "../src/agents/model.ts";
-import { DEFAULT_SETTINGS, MODEL_OPTIONS, modelReadiness, SettingsStore, sourceArg, VOICE_OPTIONS } from "../src/settings.ts";
-import { piAuthedProviders } from "../src/agents/model.ts";
+import { DEFAULT_SETTINGS, SettingsStore, sourceArg, VOICE_OPTIONS } from "../src/settings.ts";
 
 const tmp = () => mkdtempSync(join(tmpdir(), "dma-set-"));
 
-describe("模型白名单", () => {
-  test("只允许设置里列出的两个模型", () => {
-    expect(() => assertAllowedModel("openai-codex/gpt-6.1-sol")).not.toThrow();
-    expect(() => assertAllowedModel("deepseek/deepseek-flash")).not.toThrow();
+describe("模型和思考程度", () => {
+  test("默认 Codex；分析师、鸿雁的思考程度都是 medium", () => {
+    expect(DEFAULT_SETTINGS.model).toBe("openai-codex/gpt-6.1-sol");
+    expect(DEFAULT_SETTINGS.thinkingAnalyst).toBe("medium");
+    expect(DEFAULT_SETTINGS.thinkingAdvisor).toBe("medium");
   });
-  test("anthropic 和清单外的模型一律拒绝", () => {
-    expect(() => assertAllowedModel("anthropic/claude-opus-5-5")).toThrow(/按量计费|不在/);
-    expect(() => assertAllowedModel("deepseek/deepseek-v4-pro")).toThrow();
+  test("模型只校验格式（能不能用由清单判断）；anthropic 也能存", () => {
+    const s = new SettingsStore(join(tmp(), "s.json"));
+    s.update({ model: "anthropic/claude-opus-5-5" });
+    expect(s.get().model).toBe("anthropic/claude-opus-5-5");
+    expect(() => s.update({ model: "no-slash" })).toThrow();
+    expect(() => s.update({ model: "a/" })).toThrow();
   });
-  test("DeepSeek 选项标明按量计费", () => {
-    expect(MODEL_OPTIONS.find((m) => m.id === "deepseek/deepseek-flash")?.billing).toBe("按量计费");
+  test("思考程度只认 Pi 的七档", () => {
+    const s = new SettingsStore(join(tmp(), "s.json"));
+    s.update({ thinkingAnalyst: "high", thinkingAdvisor: "off" });
+    expect(s.get()).toMatchObject({ thinkingAnalyst: "high", thinkingAdvisor: "off" });
+    expect(() => s.update({ thinkingAnalyst: "extreme" } as any)).toThrow();
+  });
+  test("没设置过模型时用传进来的初始值（pi 的默认）；文件里有就用文件的", () => {
+    const file = join(tmp(), "s.json");
+    expect(new SettingsStore(file, { model: "deepseek/deepseek-flash" }).get().model).toBe("deepseek/deepseek-flash");
+    writeFileSync(file, JSON.stringify({ model: "openai-codex/gpt-6.1-sol" }));
+    expect(new SettingsStore(file, { model: "deepseek/deepseek-flash" }).get().model).toBe("openai-codex/gpt-6.1-sol");
   });
 });
 
@@ -36,13 +47,13 @@ describe("SettingsStore", () => {
   });
   test("非法值拒绝，不改文件", () => {
     const s = new SettingsStore(join(tmp(), "s.json"));
-    expect(() => s.update({ model: "anthropic/claude-opus-5-5" } as any)).toThrow();
+    expect(() => s.update({ model: "bad" } as any)).toThrow();
     expect(() => s.update({ dataSource: "bloomberg" } as any)).toThrow();
     expect(s.get()).toEqual(DEFAULT_SETTINGS);
   });
   test("文件被手改成非法值时回到默认值", () => {
     const file = join(tmp(), "s.json");
-    writeFileSync(file, JSON.stringify({ model: "anthropic/x", dataSource: "yfinance" }));
+    writeFileSync(file, JSON.stringify({ model: "bad", thinkingAnalyst: "extreme", dataSource: "yfinance" }));
     expect(new SettingsStore(file).get()).toEqual({ ...DEFAULT_SETTINGS, dataSource: "yfinance" });
   });
 });
@@ -68,32 +79,6 @@ describe("数据源", () => {
   });
 });
 
-describe("模型凭据只认 pi 里的登录", () => {
-  test("auth.json 里存了 deepseek 才算登录；只设环境变量不算", async () => {
-    const dir = tmp();
-    const auth = join(dir, "auth.json");
-    writeFileSync(auth, JSON.stringify({ "openai-codex": { type: "oauth", access: "a", refresh: "r", expires: 0 } }));
-    const before = process.env.DEEPSEEK_API_KEY;
-    process.env.DEEPSEEK_API_KEY = "sk-from-shell";
-    try {
-      expect((await piAuthedProviders(auth)).has("deepseek")).toBe(false);
-      writeFileSync(auth, JSON.stringify({ deepseek: { type: "api_key", key: "sk-x" } }));
-      expect((await piAuthedProviders(auth)).has("deepseek")).toBe(true);
-    } finally {
-      if (before === undefined) delete process.env.DEEPSEEK_API_KEY; else process.env.DEEPSEEK_API_KEY = before;
-    }
-  });
-  test("没有 auth.json（没登录过 pi）不报错", async () => {
-    expect((await piAuthedProviders(join(tmp(), "auth.json"))).size).toBe(0);
-  });
-  test("DeepSeek 的说明和提示都写明要先在 pi 里登录，不再提 .env", () => {
-    const ds = MODEL_OPTIONS.find((m) => m.id === "deepseek/deepseek-flash")!;
-    expect(ds.note).toContain("pi 里登录 DeepSeek");
-    expect(ds.authHint).toContain("pi");
-    expect(`${ds.note}${ds.authHint}`).not.toMatch(/\.env|DEEPSEEK_API_KEY/);
-  });
-});
-
 describe("语音设置", () => {
   test("默认：分析师年轻男声云希，鸿雁年轻女声晓晓，不自动朗读", () => {
     expect(DEFAULT_SETTINGS.voiceAnalyst).toBe("zh-CN-YunxiNeural");
@@ -110,18 +95,5 @@ describe("语音设置", () => {
     expect(() => s.update({ autoSpeak: "yes" } as any)).toThrow();
     s.update({ voiceAdvisor: "zh-CN-XiaoyiNeural", autoSpeak: true });
     expect(s.get().voiceAdvisor).toBe("zh-CN-XiaoyiNeural");
-  });
-});
-
-describe("模型能不能用：认 Pi 的登录，也认 .env", () => {
-  test("Pi 里登录过 deepseek（或 .env 有 key）就能用；两边都没有就不能用", () => {
-    expect(modelReadiness(() => true)["deepseek/deepseek-flash"]).toBe(true);
-    expect(modelReadiness((p) => p !== "deepseek")["deepseek/deepseek-flash"]).toBe(false);
-  });
-  test("Codex 也按 Pi 的登录状态判断", () => {
-    expect(modelReadiness((p) => p !== "openai-codex")["openai-codex/gpt-6.1-sol"]).toBe(false);
-  });
-  test("每个模型都给出没登录时的提示", () => {
-    for (const m of MODEL_OPTIONS) expect(m.authHint).toMatch(/pi/);
   });
 });
