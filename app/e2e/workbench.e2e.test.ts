@@ -246,7 +246,7 @@ describe("盘中提醒", () => {
   test("可以关掉；当天换股票、刷新都不再弹出，顶部仍标「盘中」", async () => {
     warningNext = PARTIAL;
     // 分析结果按代码缓存，用别的用例没打开过的代码
-    const { page, errors } = await open(undefined, "AMD");
+    const { page, errors } = await open(undefined, "AMD").finally(() => { warningNext = null; });
     expect(await page.isVisible("#warning")).toBe(true);
     expect(await page.textContent("#warning")).toContain("K 线未完成");
     await page.click("#warning-close");
@@ -256,17 +256,16 @@ describe("盘中提醒", () => {
     expect(await page.isVisible("#warning")).toBe(false);
     expect(await page.textContent("#data-status-v")).toContain("盘中");
     expect(errors).toEqual([]);
-    warningNext = null;
     await page.close();
   }, 30_000);
 
   test("关掉的是那一个交易日：换一天的盘中提醒照样出现", async () => {
     warningNext = PARTIAL;
-    const { page } = await open(async (p) => {
+    const { page, errors } = await open(async (p) => {
       await p.addInitScript(() => localStorage.setItem("dma-partial-dismissed", "2000-01-03"));
-    }, "INTC");
+    }, "INTC").finally(() => { warningNext = null; });
     expect(await page.isVisible("#warning")).toBe(true);
-    warningNext = null;
+    expect(errors).toEqual([]);
     await page.close();
   }, 30_000);
 });
