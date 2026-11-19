@@ -1,3 +1,3 @@
-# 启动归雁工作台：http://127.0.0.1:5178
-goose:
-    cd app && bun start
+# 启动归雁工作台：just goose，或 just goose 5179 换端口
+goose port="5178":
+    cd app && PORT={{port}} bun start

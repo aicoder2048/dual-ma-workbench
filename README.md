@@ -30,7 +30,7 @@
 
 需要：[uv](https://docs.astral.sh/uv/)（Python 脚本）和 [Bun](https://bun.sh)（工作台）。
 
-装了 [just](https://github.com/casey/just) 的话，`just goose` 启动工作台。
+装了 [just](https://github.com/casey/just) 的话，`just goose` 启动工作台，`just goose 5179` 换端口。
 
 ```bash
 cp .env.example .env          # 填入 POLYGON_API_KEY；没有也能用 yfinance
