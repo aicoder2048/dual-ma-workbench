@@ -50,15 +50,13 @@ const s = (o: Partial<Sample>): Sample => ({
 describe("看方向的 MA20 推演：和两个简单基准比", () => {
   // 前 20 天 100..119 一路涨（MA20 抵扣价低），第 20 天起一路跌
   const closes = [...Array.from({ length: 20 }, (_, k) => 100 + k), ...Array.from({ length: 30 }, (_, k) => 118 - k)];
-  test("推演说向下 3 天：只看 3 天后；实际方向、抵扣价规则（价格不变）、当前斜率三者各自算", () => {
-    const i = 24;
-    const c = ma20Check(closes, i, { dir: -1, days: 3 })!;
-    expect(c.k).toBe(3);
-    const ma = (j: number) => closes.slice(j - 19, j + 1).reduce((a, b) => a + b, 0) / 20;
-    expect<number>(c.actual).toBe(Math.sign(ma(i + 3) - ma(i)));
-    // 价格不变：3 天后 MA20 = 去掉最早 3 天、补 3 个今天的价
-    expect<number>(c.dropRule).toBe(Math.sign(3 * closes[i] - (closes[i - 19] + closes[i - 18] + closes[i - 17])));
-    expect<number>(c.slope).toBe(Math.sign(closes[i] - closes[i - 20]));
+  test("推演说向下 3 天：只看 3 天后；实际方向和当前斜率各自算", () => {
+    // 第 24 天收 114（20 天前是 104：斜率向上）；之后 3 天收 113、112、111，扣掉的是 105、106、107：MA20 向上
+    const c = ma20Check(closes, 24, { dir: -1, days: 3 })!;
+    expect(c).toEqual({ k: 3, claim: -1, actual: 1, slope: 1 });
+  });
+  test("推演说向下 10 天：只看 5 天后", () => {
+    expect(ma20Check(closes, 24, { dir: -1, days: 10 })!.k).toBe(5);
   });
   test("没有推演（中间档、明天就变）：不算", () => {
     expect(ma20Check(closes, 24, null)).toBeNull();
@@ -78,15 +76,12 @@ describe("回放汇总", () => {
     expect(sum.byLean.find((r) => r.key === "不明")!.hit).toBeNull();
     expect(sum.all.n).toBe(4);
   });
-  test("MA20 推演命中率，和抵扣价规则、当前斜率两个基准并列；没推演的不算", () => {
-    const m = (claim: 1 | -1, actual: -1 | 0 | 1, dropRule: -1 | 0 | 1, slope: -1 | 0 | 1) => ({ k: 5, claim, actual, dropRule, slope });
-    const sum = summarize([
-      s({ ma20: m(1, 1, 1, 1) }), s({ ma20: m(1, -1, -1, 1) }), s({ ma20: m(-1, -1, -1, -1) }), s({ ma20: null }),
-    ]);
+  test("MA20 推演命中率，和当前斜率基准并列；没推演的不算", () => {
+    const m = (claim: 1 | -1, actual: -1 | 0 | 1, slope: -1 | 0 | 1) => ({ k: 5, claim, actual, slope });
+    const sum = summarize([s({ ma20: m(1, 1, 1) }), s({ ma20: m(1, -1, 1) }), s({ ma20: m(-1, -1, 1) }), s({ ma20: null })]);
     expect(sum.ma20.n).toBe(3);
     expect(sum.ma20.hit).toBeCloseTo(2 / 3);
-    expect(sum.ma20.dropRule).toBeCloseTo(1);
-    expect(sum.ma20.slope).toBeCloseTo(2 / 3);
+    expect(sum.ma20.slope).toBeCloseTo(1 / 3);
   });
   test("每行带「不同日期数」：同一天几只票算一个日期", () => {
     const sum = summarize([s({ date: "2025-04-01" }), s({ date: "2025-04-01", ticker: "Y" }), s({ date: "2025-05-01" })]);

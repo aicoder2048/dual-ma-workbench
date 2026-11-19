@@ -12,7 +12,7 @@ python3 e2e/watch.py      # 改服务端代码自动重启（--watch），之后
 bun scripts/replay.ts     # 回放验证：近 2 年每 20 个交易日一个点，对照之后 20 天走势，报告写到 reports/replay/
 ```
 
-- **回放验证**（`scripts/replay.ts`，评估逻辑在 `src/replay.ts`）：默认 NVDA TSLA AAPL GOOG META MSFT AMZN SPY QQQ，可传代码和 `--years --step --horizon --jobs`。每只票取一次 yfinance 日线存 `reports/replay/data/`（删掉才会重新下载），每个点只用当天往前 3 年，和工作台一致。看四件事：模糊判断各档之后涨跌、看方向的 MA20 推演对不对、空仓计划（"不买"类）之后涨跌、"站上 EMA20 + MA20 抵扣价"进场条件触发后表现。
+- **回放验证**（`scripts/replay.ts`，评估逻辑在 `src/replay.ts`）：默认 NVDA TSLA AAPL GOOG META MSFT AMZN SPY QQQ，可传代码和 `--years --step --horizon --jobs --refresh`。每只票取一次 yfinance 日线（只取到昨天）存 `reports/replay/data/`；缓存覆盖不到所需历史、超过 7 天没更新、或给了 `--refresh` 就重新取。每个点只用当天往前 3 年，和工作台一致，不够 3 年直接报错。看四件事：模糊判断各档之后涨跌、看方向的 MA20 推演对不对、空仓计划（"不买"类）之后涨跌、"站上 EMA20 + MA20 抵扣价"进场条件触发后表现。
 
 - **设置**（右上角齿轮，存在 `data/settings.json`）：
   - 大模型：默认 `openai-codex/gpt-6.1-sol`（Codex 订阅，需先在 `pi` 里登录）；可选 `deepseek/deepseek-flash`（**按量计费**，需要先在 `pi` 里登录 DeepSeek）。只允许这两个，`anthropic/*` 一律拒绝。切换后下一次提问生效，对话上下文保留，不改 Pi 的全局默认模型。

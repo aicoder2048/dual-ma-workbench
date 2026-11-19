@@ -467,4 +467,16 @@ test("ma20Claim 和看方向的结论说的是同一件事", () => {
   soon.drops = soon.drops.map((d) => (d.period === 20 ? { ...d, first_low: 1 } : d));
   expect(buildOutlook(soon).verdict).toContain("明天起");
   expect(ma20Claim(soon)).toBeNull();
+  const later = structuredClone(bear);
+  later.drops = later.drops.map((d) => (d.period === 20 ? { ...d, first_low: 6 } : d));
+  expect(buildOutlook(later).verdict).toContain("MA20 还要向下 5 天");
+  expect(ma20Claim(later)).toEqual({ dir: -1, days: 5 });
+  const allLow = bullish();
+  allLow.drops = allLow.drops.map((d) => (d.period === 20 ? { ...d, path: d.path.map((p) => ({ ...p, close: 1 })) } : d));
+  expect(buildOutlook(allLow).verdict).toContain(`未来 ${allLow.drops[0].path.length} 天 MA20 都扣低值`);
+  expect(ma20Claim(allLow)).toEqual({ dir: 1, days: allLow.drops[0].path.length });
+  const weak = bullish();
+  weak.drops = weak.drops.map((d) => (d.period === 20 ? { ...d, path: d.path.map((p) => ({ ...p, close: 999 })) } : d));
+  expect(buildOutlook(weak).verdict).toContain("顺风在减弱");
+  expect(ma20Claim(weak)).toBeNull();
 });
