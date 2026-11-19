@@ -155,9 +155,11 @@ export function showAnalysis(data, asof = null) {
   $("data-status-v").textContent = `${a.source.replace("（复权日线）", "")} · ${a.warning ? "盘中" : a.date}`;
   status.title = a.warning ?? `数据来源：${a.source}`;
 
+  // 盘中提醒关掉一次，同一交易日不再弹出；顶部「盘中」标记和悬停全文照旧
   const warn = $("warning");
-  warn.hidden = !a.warning;
-  warn.textContent = a.warning ?? "";
+  warn.dataset.date = a.warning ? a.date : "";
+  warn.hidden = !a.warning || partialDismissed(a.date);
+  $("warning-text").textContent = a.warning ?? "";
 
   const r = data.report;
   const v = $("verdict");
@@ -293,9 +295,21 @@ document.querySelectorAll("[data-open-settings]").forEach((b) => b.addEventListe
 
 function alertInline(message) {
   const warn = $("warning");
+  warn.dataset.date = "";
   warn.hidden = false;
-  warn.textContent = message;
+  $("warning-text").textContent = message;
 }
+
+const PARTIAL_KEY = "dma-partial-dismissed";
+function partialDismissed(date) {
+  try { return localStorage.getItem(PARTIAL_KEY) === date; } catch { return false; }
+}
+$("warning-close").addEventListener("click", () => {
+  const warn = $("warning");
+  warn.hidden = true;
+  if (!warn.dataset.date) return; // 出错提示：只关这一次
+  try { localStorage.setItem(PARTIAL_KEY, warn.dataset.date); } catch { /* 隐私模式：只在本页有效 */ }
+});
 
 // ---------- 主题（跟随系统 / 浅 / 深 / 水墨）----------
 const THEMES = ["", "light", "dark", "ink"];

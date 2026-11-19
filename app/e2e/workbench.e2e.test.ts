@@ -36,6 +36,7 @@ const MP3 = readFileSync(resolve(import.meta.dir, "../test/fixtures/tts-sample.m
 const ttsCalls: { text: string; voice: string }[] = [];
 const wsSent: any[] = [];
 let staleNext = false;
+let warningNext: string | null = null;
 const lastPrompt = () => wsSent.filter((m) => m.type === "prompt").at(-1);
 let server: ReturnType<typeof Bun.serve>;
 let browser: Browser;
@@ -45,7 +46,7 @@ beforeAll(async () => {
   const dir = mkdtempSync(join(tmpdir(), "dma-e2e-"));
   const handler = createHandler({
     analyzer: new Analyzer(async (args) =>
-      JSON.stringify({ analysis: { ...(nvda as Analysis), label: args[0] }, chart: CHART })),
+      JSON.stringify({ analysis: { ...(nvda as Analysis), label: args[0], warning: warningNext ?? nvda.warning }, chart: CHART })),
     watchlist: new Watchlist(join(dir, "w.json")),
     library: SourceLibrary.load(),
     publicDir: resolve(import.meta.dir, "../public"),
@@ -76,12 +77,12 @@ afterAll(async () => {
 }, 30_000);
 
 /** 打开工作台，等模糊判断卡片出来。errors 收集页面里没接住的异常。 */
-async function open(setup?: (p: Page) => Promise<void>) {
+async function open(setup?: (p: Page) => Promise<void>, ticker = "NVDA") {
   const page = await browser.newPage();
   const errors: string[] = [];
   page.on("pageerror", (e) => errors.push(e.message));
   await setup?.(page);
-  await page.goto(`${base}/#NVDA`);
+  await page.goto(`${base}/#${ticker}`);
   await page.waitForSelector(".lean-label");
   return { page, errors };
 }
@@ -236,6 +237,35 @@ describe("服务端比页面旧", () => {
     expect(await page.textContent("#stale-bar")).toContain("just wildgoose");
     expect(errors).toEqual([]);
     staleNext = false;
+    await page.close();
+  }, 30_000);
+});
+
+describe("盘中提醒", () => {
+  const PARTIAL = "今日 K 线未完成（美东 13:03，收盘 16:00）。";
+  test("可以关掉；当天换股票、刷新都不再弹出，顶部仍标「盘中」", async () => {
+    warningNext = PARTIAL;
+    // 分析结果按代码缓存，用别的用例没打开过的代码
+    const { page, errors } = await open(undefined, "AMD").finally(() => { warningNext = null; });
+    expect(await page.isVisible("#warning")).toBe(true);
+    expect(await page.textContent("#warning")).toContain("K 线未完成");
+    await page.click("#warning-close");
+    expect(await page.isVisible("#warning")).toBe(false);
+    await page.reload();
+    await page.waitForSelector(".lean-label");
+    expect(await page.isVisible("#warning")).toBe(false);
+    expect(await page.textContent("#data-status-v")).toContain("盘中");
+    expect(errors).toEqual([]);
+    await page.close();
+  }, 30_000);
+
+  test("关掉的是那一个交易日：换一天的盘中提醒照样出现", async () => {
+    warningNext = PARTIAL;
+    const { page, errors } = await open(async (p) => {
+      await p.addInitScript(() => localStorage.setItem("dma-partial-dismissed", "2000-01-03"));
+    }, "INTC").finally(() => { warningNext = null; });
+    expect(await page.isVisible("#warning")).toBe(true);
+    expect(errors).toEqual([]);
     await page.close();
   }, 30_000);
 });
