@@ -194,10 +194,11 @@ function speakButton(agent, text) {
   const btn = document.createElement("button");
   btn.type = "button";
   btn.className = "speak";
-  const paint = (on) => {
+  const paint = (on, error = null) => {
     btn.setAttribute("aria-pressed", String(on));
-    btn.textContent = on ? "■ 停止" : "▶ 朗读";
-    btn.title = on ? "停止朗读" : "朗读这条回答（微软 Edge 在线语音）";
+    btn.classList.toggle("failed", Boolean(error));
+    btn.textContent = on ? "■ 停止" : error ? "⚠ 朗读失败" : "▶ 朗读";
+    btn.title = on ? "停止朗读" : error ?? "朗读这条回答（微软 Edge 在线语音）";
   };
   paint(false);
   btn.addEventListener("click", () => {

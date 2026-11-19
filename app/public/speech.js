@@ -50,8 +50,14 @@ export function stopSpeaking() {
   current = null;
 }
 
+/** 把失败原因说成人话。404 = 页面比服务端新：服务端还没有语音接口。 */
+async function ttsError(res) {
+  if (res.status === 404) return "服务端没有朗读接口：请重启服务（just wildgoose）后刷新页面。";
+  return (await res.json().catch(() => ({}))).error ?? `语音合成失败（${res.status}）`;
+}
+
 /**
- * 朗读一段回答。onState(playing) 在开始、结束（含被打断、出错）时回调。
+ * 朗读一段回答。onState(playing, error) 在开始、结束（含被打断）时回调；出错时 error 是原因。
  * 下一段在当前段播放时就去取，段与段之间几乎没有停顿。
  */
 export function speak(id, markdown, voice, onState = () => {}) {
@@ -63,18 +69,18 @@ export function speak(id, markdown, voice, onState = () => {}) {
   const urls = [];
   const fetchChunk = (i) => fetch("/api/tts", { method: "POST", body: JSON.stringify({ text: chunks[i], voice }) })
     .then(async (res) => {
-      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? `语音合成失败（${res.status}）`);
+      if (!res.ok) throw new Error(await ttsError(res));
       const url = URL.createObjectURL(await res.blob());
       urls.push(url);
       return url;
     });
   const me = {
     id,
-    stop() {
+    stop(error = null) {
       stopped = true;
       audio.pause();
       urls.forEach((u) => URL.revokeObjectURL(u));
-      onState(false);
+      onState(false, error);
     },
   };
   current = me;
@@ -93,7 +99,6 @@ export function speak(id, markdown, voice, onState = () => {}) {
     }
     if (current === me) { current = null; onState(false); }
   })().catch((err) => {
-    console.warn("[归雁] 朗读中断：", err.message);
-    if (current === me) me.stop();
+    if (current === me) { current = null; me.stop(err.message); }
   });
 }

@@ -451,3 +451,4 @@ body.offline .status-pill .dot { background: var(--bad); }
 .voice-row { display: grid; grid-template-columns: 64px 1fr auto; gap: 8px; align-items: center; margin: 6px 0; font-size: 13px; }
 .voice-row select { min-width: 0; padding: 4px 6px; background: var(--card); border: 1px solid var(--line); border-radius: 8px; font-size: 13px; }
 .opt.check { margin-top: 8px; }
+.speak.failed { color: var(--bad); border-color: currentColor; }

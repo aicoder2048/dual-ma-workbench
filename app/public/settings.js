@@ -49,6 +49,7 @@ function render() {
         </label>`).join("")}
     </fieldset>
     <fieldset><legend>语音播报 <span>微软 Edge 在线语音，回答的文字会发到微软的服务</span></legend>
+      ${!view.voices ? `<p class="bad">服务端还是旧版本，没有语音选项：请重启服务（just wildgoose）后刷新页面。</p>` : `
       ${[["voiceAnalyst", "分析师"], ["voiceAdvisor", "均线参谋"]].map(([key, who]) => `
         <div class="voice-row">
           <label for="sp-${key}">${who}</label>
@@ -60,7 +61,7 @@ function render() {
         </div>`).join("")}
       <label class="opt check"><input type="checkbox" name="autoSpeak" ${settings.autoSpeak ? "checked" : ""}>
         <span class="opt-main"><b>回答完自动朗读</b></span>
-        <span class="opt-note">关掉时，点每条回答旁的「▶ 朗读」。</span></label>
+        <span class="opt-note">关掉时，点每条回答旁的「▶ 朗读」。</span></label>`}
     </fieldset>
     <p class="sp-status" id="sp-status" aria-live="polite"></p>`;
 }
@@ -90,7 +91,10 @@ export async function initSettings({ onDataSourceChange }) {
     if (!btn) return;
     const id = `preview-${btn.dataset.preview}`;
     if (speakingId() === id) return stopSpeaking();
-    speak(id, PREVIEW[btn.dataset.preview], view.settings[btn.dataset.preview], (on) => (btn.textContent = on ? "停止" : "试听"));
+    speak(id, PREVIEW[btn.dataset.preview], view.settings[btn.dataset.preview], (on, error) => {
+      btn.textContent = on ? "停止" : error ? "试听失败" : "试听";
+      if (error) $("sp-status").textContent = error;
+    });
   });
 
   panel.addEventListener("change", async (e) => {
