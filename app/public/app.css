@@ -468,3 +468,4 @@ body.offline .status-pill .dot { background: var(--bad); }
 .composer.drop { outline: 2px dashed var(--accent); outline-offset: -4px; }
 .msg.user .atts { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 3px; }
 .att-name { font-size: 11.5px; border: 1px solid var(--line); border-radius: 6px; padding: 0 6px; color: var(--muted); }
+.stale-bar { background: var(--bad); color: #fff; font-size: 13.5px; padding: 8px 20px; text-align: center; flex: none; }

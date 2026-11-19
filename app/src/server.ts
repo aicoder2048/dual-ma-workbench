@@ -5,6 +5,7 @@
  */
 import { resolve } from "node:path";
 import { Analyzer } from "./analyze.ts";
+import { codeFingerprint } from "./build.ts";
 import { createHandler } from "./http.ts";
 import { SourceLibrary } from "./sources.ts";
 import { loadEnvKeys, MODEL_OPTIONS, SettingsStore } from "./settings.ts";
@@ -30,6 +31,11 @@ const handler = createHandler({
   settings,
 });
 
+// 启动时的代码指纹。页面每次连上来都重算一次：代码变了就提醒重启，免得新页面配旧服务端
+const CODE_DIRS = [import.meta.dir, resolve(import.meta.dir, "../public")];
+const BOOT_FINGERPRINT = codeFingerprint(CODE_DIRS);
+const STARTED = new Date().toLocaleTimeString("zh-CN", { hour12: false });
+
 type WsData = { client?: Client };
 
 const server = Bun.serve<WsData, never>({
@@ -47,6 +53,9 @@ const server = Bun.serve<WsData, never>({
   websocket: {
     maxPayloadLength: 24 * 1024 * 1024, // 附件：最多 4 张 4MB 图片，base64 后约 22MB
     open(ws) {
+      if (codeFingerprint(CODE_DIRS) !== BOOT_FINGERPRINT) {
+        ws.send(JSON.stringify({ type: "stale", message: `服务端是 ${STARTED} 启动的，之后代码更新过。新功能要重启才生效：在终端按 Ctrl+C，再运行 just wildgoose，然后刷新页面。` }));
+      }
       ws.data.client = { send: (d) => ws.send(d) };
       workbench.connect(ws.data.client);
     },

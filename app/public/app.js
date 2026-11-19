@@ -284,6 +284,19 @@ function initTheme() {
   });
 }
 
+/** 服务端比页面旧：顶部常驻红条，直到重启后刷新。 */
+function showStale(message) {
+  let bar = $("stale-bar");
+  if (!bar) {
+    bar = document.createElement("div");
+    bar.id = "stale-bar";
+    bar.className = "stale-bar";
+    bar.setAttribute("role", "alert");
+    document.body.prepend(bar);
+  }
+  bar.textContent = `⚠ ${message}`;
+}
+
 // ---------- 两个 agent ----------
 export const panels = {};
 
@@ -300,6 +313,7 @@ function initAgents() {
   });
   connect((e) => {
     if (e.type === "analysis") return showAnalysis(e.data, e.asof);
+    if (e.type === "stale") return showStale(e.message);
     if (e.type === "settings") return applyRemoteSettings(e.settings, { onDataSourceChange: reloadAll });
     const p = panels[e.agent];
     if (!p) return;

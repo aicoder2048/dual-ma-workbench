@@ -19,6 +19,7 @@ import nvda from "../test/fixtures/nvda-analysis.json";
 const MP3 = readFileSync(resolve(import.meta.dir, "../test/fixtures/tts-sample.mp3"));
 const ttsCalls: { text: string; voice: string }[] = [];
 const wsSent: any[] = [];
+let staleNext = false;
 const lastPrompt = () => wsSent.filter((m) => m.type === "prompt").at(-1);
 let server: ReturnType<typeof Bun.serve>;
 let browser: Browser;
@@ -41,7 +42,10 @@ beforeAll(async () => {
     fetch: (req, srv) => (new URL(req.url).pathname === "/ws" ? (srv.upgrade(req) ? undefined : new Response("", { status: 400 })) : handler(req)),
     websocket: {
       maxPayloadLength: 24 * 1024 * 1024,
-      open(ws) { for (const agent of ["analyst", "advisor"]) ws.send(JSON.stringify({ type: "status", agent, busy: false })); },
+      open(ws) {
+        if (staleNext) ws.send(JSON.stringify({ type: "stale", message: "服务端代码更新过：按 Ctrl+C 后运行 just wildgoose" }));
+        for (const agent of ["analyst", "advisor"]) ws.send(JSON.stringify({ type: "status", agent, busy: false }));
+      },
       message(_ws, m) { wsSent.push(JSON.parse(String(m))); },
     },
   });
@@ -201,6 +205,20 @@ describe("附件", () => {
     await page.setInputFiles("#analyst-composer input[type=file]", { name: "研报.pdf", mimeType: "application/pdf", buffer: Buffer.from("%PDF-1.4") });
     await page.waitForSelector(".att-note");
     expect(await page.textContent(".att-note")).toContain("截图");
+    await page.close();
+  }, 30_000);
+});
+
+describe("服务端比页面旧", () => {
+  test("服务端说代码更新过：顶部出现红条，提示重启", async () => {
+    const { page, errors } = await open();
+    // WebSocket 替身下次连上时推 stale（真服务端在页面连上时比对代码指纹）
+    staleNext = true;
+    await page.reload();
+    await page.waitForSelector("#stale-bar");
+    expect(await page.textContent("#stale-bar")).toContain("just wildgoose");
+    expect(errors).toEqual([]);
+    staleNext = false;
     await page.close();
   }, 30_000);
 });
