@@ -1,0 +1,78 @@
+/** HTTP 路由（不含 WebSocket）。依赖注入，测试时可以换掉 Analyzer 和 Watchlist。 */
+import { existsSync } from "node:fs";
+import { extname, resolve } from "node:path";
+import { explainError, type Analyzer } from "./analyze.ts";
+import { buildFacts } from "./citations.ts";
+import { buildReport } from "./report.ts";
+import type { SourceLibrary } from "./sources.ts";
+import type { Watchlist } from "./watchlist.ts";
+
+export interface Deps {
+  analyzer: Analyzer;
+  watchlist: Watchlist;
+  library: SourceLibrary;
+  publicDir: string;
+}
+
+const json = (data: unknown, status = 200) =>
+  new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json; charset=utf-8" } });
+
+const fail = (message: string, status = 400) => json({ error: message }, status);
+
+const MIME: Record<string, string> = {
+  ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8",
+  ".css": "text/css; charset=utf-8", ".svg": "image/svg+xml", ".json": "application/json",
+};
+
+export function createHandler(deps: Deps) {
+  const { analyzer, watchlist, library, publicDir } = deps;
+
+  async function api(req: Request, url: URL): Promise<Response> {
+    const p = url.pathname;
+    const q = url.searchParams;
+
+    if (p === "/api/analyze" && req.method === "GET") {
+      const r = await analyzer.analyze(q.get("ticker") ?? "", q.get("asof"));
+      return json({ ...r, facts: buildFacts(r.analysis), report: buildReport(r.analysis) });
+    }
+    if (p === "/api/summary" && req.method === "GET") {
+      const { analysis: a } = await analyzer.analyze(q.get("ticker") ?? "");
+      return json({ ticker: a.label, date: a.date, close: a.close, change_pct: a.change_pct, trend: a.trend });
+    }
+    if (p === "/api/watchlist") {
+      if (req.method === "GET") return json(watchlist.list());
+      const body = (await req.json().catch(() => ({}))) as { ticker?: string };
+      if (req.method === "POST") return json(watchlist.add(body.ticker ?? ""));
+      if (req.method === "DELETE") return json(watchlist.remove(body.ticker ?? ""));
+    }
+    if (p === "/api/sources" && req.method === "GET") {
+      return json(library.chunks.map((c) => ({ id: c.id, doc: c.docTitle, heading: c.heading })));
+    }
+    if (p === "/api/source" && req.method === "GET") {
+      const c = library.get(q.get("id") ?? "");
+      return c ? json(c) : fail("没有这个原文片段", 404);
+    }
+    return fail("没有这个接口", 404);
+  }
+
+  function serveStatic(url: URL): Response {
+    const rel = url.pathname === "/" ? "index.html" : url.pathname.slice(1);
+    const file = resolve(publicDir, rel);
+    // 防止 ../ 跳出 public 目录
+    if (!file.startsWith(publicDir + "/") || !existsSync(file)) return new Response("Not found", { status: 404 });
+    // 本地工具：不缓存，改了前端刷新就生效
+    return new Response(Bun.file(file), {
+      headers: { "content-type": MIME[extname(file)] ?? "application/octet-stream", "cache-control": "no-store" },
+    });
+  }
+
+  return async (req: Request): Promise<Response> => {
+    const url = new URL(req.url);
+    if (!url.pathname.startsWith("/api/")) return serveStatic(url);
+    try {
+      return await api(req, url);
+    } catch (err) {
+      return fail(explainError(err), err instanceof Error && /不合法|格式|最多/.test(err.message) ? 400 : 500);
+    }
+  };
+}

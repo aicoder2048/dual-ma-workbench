@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>双均线工作台</title>
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Noto+Sans+SC:wght@400;500;700&display=swap">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<div class="shell">
+
+  <!-- 左栏：自选股 -->
+  <aside class="col left" aria-label="自选股">
+    <header class="brand">
+      <div class="logo" aria-hidden="true"><i></i><i></i></div>
+      <div>
+        <strong>双均线工作台</strong>
+        <span>均线方向 = 最小阻力方向</span>
+      </div>
+    </header>
+    <div class="col-title">自选股</div>
+    <ul id="watchlist" class="watchlist"></ul>
+    <form id="wl-add" class="wl-add" autocomplete="off">
+      <input id="wl-input" placeholder="添加代码，如 AMD" maxlength="15" aria-label="添加自选股">
+      <button type="submit" aria-label="添加">＋</button>
+    </form>
+    <footer class="left-foot">
+      <button id="theme" type="button" class="ghost">切换亮/暗</button>
+      <span>学习与复盘用，不是投资建议</span>
+    </footer>
+  </aside>
+
+  <!-- 中栏：分析师 -->
+  <main class="col center" aria-label="分析师">
+    <div class="center-scroll" id="center-scroll">
+      <header class="topbar">
+        <div class="title">
+          <div class="eyebrow" id="meta-line">选择一只股票开始</div>
+          <h1><span id="ticker">—</span><span class="price num" id="price"></span><span class="chg num" id="chg"></span></h1>
+        </div>
+        <form id="load-form" class="load-form" autocomplete="off">
+          <input id="load-ticker" placeholder="代码" maxlength="15" aria-label="股票代码">
+          <input id="load-asof" type="date" aria-label="回放日期（留空为最新）" title="回放日期（留空为最新）">
+          <button type="submit">分析</button>
+        </form>
+      </header>
+      <div id="warning" class="warn" hidden></div>
+      <div id="verdict" class="verdict" hidden></div>
+
+      <section class="card chart-card">
+        <div class="legend" id="legend"></div>
+        <div id="chart" class="chart" data-selectable="chart"><p class="caption">加载中……</p></div>
+        <p class="caption">小黄点 = 明天各条 MA 要扣掉的那根 K 线（底扣价）。黄色量柱 = 成交量超过 50 日均量 2 倍。</p>
+      </section>
+
+      <section class="steps" id="steps" data-selectable="report"></section>
+
+      <section class="thread" id="analyst-thread" aria-live="polite"></section>
+    </div>
+
+    <div class="composer" id="analyst-composer">
+      <div class="chips" id="analyst-chips"></div>
+      <form class="ask" id="analyst-form">
+        <textarea id="analyst-input" rows="1" placeholder="问分析师：用双均线看看 NVDA / 现在能加仓吗 / 60 日线什么时候拐头 / 回放 TSLA 2021-04-14" disabled></textarea>
+        <button type="submit" id="analyst-send" disabled>发送</button>
+      </form>
+    </div>
+  </main>
+
+  <!-- 右栏：均线参谋 -->
+  <aside class="col right" aria-label="均线参谋">
+    <header class="right-head">
+      <strong>均线参谋</strong>
+      <span>解释概念 · 解读你划选的内容 · 每句话都有出处</span>
+    </header>
+    <div class="right-scroll" id="advisor-scroll">
+      <div class="empty" id="advisor-empty">
+        <p>在中间<b>划选一段文字</b>或<b>点一下图表</b>，再点「问参谋」，参谋会结合当前数据解读。</p>
+        <p>也可以直接问概念，比如"底扣价的公式是什么"。</p>
+      </div>
+      <section class="thread" id="advisor-thread" aria-live="polite"></section>
+    </div>
+    <div class="composer">
+      <div class="chips" id="advisor-chips"></div>
+      <div class="context-pill" id="advisor-context" hidden></div>
+      <form class="ask" id="advisor-form">
+        <textarea id="advisor-input" rows="1" placeholder="问均线参谋：什么叫双交叉？" disabled></textarea>
+        <button type="submit" id="advisor-send" disabled>发送</button>
+      </form>
+    </div>
+  </aside>
+</div>
+
+<div id="popover" class="popover" role="dialog" hidden></div>
+<button id="ask-advisor" class="ask-float" type="button" hidden>问参谋</button>
+
+<script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js"></script>
+<script type="module" src="app.js"></script>
+</body>
+</html>

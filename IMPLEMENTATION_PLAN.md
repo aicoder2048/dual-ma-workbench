@@ -28,7 +28,7 @@
 **Goal**: Bun 服务 + 静态前端。左栏自选股增删和趋势标签；中栏图表和规则版三步报告（带引用）；右栏空壳；亮/暗主题。
 **Success Criteria**: 浏览器打开能切换股票、回放日期，图表和报告正确。
 **Tests**: bun test 测 HTTP 接口；手动在浏览器里看一遍。
-**Status**: Not Started
+**Status**: Complete
 
 ## Stage 4: 分析师 agent
 **Goal**: Pi SDK 会话 + skill + `dma_analyze` / `suggest_questions` 工具；WebSocket 流式回答、中断；动态问法按钮。
