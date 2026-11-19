@@ -105,6 +105,25 @@ export function factsForPrompt(facts: Facts): string {
     .join("\n");
 }
 
+/**
+ * 一次回答可能涉及多只股票：按股票代码存数据字段，`current` 是不写代码时默认指的那只。
+ * 引用写法：`[[D:MA20]]`（默认股票）或 `[[D:TSLA:MA20]]`（指定股票）。
+ */
+export interface FactsBook {
+  byTicker: Record<string, Facts>;
+  current: string | null;
+}
+
+export const bookOf = (ticker: string, facts: Facts): FactsBook => ({ byTicker: { [ticker]: facts }, current: ticker });
+
+export function lookupFact(book: FactsBook | null, ref: string): Fact | undefined {
+  if (!book) return undefined;
+  const m = ref.match(/^([A-Z0-9.\-^=]+):(.+)$/);
+  const ticker = m ? m[1] : book.current;
+  const key = m ? m[2] : ref;
+  return ticker ? book.byTicker[ticker]?.[key] : undefined;
+}
+
 export interface CitationCheck {
   citation: Citation;
   ok: boolean;
@@ -113,7 +132,7 @@ export interface CitationCheck {
   value?: string;
 }
 
-export function validateCitations(text: string, lib: SourceLibrary, facts: Facts | null): CitationCheck[] {
+export function validateCitations(text: string, lib: SourceLibrary, book: FactsBook | null): CitationCheck[] {
   return parseCitations(text).map((citation) => {
     if (citation.kind === "S") {
       const chunk = lib.get(citation.ref);
@@ -121,7 +140,7 @@ export function validateCitations(text: string, lib: SourceLibrary, facts: Facts
         ? { citation, ok: true, title: `${chunk.docTitle} · ${chunk.heading}` }
         : { citation, ok: false };
     }
-    const fact = facts?.[citation.ref];
+    const fact = lookupFact(book, citation.ref);
     return fact ? { citation, ok: true, title: fact.label, value: fact.value } : { citation, ok: false };
   });
 }

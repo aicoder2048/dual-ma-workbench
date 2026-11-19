@@ -16,8 +16,10 @@ const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&
 
 /** facts：当前上下文的数据字段 { 键: {label, value} }；可以为空。 */
 export function renderRich(el, text, facts = null) {
-  const withSlots = String(text).replace(CITE, (_, kind, ref) =>
-    `<span class="cite-slot" data-kind="${kind}" data-ref="${esc(ref.trim())}"></span>`);
+  const withSlots = String(text)
+    .replace(CITE, (_, kind, ref) => `<span class="cite-slot" data-kind="${kind}" data-ref="${esc(ref.trim())}"></span>`)
+    // 中文里 "**加粗；**等" 不满足 CommonMark 的定界规则，marked 不认；先转成 <strong>
+    .replace(/\*\*([^*\n]+?)\*\*/g, "<strong>$1</strong>");
   const html = window.marked ? window.marked.parse(withSlots, { breaks: true }) : esc(withSlots);
   el.innerHTML = window.DOMPurify ? window.DOMPurify.sanitize(html) : html;
   el.querySelectorAll(".cite-slot").forEach((slot) => slot.replaceWith(citeButton(slot.dataset.kind, slot.dataset.ref, facts)));
@@ -28,6 +30,15 @@ export function renderInline(el, text, facts = null) {
   renderRich(el, text, facts);
   const only = el.children.length === 1 && el.firstElementChild.tagName === "P" ? el.firstElementChild : null;
   if (only) only.replaceWith(...only.childNodes);
+}
+
+/** facts 可以是 { 键: fact }，也可以是 { byTicker, current }（agent 回答，可能涉及多只股票）。 */
+function lookup(facts, ref) {
+  if (!facts) return undefined;
+  if (!facts.byTicker) return facts[ref];
+  const m = ref.match(/^([A-Z0-9.\-^=]+):(.+)$/);
+  const t = m ? m[1] : facts.current;
+  return t ? facts.byTicker[t]?.[m ? m[2] : ref] : undefined;
 }
 
 function citeButton(kind, ref, facts) {
@@ -42,7 +53,7 @@ function citeButton(kind, ref, facts) {
     b.textContent = `${DOC_SHORT[doc] ?? doc} ${sec ?? ""}`.trim();
     b.title = s ? `${s.doc} · ${s.heading}` : `引用库里没有 ${ref}`;
   } else {
-    const f = facts?.[ref];
+    const f = lookup(facts, ref);
     b.className = f ? "cite data" : "cite bad";
     // 正文里已经写了数字，标签只放字段名；数值在悬停提示和弹窗里
     b.textContent = ref;

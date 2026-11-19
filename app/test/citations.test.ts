@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { buildFacts, factsForPrompt, parseCitations, validateCitations, type Analysis } from "../src/citations.ts";
+import { bookOf, buildFacts, factsForPrompt, lookupFact, parseCitations, validateCitations, type Analysis } from "../src/citations.ts";
 import { SourceLibrary } from "../src/sources.ts";
 import nvda from "./fixtures/nvda-analysis.json";
 
@@ -40,7 +40,7 @@ describe("buildFacts", () => {
 });
 
 describe("validateCitations", () => {
-  const facts = buildFacts(analysis);
+  const facts = bookOf("NVDA", buildFacts(analysis));
 
   test("存在的编号通过，并带上标题或数值", () => {
     const [s, d] = validateCitations("[[S:article#2.3]] [[D:MA60]]", lib, facts);
@@ -55,4 +55,13 @@ describe("validateCitations", () => {
   test("没有当前分析时，数据引用一律失败", () => {
     expect(validateCitations("[[D:MA20]]", lib, null)[0].ok).toBe(false);
   });
+});
+
+describe("多只股票的数据引用", () => {
+  const book = { byTicker: { NVDA: buildFacts(analysis), TSLA: { MA20: { label: "20 日 MA", value: "386.13" } } }, current: "NVDA" };
+
+  test("不写代码时指默认股票", () => expect(lookupFact(book, "MA20")?.value).toBe("189.04"));
+  test("写了代码就指那只股票", () => expect(lookupFact(book, "TSLA:MA20")?.value).toBe("386.13"));
+  test("代码不存在则找不到", () => expect(lookupFact(book, "AMD:MA20")).toBeUndefined());
+  test("字段名里本身含冒号以外的点号不受影响", () => expect(lookupFact(book, "扣20.均值")?.value).toBe("209.97"));
 });

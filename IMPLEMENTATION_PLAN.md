@@ -34,7 +34,10 @@
 **Goal**: Pi SDK 会话 + skill + `dma_analyze` / `suggest_questions` 工具；WebSocket 流式回答、中断；动态问法按钮。
 **Success Criteria**: 问"NVDA 能抄底吗"，图表刷新、回答带合法引用、出现新的动态问法。
 **Tests**: 模型守卫单测；工具单测（不调模型）；一次真实对话冒烟（订阅）。
-**Status**: Not Started
+**Status**: Complete
+
+## 追加：主题（用户 2026-11-18 提出）
+跟随系统 / 浅 / 深 / 水墨，右上角分段切换，记在 localStorage。**Status**: Complete
 
 ## Stage 5: 均线参谋 agent
 **Goal**: 独立会话 + 引用库工具；划选文字 / 点图表（K 线、小黄点、均线）发起解读；概念类动态问法；引用点开看原文。

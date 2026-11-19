@@ -3,7 +3,7 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { Analyzer, normalizeAsof, normalizeTicker, type Runner } from "../src/analyze.ts";
-import { buildFacts, validateCitations, type Analysis } from "../src/citations.ts";
+import { bookOf, buildFacts, validateCitations, type Analysis } from "../src/citations.ts";
 import { createHandler } from "../src/http.ts";
 import { buildReport } from "../src/report.ts";
 import { SourceLibrary } from "../src/sources.ts";
@@ -25,7 +25,7 @@ describe("规则报告", () => {
   const report = buildReport(analysis);
 
   test("每一条引用都能在引用库或数据字段里找到", () => {
-    const facts = buildFacts(analysis);
+    const facts = bookOf("NVDA", buildFacts(analysis));
     const text = report.steps.flatMap((s) => s.items).join("\n");
     const checks = validateCitations(text, library, facts);
     expect(checks.length).toBeGreaterThan(20);

@@ -1,4 +1,5 @@
 // 页面状态：自选股、当前分析、规则版三步报告。Stage 4/5 在此基础上接两个 agent。
+import { connect, Panel, send } from "./agents.js";
 import { createChart } from "./chart.js";
 import { installCitationHandlers, loadSourceIndex, renderInline } from "./cite.js";
 
@@ -163,6 +164,7 @@ export function showAnalysis(data, asof = null) {
   document.querySelectorAll(".wl-item").forEach((li) =>
     li.classList.toggle("active", li.dataset.ticker === a.label && !asof));
   listeners.forEach((cb) => cb(data));
+  send({ type: "view", ticker: a.label, asof }); // 服务端据此更新问法、给参谋准备数据
 }
 
 $("load-form").addEventListener("submit", (e) => {
@@ -177,24 +179,71 @@ function alertInline(message) {
   warn.textContent = message;
 }
 
-// ---------- 主题 ----------
+// ---------- 主题（跟随系统 / 浅 / 深 / 水墨）----------
+const THEMES = ["", "light", "dark", "ink"];
+
+function applyTheme(name) {
+  if (name) document.documentElement.dataset.theme = name;
+  else delete document.documentElement.dataset.theme; // 跟随系统
+}
+
 function initTheme() {
-  let saved = null;
-  try { saved = localStorage.getItem("dma-theme"); } catch { /* 隐私模式 */ }
-  if (saved) document.documentElement.dataset.theme = saved;
-  $("theme").addEventListener("click", () => {
-    const dark = document.documentElement.dataset.theme
-      ? document.documentElement.dataset.theme === "dark"
-      : matchMedia("(prefers-color-scheme: dark)").matches;
-    const next = dark ? "light" : "dark";
-    document.documentElement.dataset.theme = next;
-    try { localStorage.setItem("dma-theme", next); } catch { /* 忽略 */ }
+  let saved = "";
+  try { saved = localStorage.getItem("dma-theme") ?? ""; } catch { /* 隐私模式 */ }
+  if (!THEMES.includes(saved)) saved = "";
+  const seg = $("theme");
+  const mark = (v) => seg.querySelectorAll("button").forEach((b) => b.setAttribute("aria-checked", String(b.dataset.value === v)));
+  applyTheme(saved);
+  mark(saved);
+  seg.addEventListener("click", (e) => {
+    const b = e.target.closest("button");
+    if (!b) return;
+    applyTheme(b.dataset.value);
+    mark(b.dataset.value);
+    try { localStorage.setItem("dma-theme", b.dataset.value); } catch { /* 忽略 */ }
   });
 }
+
+// ---------- 两个 agent ----------
+export const panels = {};
+
+function initAgents() {
+  panels.analyst = new Panel({
+    agent: "analyst", thread: $("analyst-thread"), scroller: $("center-scroll"), chips: $("analyst-chips"),
+    form: $("analyst-form"), input: $("analyst-input"), sendBtn: $("analyst-send"), resetBtn: $("analyst-reset"),
+  });
+  panels.advisor = new Panel({
+    agent: "advisor", thread: $("advisor-thread"), scroller: $("advisor-scroll"), chips: $("advisor-chips"),
+    form: $("advisor-form"), input: $("advisor-input"), sendBtn: $("advisor-send"), resetBtn: $("advisor-reset"),
+    empty: $("advisor-empty"),
+    beforeSend: () => ({ selection: takeSelection() }),
+  });
+  connect((e) => {
+    if (e.type === "analysis") return showAnalysis(e.data, e.asof);
+    const p = panels[e.agent];
+    if (!p) return;
+    switch (e.type) {
+      case "history": p.enable(true); return p.history(e.entries);
+      case "status": p.enable(true); return p.setBusy(e.busy);
+      case "turn_start": p.addUser(e.user); return p.startTurn();
+      case "text_delta": return p.delta(e.delta);
+      case "tool": return p.tool(e);
+      case "turn_end": return p.endTurn(e.entry);
+      case "suggestions": return p.suggestions(e.items, e.source);
+      case "error": return p.error(e.message);
+    }
+  });
+}
+
+// 划选内容（Stage 5 填充）：问参谋时一起发出，发完清空
+let pendingSelection = null;
+export function setSelection(sel) { pendingSelection = sel; }
+function takeSelection() { const s = pendingSelection; pendingSelection = null; return s; }
 
 // ---------- 启动 ----------
 async function main() {
   initTheme();
+  initAgents();
   installCitationHandlers(() => (state.data ? `${state.data.analysis.label} ${state.data.analysis.date}` : ""));
   chartApi = createChart($("chart"), $("legend"));
   await loadSourceIndex();
