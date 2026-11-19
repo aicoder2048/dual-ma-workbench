@@ -6,6 +6,7 @@ dual-moving-averages skill 的网页版：左「自选股」、中「分析师�
 cd app && bun install     # 第一次
 bun start                 # 打开 http://127.0.0.1:5178
 bun test                  # 单元测试（不调模型）
+bun run e2e               # 端到端测试：真 Chrome（本机安装的），假行情、假语音
 ```
 
 - **设置**（右上角齿轮，存在 `data/settings.json`）：
