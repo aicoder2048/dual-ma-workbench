@@ -30,19 +30,19 @@
 
 ## 运行
 
-需要：[uv](https://docs.astral.sh/uv/)（Python 脚本）和 [Bun](https://bun.sh)（工作台）。
+需要：[uv](https://docs.astral.sh/uv/)（Python 脚本）、[Bun](https://bun.sh)（工作台），以及 Node.js 22.19+ 和 npm（装 pi 命令行用）。下面的命令都在仓库根目录运行。
 
 ### 1. 安装
 
 ```bash
 cp .env.example .env                       # 填入 POLYGON_API_KEY；没有也能用 yfinance
-cd app && bun install
-npm i -g @earendil-works/pi-coding-agent   # pi 命令行：只用来登录和选模型
+(cd app && bun install)
+npm install -g --ignore-scripts @earendil-works/pi-coding-agent   # pi 命令行：只用来登录和选模型
 ```
 
 ### 2. 安装后第一步：在 Pi 里登录、设置模型
 
-不做这一步，分析师和鸿雁用不了。在项目目录运行 `pi`，然后：
+不登录，分析师和鸿雁用不了。运行 `pi`，然后：
 
 1. 输入 `/login`，登录 Codex（OpenAI 订阅）。要用 DeepSeek 的话，再登录 deepseek，填入你的 DeepSeek API key（按量计费）。授权存在 `~/.pi/agent/auth.json`。
 2. 输入 `/model`，选 `gpt-6.1-sol [openai-codex]`，按 **Ctrl+S** 设为默认。前面打勾、后面标 `default` 就对了：
@@ -51,14 +51,14 @@ npm i -g @earendil-works/pi-coding-agent   # pi 命令行：只用来登录和�
 
 列表里的 `[anthropic]` 模型不要选：在 pi 这种第三方 harness 里用，走的是 Anthropic API 按量计费，不是 Claude 订阅。
 
-工作台自己只认两个模型（Codex 和 DeepSeek，见[模型和计费](#模型和计费)），在右上角「设置」里切换，不跟随 pi 的默认模型。在 pi 里设默认，是为了在这个目录直接开 `pi` 时也不会落到 anthropic 上。
+工作台只用到第 1 件（登录）。它自己只认两个模型（Codex 和 DeepSeek，见[模型和计费](#模型和计费)），在右上角「设置」里切换，不跟随 pi 的默认模型。第 2 件改的是 pi 的全局默认（`~/.pi/agent/settings.json`），以后在任何目录直接开 `pi` 都不会落到 anthropic 上。
 
 ### 3. 启动
 
 ```bash
 cd app
 bun start                     # http://127.0.0.1:5178
-bun test                      # 单元测试，不调用模型
+bun test                      # 单元测试，不调用模型（另开一个终端，同样在 app/ 下）
 ```
 
 装了 [just](https://github.com/casey/just) 的话，`just wildgoose` 启动工作台，`just wildgoose 5179` 换端口（wild goose 就是大雁）。改了服务端代码（`app/src/`）会自动重启，前端文件刷新页面就生效；自动重启会清空两个 agent 的对话。改了 SKILL.md 或学习文章要手动重启，页面顶部会提示。
