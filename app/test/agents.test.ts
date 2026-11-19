@@ -75,7 +75,8 @@ describe("工具", () => {
   test("search_sources：结果带可直接引用的编号", async () => {
     const [search] = sourceTools(library) as any[];
     const res = await search.execute("id", { query: "底扣价 公式" });
-    expect(res.content[0].text).toContain("[[S:dropoff#定义与公式]]");
+    // 本地有底扣价笔记时命中笔记，公开仓库里命中概念速查
+    expect(res.content[0].text).toContain(`[[S:${library.get("dropoff#定义与公式")!.id}]]`);
   });
 });
 
@@ -83,7 +84,7 @@ describe("提示词", () => {
   test("分析师提示里有 skill 方法论和引用库目录", () => {
     const p = analystPrompt(library);
     expect(p).toContain("[[S:skill#原则]]");
-    expect(p).toContain("- article#2.3：");
+    expect(p).toContain("- concepts#底扣价：");
     expect(p).not.toContain("网页报告");
   });
   test("参谋提示强调先查原文", () => expect(advisorPrompt(library)).toContain("search_sources"));
