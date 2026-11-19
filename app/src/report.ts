@@ -6,6 +6,7 @@
  * - steps[].items：按 ASD-STE100 简明中文写的短句，一句一事，每句带引用。
  */
 import type { Analysis, Lean } from "./citations.ts";
+import { buildOutlook, buildPlans, type Outlook, type Plan, type Position } from "./plan.ts";
 
 export type Stance = "bullish" | "bearish" | "neutral";
 
@@ -44,6 +45,12 @@ export interface ReportStep {
 export interface Report {
   headline: string;
   stance: Stance;
+  /** 第 1 步的结论：趋势类型和它长什么样。 */
+  trend: { type: string; look: string };
+  /** 第 2 步的输出：空仓 / 持仓各一份计划。 */
+  plans: Record<Position, Plan>;
+  /** 第 3 步的输出：方向结论、最早何时会变、对你意味着什么。 */
+  outlook: Outlook;
   steps: ReportStep[];
   visual: ReportVisual;
 }
@@ -141,10 +148,9 @@ export function buildReport(a: Analysis): Report {
   const ln = a.lean;
   const nameOf = (l: { label: string; conflict: string | null }) => l.label + (l.conflict ? `·${l.conflict}` : "");
   const leanName = nameOf(ln);
-  // ---------- 1. 看大局 ----------
+  // ---------- 1. 看大局：先结论（趋势类型），下面都是证据 ----------
   const big: string[] = [
-    `模糊判断：${leanName} [[D:模糊判断]]。只看大方向，不看小数点 [[S:skill#模糊判断]]。`,
-    `6 条线 ${ln.up} 上、${ln.down} 下 [[D:模糊判断.方向]]。`,
+    `趋势类型：${trend} [[D:趋势初判]]。${row.look} [[S:article#4]]。`,
     `${directionSentence(a)}均线方向是最小阻力方向 [[S:article#1]]。`,
     `MA 排列：${a.arr_ma} [[D:排列.MA]]。EMA 排列：${a.arr_ema} [[D:排列.EMA]]。`,
     positionSentence(a),
@@ -159,17 +165,17 @@ export function buildReport(a: Analysis): Report {
     big.push(`今日量是 50 日均量的 ${a.volume.ratio.toFixed(1)} 倍 [[D:量比]]。`);
     if (a.volume.spikes.length) big.push(`近 20 日有 ${a.volume.spikes.length} 天大量 [[D:放量日]]。大量是标志性动作 [[S:article#2.7]]。`);
   }
-  big.push(`规则初判：${trend} [[D:趋势初判]]。边界情况要看图复核 [[S:skill#第1步]]。`);
+  big.push("类型是规则判的，边界情况要看图复核 [[S:skill#第1步]]。");
 
   // ---------- 2. 定策略 ----------
+  // ---------- 2. 定策略：结论在 plans（按有没有仓位），这里是依据 ----------
   const strategy = [
-    `按「${trend}」查表 [[S:article#4]]。`,
-    ...row.play.map((s, i) => (i === 0 ? `${s.replace(/。$/, "")} [[S:skill#第2步]]。` : s)),
+    `打法按「${trend}」定 [[D:趋势初判]] [[S:article#4]]。`,
+    "有没有仓位，做法不同 [[S:skill#第2步]]。",
+    "价位来自 EMA20 和 MA20 抵扣价 [[D:改变判断.EMA20]] [[D:改变判断.MA20]]。",
     "先认趋势类型，再看信号 [[S:skill#原则]]。",
     "仓位以心态稳得住为准 [[S:article#7.3]]。",
   ];
-  // 只有第一句带引用的打法句，后面几句补上同一出处
-  for (let i = 2; i < 1 + row.play.length; i++) strategy[i] = `${strategy[i].replace(/。$/, "")} [[S:article#4]]。`;
 
   // ---------- 3. 看方向 ----------
   const direction = a.drops.map((d) => {
@@ -188,10 +194,13 @@ export function buildReport(a: Analysis): Report {
   return {
     headline: `${a.label} · ${leanName} · ${trend}`,
     stance: stanceOf(ln),
+    trend: { type: trend, look: row.look },
+    plans: buildPlans(a),
+    outlook: buildOutlook(a),
     steps: [
       { key: "big_picture", title: "看大局", subtitle: "现在是什么趋势", items: big },
-      { key: "strategy", title: "定策略", subtitle: "该怎么做", items: strategy },
-      { key: "direction", title: "看方向", subtitle: "抵扣价推演", items: direction },
+      { key: "strategy", title: "定策略", subtitle: "你该怎么做", items: strategy },
+      { key: "direction", title: "看方向", subtitle: "接下来会不会变", items: direction },
     ],
     visual: {
       close: a.close,

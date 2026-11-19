@@ -80,8 +80,16 @@ describe("可视化数据", () => {
 describe("模糊判断在前", () => {
   test("标题先说对谁有利，再说趋势类型", () => expect(report.headline).toBe("NVDA · 明显偏空 · 极度超卖"));
   test("立场跟模糊判断走", () => expect(report.stance).toBe("bearish"));
-  test("看大局第一句就是模糊判断，并带数据引用", () => {
-    expect(report.steps[0].items[0]).toContain("[[D:模糊判断]]");
+  test("看大局第一句就是结论：趋势类型，并带数据引用", () => {
+    expect(report.steps[0].items[0]).toStartWith("趋势类型：极度超卖 [[D:趋势初判]]");
+  });
+  test("看大局不再把「规则初判」放在最后一句", () => {
+    expect(report.steps[0].items.at(-1)).not.toContain("规则初判");
+  });
+  test("定策略、看方向都有结论输出", () => {
+    expect(report.plans.flat.action).toBeTruthy();
+    expect(report.plans.holding.action).toBeTruthy();
+    expect(report.outlook.verdict).toContain("逆风");
   });
   test("可视化数据带上模糊判断和改变判断的价位", () => {
     expect(report.visual.lean.label).toBe("明显偏空");
