@@ -583,3 +583,30 @@ describe("看大局的证据：按判断顺序的四问", () => {
     await page.close();
   }, 30_000);
 });
+
+describe("定策略：成本价决定浮盈 / 浮亏的做法", () => {
+  test("填成本：高于现价是浮亏的做法，低于现价是浮盈的做法（保本价填成本）；看方向跟着变", async () => {
+    const { page } = await open();
+    const plan = page.locator('[data-step="strategy"] .plan-body');
+    const effect = page.locator('[data-step="direction"] .effect');
+    await page.click('[data-pos="holding"]');
+    await page.fill("#pos-cost", "200");
+    expect(await plan.textContent()).toContain("不等回本");
+    expect(await effect.textContent()).toContain("涨回成本");
+    await page.fill("#pos-cost", "133");
+    const t = (await plan.textContent())!;
+    expect(t).toContain("133.00");
+    expect(t).not.toContain("{cost}");
+    expect(t).not.toContain("浮亏影响心情");
+    expect(await effect.textContent()).not.toContain("涨回成本");
+    expect(await page.evaluate(() => document.activeElement?.id)).toBe("pos-cost"); // 边打字边更新，不丢焦点
+    // 填了成本再切空仓、切回持仓：还是浮盈那一版
+    await page.click('[data-pos="flat"]');
+    await page.click('[data-pos="holding"]');
+    expect(await page.inputValue("#pos-cost")).toBe("133");
+    expect(await plan.textContent()).toContain("133.00");
+    await page.fill("#pos-cost", "");
+    await page.click('[data-pos="flat"]');
+    await page.close();
+  }, 30_000);
+});

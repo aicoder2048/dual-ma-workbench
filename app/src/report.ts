@@ -6,7 +6,7 @@
  * - steps[].items：按 ASD-STE100 简明中文写的短句，一句一事，每句带引用。
  */
 import type { Analysis, Lean } from "./citations.ts";
-import { buildOutlook, buildPlans, type Outlook, type Plan, type Position } from "./plan.ts";
+import { buildOutlook, buildPlans, type Outlook, type Plan, type Situation } from "./plan.ts";
 
 export type Stance = "bullish" | "bearish" | "neutral";
 
@@ -50,8 +50,8 @@ export interface Report {
   stance: Stance;
   /** 第 1 步的结论：趋势类型和它长什么样。 */
   trend: { type: string; look: string };
-  /** 第 2 步的输出：空仓 / 持仓各一份计划。 */
-  plans: Record<Position, Plan>;
+  /** 第 2 步的输出：空仓、持仓（没填成本）、浮盈、浮亏各一份计划。 */
+  plans: Record<Situation, Plan>;
   /** 第 3 步的输出：方向结论、最早何时会变、对你意味着什么。 */
   outlook: Outlook;
   steps: ReportStep[];
