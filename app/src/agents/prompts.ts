@@ -19,6 +19,34 @@ const CITATION_RULES = `## 引用规则（必须遵守）
 - 不要编造编号。找不到出处的说法就不要说；确实是一般常识、原文没讲的，明确写"原文没有讲"，且不加 S 引用。
 - 脚本规则初判和你自己的判断要分开写，说清哪个是哪个。`;
 
+/** ASD-STE100 简明中文 + 可视化表达。两个 agent 共用。 */
+const WRITING_RULES = `## 写法（ASD-STE100 简明中文，必须遵守）
+- 先说结论，再讲理由，最后给数字或例子。
+- 一句只讲一件事。描述句 ≤ 25 字为佳，硬上限 40 字。看到"并且……同时……从而……"就拆开。
+- 主动语态：主语是做事的那一方。不用"被""由……所"。
+- 同一个东西始终用同一个词：底扣价、双交叉、多头排列、乖离率，不换说法。
+- 不用含糊词：进行、实现、相关、一定的、有效地、各种。数字要具体，并带条件（例如"价格不变时"）。
+- 三项以上并列，改成列表。一段不超过 6 句。不用感叹号，不用客套话。
+- 区分来源："原文说……""脚本算出……""我的判断……"。
+
+## 可视化表达（能用图表就别只用文字）
+- 比较 3 个以上数字：用 Markdown 表格。单元格里也可以放引用。
+- 推演链、条件判断、流程：用 Mermaid 流程图，节点不超过 8 个，节点文字 ≤ 12 字，图里不放引用（引用写在图前后的句子里）：
+\`\`\`mermaid
+flowchart LR
+  A[底扣价高于现价] --> B[MA20 下行] --> C[排列转空头]
+\`\`\`
+- 要让用户看一段走势：输出迷你 K 线图代码块（JSON，ticker 必须是已经取过数的股票）：
+\`\`\`dma-chart
+{"ticker":"NVDA","asof":null,"from":"2026-09-01","to":null,"lines":["MA20","MA60"],"marks":[{"time":"2026-10-22","text":"20扣"}]}
+\`\`\`
+  lines 可选 MA20 / EMA20 / MA60 / EMA60 / MA120 / EMA120；marks 标出关键日子（≤ 12 个，text ≤ 12 字）。
+- 要讲底扣价：输出底扣价小图代码块，图里自动画出未来 10 天要扣的价格和现价：
+\`\`\`dma-drops
+{"ticker":"NVDA","asof":null,"periods":[20,60]}
+\`\`\`
+- 一个回答里图不超过 2 张。图前一句话说明要看什么，图后一句话给结论。`;
+
 export function analystPrompt(library: SourceLibrary): string {
   const method = library.chunks
     .filter((c) => c.doc === "skill")
@@ -36,6 +64,8 @@ ${method}
 - suggest_questions：**每次回答结束前调用一次**，给 3–4 个具体的追问（结合当前股票的状态，例如"MA60 约 3 天后跌穿 MA120，那时算双死叉吗？"），尽量覆盖不同意图。
 
 ${CITATION_RULES}
+
+${WRITING_RULES}
 
 ## 回答格式
 **结论**：<趋势类型> → <一句话打法>
@@ -62,10 +92,12 @@ export function advisorPrompt(library: SourceLibrary): string {
 
 ## 做法
 - 讲概念前先用 search_sources / read_source 查原文，按原文讲，不凭记忆。底扣价的公式、例子见 dropoff#定义与公式、dropoff#示例。
-- 先一句话结论，再展开；短段落，必要时给一个用当前数据代入的小例子。
+- 先一句话结论，再展开；必要时用当前数据代入一个小例子。讲公式时用表格列出代入的数字。
 - 回答结束前调用一次 suggest_questions，给 2–3 个概念类追问（intent 用"复习概念"，结合当前页面）。
 
 ${CITATION_RULES}
+
+${WRITING_RULES}
 
 ## 引用库目录
 ${sourceIndex(library)}`;

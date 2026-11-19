@@ -318,3 +318,11 @@ body.offline .composer::before { content: "与服务断开，正在重连…"; f
   .flow { grid-template-columns: minmax(0, 1fr); }
   .flow .edge { transform: rotate(90deg); justify-self: center; }
 }
+
+/* agent 回答里的可视化块 */
+.msg .block { margin: 10px 0; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); }
+.msg .block-mermaid svg { max-width: 100%; height: auto; }
+.msg .mini-chart { height: 220px; }
+.msg .block .drops { grid-template-columns: repeat(auto-fill, minmax(190px, 260px)); }
+.msg pre { background: var(--grid); border-radius: 8px; padding: 8px 10px; overflow-x: auto; font-size: 12px; }
+.block-error { font-size: 12px; color: var(--bad); margin: -4px 0 8px; }

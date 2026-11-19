@@ -31,7 +31,7 @@
 **Goal**: 提示词加入 STE 规则和可视化词汇；前端渲染表格、Mermaid、dma-chart、dma-drops。
 **Success Criteria**: 真实提问时回答出现表格或图，引用仍全部通过。
 **Tests**: 代码块解析单测；一次真实对话冒烟。
-**Status**: Not Started
+**Status**: Complete
 
 ## Stage D: 配置（用户 2026-11-18 追加）
 **Goal**: 设置面板：大模型（默认 openai-codex/gpt-6.1-sol，可选 deepseek/deepseek-flash，标明按量计费）；市场数据（默认 Polygon/Massive，可选 yfinance）。

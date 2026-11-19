@@ -1,4 +1,5 @@
 // 两个 agent 面板（中栏分析师、右栏均线参谋）+ WebSocket 连接。
+import { enhance } from "./blocks.js";
 import { renderRich } from "./cite.js";
 
 const $ = (id) => document.getElementById(id);
@@ -188,6 +189,7 @@ function renderAssistant(el, body, entry) {
     return;
   }
   renderRich(body, entry.text, entry.book);
+  enhance(body); // 表格由 Markdown 直接渲染；流程图、迷你 K 线、底扣价小图异步画出
   const bad = entry.checks.filter((c) => !c.ok).length;
   const total = entry.checks.length;
   const foot = document.createElement("div");
