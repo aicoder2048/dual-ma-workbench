@@ -31,6 +31,7 @@ export const SOURCE_DOCS: SourceDoc[] = [
   },
   { code: "concepts", title: "概念速查", path: `${SKILL}/references/concepts.md` },
   { code: "cases", title: "视频案例", path: `${SKILL}/references/cases.md` },
+  { code: "playbook", title: "打法细则", path: `${SKILL}/references/playbooks.md` },
   { code: "dropoff", title: "底扣价学习笔记", path: "study-notes/261118-ma-drop-off-price.md" },
   { code: "ta01", title: "TA01 均线实战要点", path: "docs/moving-averages/TA01-MA-Practical-Essentials.md" },
   { code: "ta15", title: "TA15 用均线判断趋势与震荡", path: "docs/moving-averages/TA15-Trend-Summary-from-MA.md" },

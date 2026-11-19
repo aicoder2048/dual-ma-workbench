@@ -144,14 +144,14 @@ export function buildReport(a: Analysis): Report {
     positionSentence(a),
     `价格离 20 线 ${pct(a.bias20)} [[D:乖离20]]。这在历史上排 ${Math.round(a.bias_pctl * 100)}% 分位 [[D:乖离分位]]。`,
   ];
-  if (a.bias_pctl <= 0.05 || a.bias_pctl >= 0.95) big.push("大幅乖离是趋势的最后一步 [[S:article#3]]。");
+  if (a.bias_pctl <= 0.05 || a.bias_pctl >= 0.95) big.push("大幅乖离是趋势的最后一步 [[S:article#3.2]]。");
   for (const c of crosses) {
     if (c.verdict.startsWith("双")) big.push(`${c.pair}：${c.verdict} [[D:交叉.${c.pair}]]。两组都交叉，才算确认 [[S:article#2.2]]。`);
     else if (c.verdict === "不一致") big.push(`${c.pair}：MA ${c.ma.kind}，EMA ${c.ema.kind} [[D:交叉.${c.pair}]]。只有一组交叉，可能是假动作 [[S:article#2.2]]。`);
   }
   if (a.volume) {
     big.push(`今日量是 50 日均量的 ${a.volume.ratio.toFixed(1)} 倍 [[D:量比]]。`);
-    if (a.volume.spikes.length) big.push(`近 20 日有 ${a.volume.spikes.length} 天大量 [[D:放量日]]。大量是标志性动作 [[S:article#2.6]]。`);
+    if (a.volume.spikes.length) big.push(`近 20 日有 ${a.volume.spikes.length} 天大量 [[D:放量日]]。大量是标志性动作 [[S:article#2.7]]。`);
   }
   big.push(`规则初判：${trend} [[D:趋势初判]]。边界情况要看图复核 [[S:skill#第1步]]。`);
 
@@ -160,7 +160,7 @@ export function buildReport(a: Analysis): Report {
     `按「${trend}」查表 [[S:article#4]]。`,
     ...row.play.map((s, i) => (i === 0 ? `${s.replace(/。$/, "")} [[S:skill#第2步]]。` : s)),
     "先认趋势类型，再看信号 [[S:skill#原则]]。",
-    "仓位以心态稳得住为准 [[S:article#资金原则]]。",
+    "仓位以心态稳得住为准 [[S:article#7.3]]。",
   ];
   // 只有第一句带引用的打法句，后面几句补上同一出处
   for (let i = 2; i < 1 + row.play.length; i++) strategy[i] = `${strategy[i].replace(/。$/, "")} [[S:article#4]]。`;
