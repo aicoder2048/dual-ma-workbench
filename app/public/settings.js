@@ -119,6 +119,8 @@ export async function initSettings({ onDataSourceChange }) {
   openPanel = open;
   btn.addEventListener("click", () => (panel.hidden ? open() : close()));
   document.addEventListener("keydown", (e) => e.key === "Escape" && close());
+  // 面板开着时整页压在暗幕下（app.css body::after），点哪儿都落在 body 上 → 关；
+  // 下面排除设置按钮和状态胶囊，只对面板关着时有意义（让它们的 click 去打开）
   document.addEventListener("mousedown", (e) => {
     if (!panel.hidden && !e.target.closest("#settings-panel, #settings-btn, [data-open-settings]")) close();
   });
