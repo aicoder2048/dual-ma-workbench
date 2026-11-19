@@ -3,7 +3,7 @@
  *
  * 大模型只允许清单里的两个（显式白名单）：
  *   - openai-codex/gpt-6.1-sol：Codex 订阅（默认）
- *   - deepseek/deepseek-flash：DeepSeek API，按量计费；用 pi 里登录的 key，没登录时读项目根目录 .env 的 DEEPSEEK_API_KEY
+ *   - deepseek/deepseek-flash：DeepSeek API，按量计费；key 只用 pi 里登录时存的那个（~/.pi/agent/auth.json）
  * anthropic/* 不在清单里，一律拒绝（第三方 harness 用它走 API 按量计费）。
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -15,8 +15,6 @@ export interface ModelOption {
   label: string;
   billing: "订阅" | "按量计费";
   note: string;
-  /** 也可以用的环境变量（从 .env 读）。Pi 里登录过就不需要。 */
-  keyEnv?: string;
   /** 没有凭据时告诉用户怎么办。 */
   authHint: string;
 }
@@ -28,9 +26,8 @@ export const MODEL_OPTIONS: ModelOption[] = [
   },
   {
     id: "deepseek/deepseek-flash", label: "DeepSeek · deepseek-flash", billing: "按量计费",
-    note: "DeepSeek 官方 API，按 token 计费（预充值）。用 pi 里登录的 key；没登录时读项目 .env 的 DEEPSEEK_API_KEY。两边都有时用 pi 的。",
-    keyEnv: "DEEPSEEK_API_KEY",
-    authHint: "没有 DeepSeek 凭据：在 pi 里登录 deepseek，或在项目 .env 里设 DEEPSEEK_API_KEY 后重启服务。",
+    note: "DeepSeek 官方 API，按 token 计费（预充值）。需要先在 pi 里登录 DeepSeek（填入你的 API key），这里用的就是 pi 存的那个 key。",
+    authHint: "还没在 pi 里登录 DeepSeek：在终端运行 pi，在里面登录 deepseek，再回来刷新页面。",
   },
 ];
 
@@ -131,25 +128,7 @@ export class SettingsStore {
   }
 }
 
-/** 只从 .env 读模型要用的 key（不碰 Polygon 等其他 key，那些由 Python 脚本自己读）。已有的环境变量优先。 */
-const MODEL_KEYS = [...new Set(MODEL_OPTIONS.map((o) => o.keyEnv).filter(Boolean))] as string[];
-
-export function loadEnvKeys(
-  file = resolve(PROJECT_ROOT, ".env"),
-  env: Record<string, string | undefined> = process.env,
-): string[] {
-  if (!existsSync(file)) return [];
-  const loaded: string[] = [];
-  for (const line of readFileSync(file, "utf8").split(/\r?\n/)) {
-    const m = line.match(/^\s*(?:export\s+)?([A-Z_][A-Z0-9_]*)\s*=\s*(.*)\s*$/);
-    if (!m || !MODEL_KEYS.includes(m[1]) || env[m[1]]) continue;
-    env[m[1]] = m[2].replace(/^(['"])(.*)\1$/, "$2");
-    loaded.push(m[1]);
-  }
-  return loaded;
-}
-
-/** provider（如 "deepseek"）有没有可用凭据。实际由 Pi 判断：pi 里登录过，或环境变量里有 key（见 agents/model.ts 的 piHasAuth）。 */
+/** provider（如 "deepseek"）在 pi 里登录过没有（见 agents/model.ts 的 piAuthedProviders）。 */
 export type HasAuth = (provider: string) => boolean;
 
 /** 给界面看的：每个模型有没有可用凭据（不返回 key 本身）。 */

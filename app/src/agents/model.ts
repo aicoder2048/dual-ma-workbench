@@ -6,9 +6,8 @@
  *
  * 环境变量：DMA_THINKING = off | low | medium | high，默认按角色（分析师 medium，鸿雁 low）。
  */
-import { createAgentSessionServices, type ModelRuntime } from "@earendil-works/pi-coding-agent";
+import { readStoredCredential, type ModelRuntime } from "@earendil-works/pi-coding-agent";
 import { MODEL_OPTIONS } from "../settings.ts";
-import { PROJECT_ROOT } from "../sources.ts";
 
 const THINKING = ["off", "low", "medium", "high"] as const;
 export type Thinking = (typeof THINKING)[number];
@@ -47,14 +46,11 @@ export function resolveModel(runtime: ModelRuntime, spec: string) {
 }
 
 /**
- * 当前有凭据的 provider：问 Pi（它同时认 ~/.pi/agent/auth.json 里的登录和环境变量里的 key；
- * 两边都有时 Pi 用 auth.json 的，实测过）。每次现查，在 pi 里刚登录完也立刻生效；一次约 10ms。
+ * 在 pi 里登录过的 provider：只看 pi 存的凭据（~/.pi/agent/auth.json），不认环境变量，
+ * 免得"shell 里 export 了 key 所以能用"这种看不见的来源让人困惑。每次现查，在 pi 里刚登录完刷新就生效。
+ * 调用模型时 Pi 也优先用 auth.json 里的 key（实测），所以"能不能用"和"实际用哪个"一致。
  */
-export async function piAuthedProviders(): Promise<Set<string>> {
-  const services = await createAgentSessionServices({
-    cwd: PROJECT_ROOT,
-    resourceLoaderOptions: { noExtensions: true, noSkills: true, noPromptTemplates: true, noThemes: true, noContextFiles: true },
-  });
+export async function piAuthedProviders(authPath?: string): Promise<Set<string>> {
   const providers = new Set(MODEL_OPTIONS.map((o) => parseModelSpec(o.id).provider));
-  return new Set([...providers].filter((p) => services.modelRuntime.hasConfiguredAuth(p)));
+  return new Set([...providers].filter((p) => readStoredCredential(p, authPath) !== undefined));
 }

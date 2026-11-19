@@ -8,16 +8,12 @@ import { Analyzer } from "./analyze.ts";
 import { codeFingerprint } from "./build.ts";
 import { createHandler } from "./http.ts";
 import { PROJECT_ROOT, SOURCE_DOCS, SourceLibrary } from "./sources.ts";
-import { loadEnvKeys, MODEL_OPTIONS, SettingsStore } from "./settings.ts";
+import { MODEL_OPTIONS, SettingsStore } from "./settings.ts";
 import { Watchlist } from "./watchlist.ts";
 import { Workbench, type Client } from "./workbench.ts";
 
 const PORT = Number(process.env.PORT ?? 5178);
 const HOST = "127.0.0.1";
-
-// 模型 key 默认放在项目根目录 .env（只读模型要用的那几个，只打印变量名）
-const loadedKeys = loadEnvKeys();
-if (loadedKeys.length) console.log(`从 .env 读取：${loadedKeys.join(", ")}`);
 
 const settings = new SettingsStore();
 const analyzer = new Analyzer(undefined, undefined, () => settings.get().dataSource);

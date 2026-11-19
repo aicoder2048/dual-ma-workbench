@@ -4,7 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Analyzer } from "../src/analyze.ts";
 import { assertAllowedModel } from "../src/agents/model.ts";
-import { DEFAULT_SETTINGS, loadEnvKeys, MODEL_OPTIONS, modelReadiness, SettingsStore, sourceArg, VOICE_OPTIONS } from "../src/settings.ts";
+import { DEFAULT_SETTINGS, MODEL_OPTIONS, modelReadiness, SettingsStore, sourceArg, VOICE_OPTIONS } from "../src/settings.ts";
+import { piAuthedProviders } from "../src/agents/model.ts";
 
 const tmp = () => mkdtempSync(join(tmpdir(), "dma-set-"));
 
@@ -67,19 +68,30 @@ describe("数据源", () => {
   });
 });
 
-describe(".env 里的模型 key", () => {
-  test("读 DEEPSEEK_API_KEY；已有环境变量不覆盖；不碰其他 key", () => {
+describe("模型凭据只认 pi 里的登录", () => {
+  test("auth.json 里存了 deepseek 才算登录；只设环境变量不算", async () => {
     const dir = tmp();
-    writeFileSync(join(dir, ".env"), "POLYGON_API_KEY=p\nDEEPSEEK_API_KEY=\"sk-test\"\n# 注释\n");
-    const env: Record<string, string | undefined> = {};
-    expect(loadEnvKeys(join(dir, ".env"), env)).toEqual(["DEEPSEEK_API_KEY"]);
-    expect(env.DEEPSEEK_API_KEY).toBe("sk-test");
-    expect(env.POLYGON_API_KEY).toBeUndefined();
-    const env2: Record<string, string | undefined> = { DEEPSEEK_API_KEY: "from-shell" };
-    loadEnvKeys(join(dir, ".env"), env2);
-    expect(env2.DEEPSEEK_API_KEY).toBe("from-shell");
+    const auth = join(dir, "auth.json");
+    writeFileSync(auth, JSON.stringify({ "openai-codex": { type: "oauth", access: "a", refresh: "r", expires: 0 } }));
+    const before = process.env.DEEPSEEK_API_KEY;
+    process.env.DEEPSEEK_API_KEY = "sk-from-shell";
+    try {
+      expect((await piAuthedProviders(auth)).has("deepseek")).toBe(false);
+      writeFileSync(auth, JSON.stringify({ deepseek: { type: "api_key", key: "sk-x" } }));
+      expect((await piAuthedProviders(auth)).has("deepseek")).toBe(true);
+    } finally {
+      if (before === undefined) delete process.env.DEEPSEEK_API_KEY; else process.env.DEEPSEEK_API_KEY = before;
+    }
   });
-  test("没有 .env 文件不报错", () => expect(loadEnvKeys(join(tmp(), ".env"), {})).toEqual([]));
+  test("没有 auth.json（没登录过 pi）不报错", async () => {
+    expect((await piAuthedProviders(join(tmp(), "auth.json"))).size).toBe(0);
+  });
+  test("DeepSeek 的说明和提示都写明要先在 pi 里登录，不再提 .env", () => {
+    const ds = MODEL_OPTIONS.find((m) => m.id === "deepseek/deepseek-flash")!;
+    expect(ds.note).toContain("pi 里登录 DeepSeek");
+    expect(ds.authHint).toContain("pi");
+    expect(`${ds.note}${ds.authHint}`).not.toMatch(/\.env|DEEPSEEK_API_KEY/);
+  });
 });
 
 describe("语音设置", () => {
