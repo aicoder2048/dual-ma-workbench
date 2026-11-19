@@ -95,3 +95,71 @@ def test_drop_off_path_lists_future_deductions(rising):
     assert len(d["path"]) == min(20, dma.PROJECT_DAYS)
     assert d["path"][0] == {"date": str(rising.index[-20].date()), "close": 181.0}
     assert sum(p["close"] for p in d["path"]) / len(d["path"]) == pytest.approx(d["mean"])
+
+
+# ---------- 模糊判断（lean）----------
+
+def test_rising_series_leans_clearly_bullish(rising):
+    lean = dma.analyze(rising, "TEST", "synthetic")["lean"]
+    assert lean["label"] == "明显偏多"
+    assert (lean["up"], lean["down"]) == (6, 0)
+
+
+def test_falling_series_leans_clearly_bearish():
+    lean = dma.analyze(make_df([float(i) for i in range(300, 100, -1)]), "TEST", "synthetic")["lean"]
+    assert lean["label"] == "明显偏空"
+
+
+def test_small_misorder_does_not_hide_a_clear_downtrend():
+    # 长期上涨后急跌：6 条线都向下、价格在所有线下方，但 MA60 仍略高于 MA120。
+    # 精确规则会判"排列混乱"，模糊判断应当是明显偏空，趋势类型落在下跌一侧。
+    closes = [100 + i * 0.5 for i in range(200)] + [200 - i * 3 for i in range(30)]
+    a = dma.analyze(make_df(closes), "TEST", "synthetic")
+    row = a["lean"]
+    assert a["lines"][1]["ma"] > a["lines"][2]["ma"]  # MA60 > MA120：确实"错位"
+    assert row["label"] == "明显偏空"
+    assert a["trend"] in ("健康下跌", "极度超卖")
+
+
+def test_flat_series_has_no_lean():
+    closes = [100 + (1 if i % 2 else -1) for i in range(260)]
+    lean = dma.analyze(make_df(closes), "TEST", "synthetic")["lean"]
+    assert lean["label"] == "不明"
+
+
+def test_flip_levels_name_what_would_change_a_bearish_read():
+    a = dma.analyze(make_df([float(i) for i in range(300, 100, -1)]), "TEST", "synthetic")
+    flips = {f["line"]: f["price"] for f in a["lean"]["flips"]}
+    # 偏空时：收盘站上 EMA20（EMA20 先拐）、站上 MA20 明天的底扣价（MA20 后拐）
+    assert flips["EMA20"] == pytest.approx(a["lines"][0]["ema"])
+    assert flips["MA20"] == pytest.approx(a["drops"][0]["tomorrow"])
+
+
+def test_lean_after_projects_price_flat(rising):
+    after = dma.analyze(rising, "TEST", "synthetic")["lean"]["after"]
+    assert after["label"] in dma.LEAN_LABELS
+    assert after["days"] == dma.PROJECT_DAYS
+
+
+def test_bounce_under_the_60_group_is_flagged_not_bought():
+    # TSLA 2021-04-14 的形状：长涨 → 急跌 → 强反弹。多数线已向上，但 20 线组仍在 60 线组下方。
+    closes = [100 + i * 0.5 for i in range(250)] + [225 - i * 2 for i in range(30)] + [165 + i * 2 for i in range(18)]
+    a = dma.analyze(make_df(closes), "TEST", "synthetic")
+    lean = a["lean"]
+    assert lean["up"] > lean["down"]
+    assert lean["conflict"] == "反弹被压"
+    assert "不买" in lean["play"]
+
+
+def test_aligned_trend_has_no_conflict(rising):
+    assert dma.analyze(rising, "TEST", "synthetic")["lean"]["conflict"] is None
+
+
+def test_flip_levels_mark_thresholds_price_already_crossed():
+    # 上涨后回落一点：偏多，但价格已在 EMA20 下方 → EMA20 那个门槛标为已越过
+    closes = [100 + i * 0.5 for i in range(250)] + [225 - i * 1.5 for i in range(6)]
+    a = dma.analyze(make_df(closes), "TEST", "synthetic")
+    assert a["lean"]["score"] > 0
+    ema20 = next(f for f in a["lean"]["flips"] if f["line"] == "EMA20")
+    assert ema20["crossed"] == (a["close"] < a["lines"][0]["ema"])
+    assert ema20["crossed"]

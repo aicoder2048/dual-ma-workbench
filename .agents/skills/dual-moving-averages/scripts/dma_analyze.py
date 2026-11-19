@@ -46,6 +46,11 @@ TANGLE_SPREAD_PCT = 4.0     # 三条 MA 最大最小差 / 价格 < 4% 视为缠�
 EXTREME_PCTL = 0.95         # 20 线乖离率处于自身历史 95% 分位以上 = 大幅乖离
 PROJECT_DAYS = 10           # 底扣价推演天数
 VOLUME_SPIKE = 2.0          # 成交量 > 50 日均量 2 倍 = 大量
+ORDER_TIE_PCT = 0.5         # 两条线相差 < 价格的 0.5% 视为"贴在一起"，不算上下
+LEAN_DIR_WEIGHT = 0.6       # 模糊判断：方向占 60%，排布占 40%
+LEAN_CLEAR = 0.6            # |分数| ≥ 0.6 明显偏多/偏空
+LEAN_SOME = 0.25            # |分数| ≥ 0.25 偏多/偏空，否则不明
+LEAN_LABELS = ("明显偏多", "偏多", "不明", "偏空", "明显偏空")
 
 
 HISTORY_YEARS = 3           # 取多少年日线（乖离率分位用全部历史）
@@ -231,16 +236,76 @@ def drop_off(df: pd.DataFrame, n: int) -> dict:
     }
 
 
-def classify(arr_ma: str, arr_ema: str, slopes: dict, spread_pct: float,
-             bias_pctl: float) -> str:
-    s20, s60, s120 = (slopes[n] for n in PERIODS)
-    if spread_pct < TANGLE_SPREAD_PCT and abs(s60) < FLAT_SLOPE_PCT * 2:
+def sign(x: float, tol: float) -> int:
+    return 0 if abs(x) < tol else (1 if x > 0 else -1)
+
+
+def lean_label(score: float) -> str:
+    if score >= LEAN_CLEAR:
+        return "明显偏多"
+    if score >= LEAN_SOME:
+        return "偏多"
+    if score <= -LEAN_CLEAR:
+        return "明显偏空"
+    if score <= -LEAN_SOME:
+        return "偏空"
+    return "不明"
+
+
+def lean_of(values: dict[str, float], slopes: dict[str, float], close: float) -> dict:
+    """模糊判断：6 条成本线往哪走（方向）+ 短中长期谁在上（排布），合成 −1…+1 的分数。
+
+    方向：每条线向上 +1、走平 0、向下 −1。排布：20 线组对 60 线组、60 线组对 120 线组，
+    MA 和 EMA 各算一次，共 4 对；两条线相差不到价格的 ORDER_TIE_PCT 算贴在一起（0）。
+    一两处小错位只扣一点分，不会把明显的趋势判成"混乱"。
+    """
+    dirs = {k: sign(v, FLAT_SLOPE_PCT) for k, v in slopes.items()}
+    tol = close * ORDER_TIE_PCT / 100
+    pairs = []
+    for kind in ("MA", "EMA"):
+        for fast, slow in ((20, 60), (60, 120)):
+            rel = sign(values[f"{kind}{fast}"] - values[f"{kind}{slow}"], tol)
+            pairs.append({"pair": f"{kind}{fast}/{kind}{slow}", "rel": rel})
+    up = sum(d > 0 for d in dirs.values())
+    down = sum(d < 0 for d in dirs.values())
+    order = sum(p["rel"] for p in pairs)
+    score = LEAN_DIR_WEIGHT * (up - down) / len(dirs) + (1 - LEAN_DIR_WEIGHT) * order / len(pairs)
+    # 方向和短期排布打架：多数线向上、20 线组却还在 60 线组下方（或反过来）
+    short = pairs[0]["rel"] + pairs[2]["rel"]  # MA20/MA60 + EMA20/EMA60
+    conflict = ("反弹被压" if up > down and short == -2 else
+                "回调有撑" if down > up and short == 2 else None)
+    return {"score": score, "label": lean_label(score), "up": up, "down": down,
+            "flat": len(dirs) - up - down, "dirs": dirs, "order": order, "pairs": pairs,
+            "conflict": conflict}
+
+
+def flip_levels(a_lines: list[dict], drops: list[dict], score: float, close: float) -> list[dict]:
+    """什么价位会改变判断：偏空看"站上"，偏多看"跌破"。按 EMA 先拐、MA 后拐、短周期到长周期排列。
+
+    价格已经越过的门槛标 crossed=True：那条线已经（或明天就会）朝反方向拐了。
+    """
+    if abs(score) < LEAN_SOME:
+        return []
+    up = score < 0  # 偏空时要价格涨上去才会翻转
+    verb, turn = ("站上", "向上") if up else ("跌破", "向下")
+    out = []
+    for ln, d in zip(a_lines, drops):
+        n = ln["period"]
+        for line, price, what in ((f"EMA{n}", ln["ema"], f"EMA{n}"), (f"MA{n}", d["tomorrow"], f"MA{n} 的底扣价")):
+            crossed = close > price if up else close < price
+            text = (f"已经{verb} {what}（{price:.2f}）：{line} {turn}拐的力量已出现" if crossed
+                    else f"收盘{verb} {what}（{price:.2f}），{line} 拐头{turn}")
+            out.append({"line": line, "price": price, "crossed": crossed, "text": text})
+    return out
+
+
+def classify(lean_score: float, slopes: dict, spread_pct: float, bias_pctl: float) -> str:
+    """趋势类型：先看是否缠绕走平，再按模糊判断的方向分上涨/下跌，最后看乖离分轻重。"""
+    if spread_pct < TANGLE_SPREAD_PCT and abs(slopes[60]) < FLAT_SLOPE_PCT * 2:
         return "横盘震荡"
-    bull = arr_ma == "多头" and arr_ema == "多头"
-    bear = arr_ma == "空头" and arr_ema == "空头"
-    if bull and min(s20, s60, s120) > 0:
+    if lean_score >= LEAN_CLEAR:
         return "极度超买" if bias_pctl >= EXTREME_PCTL else "健康上涨"
-    if bear and max(s20, s60, s120) < 0:
+    if lean_score <= -LEAN_CLEAR:
         return "极度超卖" if bias_pctl <= 1 - EXTREME_PCTL else "健康下跌"
     return "过渡态（排列或方向不一致）"
 
@@ -252,6 +317,17 @@ STRATEGY = {
     "健康下跌": "不抄底。反弹到均线附近是减仓/离场机会。",
     "极度超卖": "不抢反弹。均线理顺成多头排列前不买。",
     "过渡态（排列或方向不一致）": "条件不满足就不做。看底扣价推演：均线能否在合理时间内理顺？反弹若被中长期线压着多半是假动作。",
+}
+
+LEAN_PLAY = {
+    "明显偏多": "顺着多头做：持有，回调到均线附近找加仓点，不追加速。",
+    "偏多": "多头略占上风，但还没理顺：轻仓或等回调，不加大仓位。",
+    "不明": "成本没有方向：不做，等均线理顺或出现标志性动作。",
+    "偏空": "空头略占上风：不买；有仓位就在反弹时减仓。",
+    "明显偏空": "顺着空头看：不抄底，反弹到均线附近是离场机会。",
+    # 方向和排布打架时，优先用这两条
+    "反弹被压": "反弹被中长期线压着（20 线组还在 60 线组下方），多半是假动作：不买，有仓位逢高减。用底扣价算 20 线组多久能站上 60 线组。",
+    "回调有撑": "短期回调，但 20 线组仍在 60 线组上方，结构还是多头：持有观察，不在急跌里卖；20/60 双死叉才算结构坏。",
 }
 
 
@@ -271,6 +347,21 @@ def partial_bar_warning(last_bar: pd.Timestamp, now: datetime | None = None) -> 
             "底扣价比较、均线方向、交叉都可能在收盘前变化，下结论请等美东 16:15 后重跑。")
 
 
+def lean_after(values: dict[str, float], drops: list[dict], close: float) -> dict:
+    """价格停在现价 PROJECT_DAYS 天后的模糊判断。MA 由底扣价推出，EMA 用精确解。"""
+    days = PROJECT_DAYS
+    after, slopes = {}, {}
+    for d in drops:
+        n = d["period"]
+        after[f"MA{n}"] = values[f"MA{n}"] * (1 + d["ma_flat_change_pct"] / 100)
+        after[f"EMA{n}"] = close + (values[f"EMA{n}"] - close) * (1 - 2 / (n + 1)) ** days
+    for k, v in after.items():
+        slopes[k] = (v / values[k] - 1) * 100 / days
+    res = lean_of(after, slopes, close)
+    return {"days": days, "score": res["score"], "label": res["label"], "conflict": res["conflict"],
+            "up": res["up"], "down": res["down"], "flat": res["flat"]}
+
+
 def analyze(df: pd.DataFrame, label: str, src: str) -> dict:
     """把三步分析算成结构化数据，Markdown 和 HTML 都从这里渲染。"""
     row = df.iloc[-1]
@@ -282,7 +373,10 @@ def analyze(df: pd.DataFrame, label: str, src: str) -> dict:
     spread_pct = float((max(mas) - min(mas)) / c * 100)
     bias_hist = df["BIAS20"].dropna()
     bias_pctl = float((bias_hist <= row["BIAS20"]).mean())
-    trend = classify(arr_ma, arr_ema, slopes, spread_pct, bias_pctl)
+    values = {f"{k}{n}": float(row[f"{k}{n}"]) for n in PERIODS for k in ("MA", "EMA")}
+    lean = lean_of(values, {**{f"MA{n}": slopes[n] for n in PERIODS},
+                            **{f"EMA{n}": ema_slopes[n] for n in PERIODS}}, c)
+    trend = classify(lean["score"], slopes, spread_pct, bias_pctl)
 
     lines = [{"period": n, "ma": float(row[f"MA{n}"]), "ema": float(row[f"EMA{n}"]),
               "above": bool(c > row[f"MA{n}"]), "slope": slopes[n],
@@ -300,6 +394,9 @@ def analyze(df: pd.DataFrame, label: str, src: str) -> dict:
         d["period"] = n
         d["direction"] = "上" if c > d["tomorrow"] else ("下" if c < d["tomorrow"] else "平")
         drops.append(d)
+    lean["play"] = LEAN_PLAY[lean["conflict"] or lean["label"]]
+    lean["flips"] = flip_levels(lines, drops, lean["score"], c)
+    lean["after"] = lean_after(values, drops, c)
     prev = float(df["Close"].iloc[-2])
     return {
         "label": label, "date": str(df.index[-1].date()), "close": c,
@@ -308,7 +405,7 @@ def analyze(df: pd.DataFrame, label: str, src: str) -> dict:
         "lines": lines, "arr_ma": arr_ma, "arr_ema": arr_ema,
         "spread_pct": spread_pct, "bias20": float(row["BIAS20"]), "bias_pctl": bias_pctl,
         "crosses": crosses, "volume": volume,
-        "trend": trend, "strategy": STRATEGY[trend], "drops": drops,
+        "trend": trend, "strategy": STRATEGY[trend], "drops": drops, "lean": lean,
     }
 
 
@@ -317,7 +414,20 @@ def render_markdown(a: dict) -> str:
            f"数据来源：{a['source']}", ""]
     if a["warning"]:
         out += ["> [!warning] " + a["warning"], ""]
-    out += ["## 1) 看大局", "",
+    ln = a["lean"]
+    af = ln["after"]
+    out += ["## 0) 模糊判断：接下来几周对谁有利", "",
+            f"**{ln['label']}**{'·' + ln['conflict'] if ln['conflict'] else ''}"
+            f"（分数 {ln['score']:+.2f}，−1 最空、+1 最多）→ {ln['play']}", "",
+            f"- 方向：6 条成本线 {ln['up']} 条向上、{ln['flat']} 条走平、{ln['down']} 条向下",
+            "- 排布：" + "，".join(f"{p['pair']} {'>' if p['rel'] > 0 else '<' if p['rel'] < 0 else '≈'}"
+                                 for p in ln["pairs"]) + f"（相差 < {ORDER_TIE_PCT}% 价格算 ≈）",
+            f"- 价格停在这里 {af['days']} 天后：{af['label']}{'·' + af['conflict'] if af['conflict'] else ''}"
+            f"（{af['up']} 上 / {af['down']} 下）"]
+    if ln["flips"]:
+        out.append("- 什么会改变判断（按 EMA 先拐、MA 后拐的顺序）：")
+        out += [f"  - {f['text']}" for f in ln["flips"][:4]]
+    out += ["", "## 1) 看大局", "",
             "| 周期 | MA | EMA | 价格在 MA 上/下 | MA 方向 | EMA 方向 |",
             "|---|---|---|---|---|---|"]
     for ln in a["lines"]:

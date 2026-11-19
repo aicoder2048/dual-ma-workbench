@@ -27,7 +27,6 @@ import pandas as pd
 CHART_BARS = 260  # 图上显示最近多少根日 K 线
 CHART_LIB = "https://cdn.jsdelivr.net/npm/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"
 LIST_FIELDS = ("big_picture", "strategy", "direction", "risks")
-STANCE_BY_TREND = {"健康上涨": "bullish", "极度超买": "bullish", "健康下跌": "bearish", "极度超卖": "bearish"}
 
 
 def load_commentary(path: str) -> dict:
@@ -77,9 +76,13 @@ def chart_data(df: pd.DataFrame, a: dict) -> dict:
 
 def render_html(a: dict, df: pd.DataFrame, commentary: dict | None = None) -> str:
     c = commentary or {}
-    stance = c.get("stance") or STANCE_BY_TREND.get(a["trend"], "neutral")
-    headline = c.get("headline") or a["trend"]
-    summary = c.get("summary") or a["strategy"]
+    lean = a["lean"]
+    lean_stance = "bullish" if lean["score"] >= 0.25 else "bearish" if lean["score"] <= -0.25 else "neutral"
+    stance = c.get("stance") or lean_stance
+    lean_name = lean["label"] + ("·" + lean["conflict"] if lean["conflict"] else "")
+    headline = c.get("headline") or f"{lean_name}（{a['trend']}）"
+    summary = c.get("summary") or lean["play"]
+    flip = next((f["text"] for f in lean["flips"] if not f["crossed"]), "暂无：方向不明，等均线理顺")
     chg_cls = "up" if a["change_pct"] >= 0 else "down"
     chart_json = json.dumps(chart_data(df, a), ensure_ascii=False).replace("</", "<\\/")
 
@@ -201,6 +204,9 @@ footer {{ font-size: 12px; color: var(--muted); display: grid; gap: 4px; }}
     <h2>{_t(headline)}</h2>
     <p>{_t(summary)}</p>
     <div class="chips">
+      <span class="chip">模糊判断 <b>{html.escape(lean_name)}</b>（6 条线 {lean['up']} 上 / {lean['down']} 下）</span>
+      <span class="chip">价不变 {lean['after']['days']} 天后 <b>{html.escape(lean['after']['label'])}</b></span>
+      <span class="chip">改变判断 <b>{html.escape(flip)}</b></span>
       <span class="chip">规则初判 <b>{html.escape(a['trend'])}</b></span>
       <span class="chip">排列 MA <b>{a['arr_ma']}</b> · EMA <b>{a['arr_ema']}</b></span>
       <span class="chip">20 线乖离 <b class="num">{a['bias20']:+.1f}%</b>（历史 {a['bias_pctl']:.0%} 分位）</span>
