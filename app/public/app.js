@@ -195,6 +195,20 @@ $("load-form").addEventListener("submit", (e) => {
   $("load-ticker").blur();
 });
 
+// 左栏「＋ 自选」：加输入框里的代码；输入框为空时加中栏当前这只
+$("wl-add").addEventListener("click", async () => {
+  const input = $("load-ticker");
+  const t = input.value.trim() || state.ticker;
+  if (!t) { input.focus(); return; }
+  try {
+    await api("/api/watchlist", { method: "POST", body: JSON.stringify({ ticker: t }) });
+    input.value = "";
+    await refreshWatchlist();
+  } catch (err) {
+    alertInline(err.message);
+  }
+});
+
 // ---------- 中栏标题：自选开关 ----------
 function paintStar() {
   const star = $("star");

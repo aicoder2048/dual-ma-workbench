@@ -345,6 +345,9 @@ body.offline .status-pill .dot { background: var(--bad); }
 .left .search:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 .left .search input { flex: 1; min-width: 0; border: 0; background: transparent; outline: none; padding: 0; font: 600 13.5px var(--mono); text-transform: uppercase; }
 .left .search input::placeholder { font: 400 13px var(--sans); text-transform: none; }
+.left .search { padding-right: 4px; }
+.wl-add-btn { flex: none; height: 26px; padding: 0 8px; border: 1px solid var(--line); border-radius: 7px; background: var(--panel); color: var(--fg); font-size: 12px; cursor: pointer; white-space: nowrap; }
+.wl-add-btn:hover { border-color: var(--accent); color: var(--accent); }
 .left .search kbd { font: 11px var(--mono); color: var(--faint); border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; }
 .panel-head.sub { border-bottom: 0; padding-bottom: 0; }
 
