@@ -118,37 +118,56 @@ const PLAYS: Record<string, Record<Position, (l: L) => Plan>> = {
 
 const short = (t: string) => t.replace("（排列或方向不一致）", "");
 
-/** 持仓时趋势站在哪一边：决定浮盈 / 浮亏该怎么说。 */
-type Side = "bull" | "bear" | "range";
-function sideOf(a: Analysis): Side {
-  const t = short(a.trend);
-  if (t === "健康上涨" || t === "极度超买") return "bull";
-  if (t === "健康下跌" || t === "极度超卖") return "bear";
-  return a.lean.score <= -0.25 ? "bear" : a.lean.score >= 0.25 ? "bull" : "range";
-}
-
-/** 浮盈 / 浮亏时多出来的一行。来源：资金原则（文章 7.3）和"有仓位分批止盈或上移止损"（playbooks 极度超买）。 */
-const PNL: Record<Side, Record<"profit" | "loss", PlanItem>> = {
-  bear: {
-    profit: { label: "盈亏", text: `还有浮盈：先把止损提到成本 ${COST} 附近保本，反弹时先减一部分，别让盈利变成亏损。` },
-    loss: { label: "盈亏", text: "已经浮亏：不等回本。反弹到减仓位就执行，减到浮亏不影响心情为止。" },
+/**
+ * 浮盈 / 浮亏时持仓计划怎么改：多一行「盈亏」，必要时换掉做法、去掉不再成立的条目。
+ * 每种趋势类型各写一条，和同一张计划里的其他条目说同一件事（偏多浮亏不说"再加"配"不加仓"这种话）。
+ * 来源：资金原则（文章 7.3）、"有仓位分批止盈或上移止损"（playbooks 极度超买）、各类型的离场条件。
+ */
+interface PnlTweak { line: string; action?: string; omit?: string[] }
+const PNL: Record<string, Record<"profit" | "loss", PnlTweak>> = {
+  横盘震荡: {
+    profit: { line: `还有浮盈：把止损提到成本 ${COST} 附近保本；磨蹭不涨就先走。` },
+    loss: { line: "已经浮亏：守住离场底线（20/60 死叉），不在箱体里加仓摊低，也不死等回本。" },
   },
-  bull: {
-    profit: { label: "盈亏", text: `还有浮盈：成本 ${COST} 在下方是安全垫，按趋势规则拿着，不因小回调卖掉。` },
-    loss: { label: "盈亏", text: "暂时浮亏：趋势还向上，不急着割；但不在浮亏时加仓摊低，等回调获支撑、小级别确认后再加。" },
+  健康上涨: {
+    profit: { line: `还有浮盈：成本 ${COST} 在下方是安全垫，按趋势规则拿着，不因小回调卖掉。` },
+    loss: { line: "暂时浮亏：趋势还向上，不急着割；不在浮亏时急着加仓摊低，等回踩获支撑、小级别确认后再加。" },
   },
-  range: {
-    profit: { label: "盈亏", text: `还有浮盈：把止损提到成本 ${COST} 附近保本；磨蹭不涨就先走。` },
-    loss: { label: "盈亏", text: "已经浮亏：守住离场底线，不在没方向的时候加仓摊低成本。" },
+  极度超买: {
+    profit: { line: `浮盈不少：先分批止盈一部分，剩下的把止损上移到成本 ${COST} 以上。` },
+    loss: {
+      action: "追在高位、暂时浮亏：不加仓，跌破 EMA20 就走。",
+      line: "已经浮亏：多半是追高买的。不加仓摊低，按离场条件走，不等回本。",
+      omit: ["警惕"], // 亏着钱谈不上"先止盈一部分"
+    },
+  },
+  健康下跌: {
+    profit: { line: `还有浮盈：先把止损提到成本 ${COST} 附近保本，反弹到减仓位先减一部分，别让盈利变成亏损。` },
+    loss: { line: "已经浮亏：不等回本。反弹到减仓位就执行，减到浮亏不影响心情为止。" },
+  },
+  极度超卖: {
+    profit: { line: `还有浮盈：先把止损提到成本 ${COST} 附近保本，反弹到减仓位先减一部分，别让盈利变成亏损。` },
+    loss: { line: "已经浮亏：不等回本。反弹到减仓位就执行，减到浮亏不影响心情为止。" },
+  },
+  过渡态: {
+    profit: { line: `还有浮盈：把止损提到成本 ${COST} 附近保本；排列理顺前不加仓。` },
+    loss: { line: "已经浮亏：不加仓摊低；跌破 EMA20 就按离场条件减，不等回本。" },
   },
 };
 
 /** 只按趋势类型定的打法（还没加看方向给的时机）。浮盈 / 浮亏在持仓打法的做法之后加一行。 */
 function basePlans(a: Analysis): Record<Situation, Plan> {
-  const play = PLAYS[short(a.trend)] ?? PLAYS["过渡态"];
+  const key = PLAYS[short(a.trend)] ? short(a.trend) : "过渡态";
+  const play = PLAYS[key];
   const l = levels(a);
   const holding = play.holding(l);
-  const withPnl = (k: "profit" | "loss"): Plan => ({ ...holding, items: [PNL[sideOf(a)][k], ...holding.items] });
+  const withPnl = (k: "profit" | "loss"): Plan => {
+    const t = PNL[key][k];
+    return {
+      action: t.action ?? holding.action,
+      items: [{ label: "盈亏", text: t.line }, ...holding.items.filter((i) => !t.omit?.includes(i.label))],
+    };
+  };
   return { flat: play.flat(l), holding, profit: withPnl("profit"), loss: withPnl("loss") };
 }
 

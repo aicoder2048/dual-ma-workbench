@@ -601,6 +601,11 @@ describe("定策略：成本价决定浮盈 / 浮亏的做法", () => {
     expect(await effect.textContent()).not.toContain("涨回成本");
     expect(await effect.textContent()).not.toContain("支持支持");
     expect(await page.evaluate(() => document.activeElement?.id)).toBe("pos-cost"); // 边打字边更新，不丢焦点
+    // 填了成本再切空仓、切回持仓：还是浮盈那一版
+    await page.click('[data-pos="flat"]');
+    await page.click('[data-pos="holding"]');
+    expect(await page.inputValue("#pos-cost")).toBe("133");
+    expect(await plan.textContent()).toContain("133.00");
     await page.fill("#pos-cost", "");
     await page.click('[data-pos="flat"]');
     await page.close();

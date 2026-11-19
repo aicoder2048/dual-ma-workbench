@@ -100,3 +100,29 @@ describe("成本价参与策略：浮盈、浮亏分开说", () => {
     expect([bullishPlans().loss.action, ...bullishPlans().loss.items.map((i) => i.text)].join("")).toContain("摊低");
   });
 });
+
+describe("每种趋势类型的浮盈 / 浮亏都不自相矛盾", () => {
+  const TRENDS = ["横盘震荡", "健康上涨", "极度超买", "健康下跌", "极度超卖", "过渡态（排列或方向不一致）"];
+  const withTrend = (t: string, score: number) => {
+    const a = structuredClone(bear);
+    a.trend = t;
+    a.lean = { ...a.lean, score, conflict: null };
+    return a;
+  };
+  const txt = (p: { action: string; items: { text: string }[] }) => [p.action, ...p.items.map((i) => i.text)].join("｜");
+  for (const t of TRENDS) for (const score of [-0.4, 0.4]) {
+    test(`${t}，lean ${score}`, () => {
+      const p = buildPlans(withTrend(t, score));
+      expect(txt(p.profit)).toContain("{cost}");
+      expect(txt(p.profit)).not.toMatch(/浮亏|不等回本/);
+      expect(txt(p.loss)).not.toMatch(/止盈|浮盈|保本/); // 亏着钱谈不上止盈、保本
+      expect(txt(p.loss)).toMatch(/摊低|不等回本/); // 浮亏时最常见的错：加仓摊低、死等回本
+      if (/不加仓/.test(txt(p.loss))) expect(txt(p.loss)).not.toMatch(/再加|加仓。|可以加仓/);
+      if (t !== "健康上涨") expect(txt(p.loss)).not.toContain("趋势还向上"); // 只有健康上涨才能这么说
+      for (const k of ["profit", "loss"] as const) {
+        // 盈亏行提到的「减仓位」「离场条件」，同一张计划里要真的有这一条
+        if (/减仓位/.test(p[k].items.find((i) => i.label === "盈亏")!.text)) expect(p[k].items.some((i) => i.label === "减仓位")).toBe(true);
+      }
+    });
+  }
+});
