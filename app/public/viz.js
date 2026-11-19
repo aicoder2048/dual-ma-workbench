@@ -90,16 +90,6 @@ export function leanCard(l, close, trend) {
 }
 
 // ---------- 1. 看大局 ----------
-export function maTable(v) {
-  const rows = v.lines.map((l) => `<tr>
-      <th><i class="sw" style="--c: var(--ma${l.period})"></i>${l.period} 日</th>
-      <td class="num">${f2(l.ma)}</td><td class="num">${f2(l.ema)}</td>
-      <td><span class="dir">${clockGlyph(l.clock)}${esc(l.clock)}</span></td>
-      <td class="num">${pct(l.slope, 2)}/日</td>
-      <td>${l.above ? '<span class="bullish">上方</span>' : '<span class="bearish">下方</span>'}</td></tr>`).join("");
-  return `<table class="vt"><thead><tr><th>周期</th><th>MA</th><th>EMA</th><th>MA 方向</th><th>斜率</th><th>价格在</th></tr></thead><tbody>${rows}</tbody></table>`;
-}
-
 /** 价位梯子：一条价格轴上标出收盘价、3 条 MA（实心点）、3 条 EMA（空心圈）。看次序和间距。 */
 export function ladder(v) {
   const W = 640, H = 92, padX = 28, axisY = 46;
@@ -279,13 +269,34 @@ export function outlookAnswer(o, pos) {
     </div>`;
 }
 
+/**
+ * 看大局的证据：按趋势类型的判断顺序排成四问（和脚本 classify 一致）。
+ * ① 三条 MA 挤在一起 → 横盘；② 模糊判断定偏哪边；③ 乖离分位定健康还是极度；④ 交叉只作确认，不参与判断。
+ */
+function bigPictureEvidence(v) {
+  const l = v.lean;
+  const side = l.score >= 0.6 ? "上涨" : l.score <= -0.6 ? "下跌" : null;
+  const pctl = Math.round(v.bias.pctl * 100);
+  const extreme = v.bias.pctl <= 0.05 || v.bias.pctl >= 0.95;
+  const tangle = v.trend === "横盘震荡";
+  const dbl = v.crosses.filter((c) => c.verdict.startsWith("双"));
+  const check = (n, q, judge, body = "") =>
+    `<section class="check"><h3>${n} ${q}</h3><p class="judge">${judge}</p>${body}</section>`;
+  return `<p class="evidence-title">证据：趋势类型是按下面的顺序判出来的</p>`
+    + check("①", "是不是横盘？", `三条 MA 相差 ${v.spread.toFixed(1)}%（挤在 4% 以内、60 线走平才算缠绕）→ <b>${tangle ? "是横盘" : "不是横盘"}</b>`)
+    + check("②", "偏哪一边？", `${esc(leanName(l))}：6 条线 ${l.up} 上、${l.down} 下 → <b>${side ? `${side}一侧` : "两边都不够明显，算过渡态"}</b>`,
+      ladder(v))
+    + check("③", "健康还是极度？", `离 20 线 ${pct(v.bias.value)}，在自身历史排 ${pctl}% 分位（两端各 5% 算大幅乖离）→ <b>${extreme ? "极度" : "健康"}</b>`,
+      biasMeter(v))
+    + check("④", "交叉确认（参考）", dbl.length ? `${dbl.map((c) => `${c.pair} ${c.verdict}`).join("，")}：两组都交叉，方向得到确认。不参与上面的判断。` : "没有双交叉：方向还没得到交叉确认。不参与上面的判断。",
+      crossTable(v))
+    + `<p class="check-sum">所以是 <b>${esc(v.trend)}</b>。</p>`
+    + `<details class="ref"><summary>六种趋势类型对照（现在是哪一种）</summary>${trendTable(v)}</details>`;
+}
+
 /** 每一步的证据（结论在 step-answer 里）。 */
 export function stepVisuals(key, v) {
-  if (key === "big_picture") {
-    return `<p class="evidence-title">证据：6 条线的方向和位置、离 20 线多远、最近的交叉</p>`
-      + maTable(v) + ladder(v) + `<div class="two">${biasMeter(v)}${crossTable(v)}</div>`
-      + `<details class="ref"><summary>六种趋势类型对照（现在是哪一种）</summary>${trendTable(v)}</details>`;
-  }
+  if (key === "big_picture") return bigPictureEvidence(v);
   if (key === "direction") {
     return `<p class="evidence-title">证据：未来 10 天每条 MA 要扣掉的价格。红点在现价上方 = 扣高值，均线往下拉；绿点在下方 = 扣低值，往上抬。</p>`
       + dropMultiples(v) + projectionFlow(v);

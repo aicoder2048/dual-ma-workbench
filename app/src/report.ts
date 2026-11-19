@@ -27,6 +27,9 @@ export interface Projection {
 export interface ReportVisual {
   close: number;
   lean: Lean;
+  /** 趋势类型（短名）和三条 MA 最大最小差占价格的百分比：看大局的"是不是横盘"用。 */
+  trend: string;
+  spread: number;
   lines: Analysis["lines"];
   bias: { value: number; pctl: number };
   crosses: { pair: string; ma: CrossInfo; ema: CrossInfo; verdict: string }[];
@@ -205,6 +208,8 @@ export function buildReport(a: Analysis): Report {
     visual: {
       close: a.close,
       lean: ln,
+      trend,
+      spread: a.spread_pct,
       lines: a.lines,
       bias: { value: a.bias20, pctl: a.bias_pctl },
       crosses,

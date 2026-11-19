@@ -566,3 +566,20 @@ describe("十字线日期", () => {
     await page.close();
   }, 30_000);
 });
+
+describe("看大局的证据：按判断顺序的四问", () => {
+  test("四问依次是：横盘、偏哪边、健康还是极度、交叉确认；每问先给判断；最后接回结论", async () => {
+    const { page, errors } = await open();
+    const step = page.locator('[data-step="big_picture"]');
+    const qs = await step.locator(".check h3").allTextContents();
+    expect(qs.map((q) => q.replace(/\s+/g, ""))).toEqual(["①是不是横盘？", "②偏哪一边？", "③健康还是极度？", "④交叉确认（参考）"]);
+    const verdicts = await step.locator(".check .judge").allTextContents();
+    expect(verdicts[0]).toContain("不是横盘");
+    expect(verdicts[1]).toContain("明显偏空");
+    expect(verdicts[2]).toContain("极度");
+    expect(await step.locator(".check-sum").textContent()).toContain("极度超卖");
+    expect(await step.locator("table.vt th:text('MA 方向')").count()).toBe(0); // 和总结卡片重复的均线表去掉了
+    expect(errors).toEqual([]);
+    await page.close();
+  }, 30_000);
+});
