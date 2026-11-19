@@ -32,7 +32,7 @@
 
 需要：[uv](https://docs.astral.sh/uv/)（Python 脚本）和 [Bun](https://bun.sh)（工作台）。
 
-装了 [just](https://github.com/casey/just) 的话，`just wildgoose` 启动工作台，`just wildgoose 5179` 换端口（wild goose 就是大雁）。
+装了 [just](https://github.com/casey/just) 的话，`just wildgoose` 启动工作台，`just wildgoose 5179` 换端口（wild goose 就是大雁）。改了服务端代码（`app/src/`）会自动重启，前端文件刷新页面就生效；自动重启会清空两个 agent 的对话。改了 SKILL.md 或学习文章要手动重启，页面顶部会提示。
 
 ```bash
 cp .env.example .env          # 填入 POLYGON_API_KEY；没有也能用 yfinance

@@ -22,3 +22,17 @@ describe("codeFingerprint：服务端启动后代码有没有变", () => {
     expect(codeFingerprint([dir])).not.toBe(before);
   });
 });
+
+describe("codeFingerprint：也认启动时读进来的单个文件", () => {
+  const dir = mkdtempSync(join(tmpdir(), "dma-build2-"));
+  const md = join(dir, "SKILL.md");
+  writeFileSync(md, "原则 1");
+  test("改了单个 Markdown 文件，指纹就变", () => {
+    const before = codeFingerprint([md]);
+    writeFileSync(md, "原则 2");
+    expect(codeFingerprint([md])).not.toBe(before);
+  });
+  test("不存在的文件跳过，不报错（公开仓库没有转载的笔记）", () => {
+    expect(() => codeFingerprint([join(dir, "没有这个文件.md")])).not.toThrow();
+  });
+});
