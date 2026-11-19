@@ -553,3 +553,16 @@ describe("抽屉：五块，滚过哪块就出现哪块的按钮", () => {
     await page.close();
   }, 30_000);
 });
+
+describe("十字线日期", () => {
+  test("十字线底部的日期写成 2026-10-22", async () => {
+    const { page } = await open();
+    await page.waitForSelector("#chart canvas");
+    const out = await page.evaluate(async () => {
+      const f = (await import("/app.js")).getChart().chart.options().localization.timeFormatter;
+      return f ? [f({ year: 2026, month: 10, day: 22 }), f("2026-10-22"), f(Date.UTC(2026, 9, 22) / 1000)] : null;
+    });
+    expect(out).toEqual(["2026-10-22", "2026-10-22", "2026-10-22"]);
+    await page.close();
+  }, 30_000);
+});

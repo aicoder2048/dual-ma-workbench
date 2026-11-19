@@ -3,6 +3,13 @@ const SPECS = [];
 [20, 60, 120].forEach((n) => ["MA", "EMA"].forEach((k) =>
   SPECS.push({ key: k + n, token: `--${k.toLowerCase()}${n}`, dashed: k === "EMA", width: k === "MA" ? 2 : 1 })));
 
+/** 图表库传来的时间（"2026-10-22"、{year,month,day} 或 UTC 秒）→ "2026-10-22"。 */
+function isoDate(t) {
+  if (typeof t === "string") return t;
+  if (typeof t === "number") return new Date(t * 1000).toISOString().slice(0, 10);
+  return `${t.year}-${String(t.month).padStart(2, "0")}-${String(t.day).padStart(2, "0")}`;
+}
+
 const css = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
 
 export function createChart(box, legendEl) {
@@ -15,6 +22,8 @@ export function createChart(box, legendEl) {
     autoSize: true,
     rightPriceScale: { scaleMargins: { top: 0.06, bottom: 0.24 } },
     timeScale: { rightOffset: 4 },
+    // 十字线底部的日期统一写成 2026-10-22（默认按浏览器语言写成 "22 10月 '26"，不好读）
+    localization: { timeFormatter: isoDate },
     crosshair: { mode: 0 },
     // 滚轮只滚页面，不缩放图表（误触太多）；缩放用 ⌘/Ctrl + 滚轮（见下方 wheel 处理），按住拖动平移
     handleScroll: { mouseWheel: false, pressedMouseMove: true, horzTouchDrag: true, vertTouchDrag: false },
