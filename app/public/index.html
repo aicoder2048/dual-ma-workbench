@@ -90,7 +90,7 @@
           <button type="button" class="ask-card" data-ask-card="chart" aria-haspopup="menu">问鸿雁</button></div>
         <div class="legend" id="legend"></div>
         <div id="chart" class="chart"><p class="caption">加载中……</p></div>
-        <p class="caption">小黄点：明天各条 MA 要扣掉的 K 线（抵扣价）。黄色量柱：成交量超过 50 日均量 2 倍。点图表上任一天，可以问鸿雁。</p>
+        <p class="caption">小黄点：明天各条 MA 要扣掉的 K 线（抵扣价）。黄色量柱：成交量超过 50 日均量 2 倍。虚线是门槛线：价格过了它，判断才值得改。滚轮不缩放图表，按住拖动可以平移。点图表上任一天，可以问鸿雁。</p>
       </section>
 
       <section class="steps" id="steps"></section>
@@ -138,7 +138,7 @@
       <div class="chips" id="advisor-chips"></div>
       <div class="context-pill" id="advisor-context" hidden></div>
       <form class="ask" id="advisor-form">
-        <textarea id="advisor-input" rows="1" placeholder="例如：什么叫双交叉？可以粘贴截图" disabled></textarea>
+        <textarea id="advisor-input" rows="1" placeholder="例如：什么叫双交叉？" disabled></textarea>
         <button type="submit" id="advisor-send" disabled>发送</button>
       </form>
     </div>

@@ -16,6 +16,22 @@ import { Speaker } from "../src/tts.ts";
 import { Watchlist } from "../src/watchlist.ts";
 import nvda from "../test/fixtures/nvda-analysis.json";
 
+/** 300 个交易日的合成日线：图表工具（范围、读数、门槛线）要有真数据才能测。 */
+const CHART = (() => {
+  const days: string[] = [];
+  for (let d = new Date("2025-08-01"); days.length < 300; d.setDate(d.getDate() + 1)) {
+    if (d.getDay() % 6) days.push(d.toISOString().slice(0, 10));
+  }
+  const close = days.map((_, i) => 200 + 30 * Math.sin(i / 25) - i * 0.1);
+  const line = (k: number) => days.map((time, i) => ({ time, value: close[i] + k }));
+  return {
+    candles: days.map((time, i) => ({ time, open: close[i] - 1, high: close[i] + 2, low: close[i] - 2, close: close[i] })),
+    volume: days.map((time) => ({ time, value: 1e6, spike: false })),
+    lines: { MA20: line(5), EMA20: line(4), MA60: line(10), EMA60: line(9), MA120: line(15), EMA120: line(14) },
+    drops: [{ time: days[280], period: 20 }],
+  };
+})();
+
 const MP3 = readFileSync(resolve(import.meta.dir, "../test/fixtures/tts-sample.mp3"));
 const ttsCalls: { text: string; voice: string }[] = [];
 const wsSent: any[] = [];
@@ -29,7 +45,7 @@ beforeAll(async () => {
   const dir = mkdtempSync(join(tmpdir(), "dma-e2e-"));
   const handler = createHandler({
     analyzer: new Analyzer(async (args) =>
-      JSON.stringify({ analysis: { ...(nvda as Analysis), label: args[0] }, chart: { candles: [], volume: [], lines: {}, drops: [] } })),
+      JSON.stringify({ analysis: { ...(nvda as Analysis), label: args[0] }, chart: CHART })),
     watchlist: new Watchlist(join(dir, "w.json")),
     library: SourceLibrary.load(),
     publicDir: resolve(import.meta.dir, "../public"),
@@ -220,6 +236,66 @@ describe("服务端比页面旧", () => {
     expect(await page.textContent("#stale-bar")).toContain("just wildgoose");
     expect(errors).toEqual([]);
     staleNext = false;
+    await page.close();
+  }, 30_000);
+});
+
+describe("K 线图工具", () => {
+  const range = (page: Page) => page.evaluate(async () => {
+    const { getChart } = await import("/app.js");
+    return getChart().chart.timeScale().getVisibleRange();
+  });
+
+  test("滚轮不缩放图表（只滚动页面）", async () => {
+    const { page, errors } = await open();
+    await page.waitForSelector("#chart canvas");
+    await page.locator("#chart").scrollIntoViewIfNeeded();
+    const before = await range(page);
+    const box = (await page.locator("#chart").boundingBox())!;
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.wheel(0, -600);
+    await page.waitForTimeout(300);
+    expect(await range(page)).toEqual(before);
+    expect(errors).toEqual([]);
+    await page.close();
+  }, 30_000);
+
+  test("范围按钮：默认近 1 年，点「全部」看到第一根 K 线", async () => {
+    const { page } = await open();
+    await page.waitForSelector("#chart canvas");
+    expect(await page.getAttribute(".range-btn[data-range='1y']", "aria-pressed")).toBe("true");
+    const oneYear = await range(page);
+    expect(oneYear!.from > CHART.candles[0].time).toBe(true);
+    await page.click(".range-btn[data-range='all']");
+    await page.waitForTimeout(200);
+    expect((await range(page))!.from).toBe(CHART.candles[0].time);
+    await page.close();
+  }, 30_000);
+
+  test("悬停读数：显示当天收盘和 6 条线；移开显示最新一天", async () => {
+    const { page } = await open();
+    await page.waitForSelector("#chart canvas");
+    await page.locator("#chart").scrollIntoViewIfNeeded();
+    const last = CHART.candles.at(-1)!.time;
+    expect(await page.textContent("#chart-readout")).toContain(last);
+    const box = (await page.locator("#chart").boundingBox())!;
+    await page.mouse.move(box.x + box.width * 0.3, box.y + box.height / 2);
+    await page.waitForFunction((last) => !document.getElementById("chart-readout")!.textContent!.includes(last), last);
+    const text = (await page.textContent("#chart-readout"))!;
+    expect(text).toMatch(/\d{4}-\d{2}-\d{2}/);
+    for (const k of ["收", "MA20", "EMA120"]) expect(text).toContain(k);
+    await page.close();
+  }, 30_000);
+
+  test("门槛线：把「改变判断」的价位画在图上，可以关掉", async () => {
+    const { page } = await open();
+    await page.waitForSelector("#chart canvas");
+    const levels = () => page.evaluate(async () => (await import("/app.js")).getChart().levels());
+    const on = await levels();
+    expect(on.length).toBeGreaterThan(0);
+    expect(on[0]).toMatchObject({ title: "站上 EMA20", price: expect.any(Number) });
+    await page.click(".levels-toggle");
+    expect(await levels()).toEqual([]);
     await page.close();
   }, 30_000);
 });

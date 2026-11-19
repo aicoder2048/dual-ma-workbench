@@ -383,7 +383,7 @@ body.offline .status-pill .dot { background: var(--bad); }
 
 /* ===================== 卡片上的「问鸿雁」 ===================== */
 .ask-card { display: inline-flex; align-items: center; gap: 6px; border: 1px solid color-mix(in srgb, var(--ma120) 40%, var(--line)); background: color-mix(in srgb, var(--ma120) 8%, var(--card)); color: var(--ma120); border-radius: 8px; padding: 2px 10px; font-size: 12.5px; cursor: pointer; white-space: nowrap; }
-.ask-card::before { content: "参"; width: 16px; height: 16px; border-radius: 4px; display: grid; place-items: center; background: var(--ma120); color: var(--card); font: 600 10px var(--heading); }
+.ask-card::before { content: "雁"; width: 16px; height: 16px; border-radius: 4px; display: grid; place-items: center; background: var(--ma120); color: var(--card); font: 600 10px var(--heading); }
 .ask-card:hover, .ask-card[aria-expanded="true"] { border-color: var(--ma120); }
 .chart-card .legend { margin-bottom: 8px; }
 .step-head .ask-card { margin-left: auto; }
@@ -469,3 +469,13 @@ body.offline .status-pill .dot { background: var(--bad); }
 .msg.user .atts { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 3px; }
 .att-name { font-size: 11.5px; border: 1px solid var(--line); border-radius: 6px; padding: 0 6px; color: var(--muted); }
 .stale-bar { background: var(--bad); color: #fff; font-size: 13.5px; padding: 8px 20px; text-align: center; flex: none; }
+
+/* ===================== K 线图工具 ===================== */
+.chart-tools { display: flex; gap: 6px; align-items: center; margin: 0 0 6px; flex-wrap: wrap; }
+.chart-tools button { font-size: 12px; background: transparent; border: 1px solid var(--line); border-radius: 999px; padding: 1px 10px; cursor: pointer; color: var(--muted); }
+.chart-tools button[aria-pressed="true"] { color: var(--fg); border-color: var(--faint); background: var(--panel); }
+.chart-tools .levels-toggle { margin-left: auto; }
+.chart-readout { display: flex; flex-wrap: wrap; gap: 4px 12px; font: 12px var(--mono); color: var(--muted); min-height: 20px; margin-bottom: 4px; }
+.chart-readout b { color: var(--fg); font-weight: 600; }
+.chart-readout i { display: inline-block; width: 12px; border-top: 2px solid var(--c); margin-right: 4px; vertical-align: middle; }
+.chart-readout i.dash { border-top-style: dashed; }

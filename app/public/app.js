@@ -164,6 +164,7 @@ export function showAnalysis(data, asof = null) {
   renderInline(v.querySelector(".lean-play"), `${r.visual.lean.play} [[D:模糊判断]] [[S:skill#模糊判断]]`, data.facts);
 
   chartApi?.setData(data.chart);
+  chartApi?.setLevels(r.visual.lean);
 
   const steps = $("steps");
   steps.innerHTML = "";
