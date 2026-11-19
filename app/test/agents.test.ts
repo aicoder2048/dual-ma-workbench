@@ -3,7 +3,7 @@ import { Analyzer } from "../src/analyze.ts";
 import { buildFacts, type Analysis } from "../src/citations.ts";
 import { assistantText, type ServerEvent } from "../src/agents/host.ts";
 import { assertAllowedModel, parseModelSpec, resolveThinking } from "../src/agents/model.ts";
-import { SettingsStore } from "../src/settings.ts";
+import { DEFAULT_SETTINGS, SettingsStore } from "../src/settings.ts";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -150,5 +150,5 @@ test("Workbench：改设置会广播给所有页面", () => {
   const wb = new Workbench(fakeAnalyzer(), library, { settings, suggester: { suggest: async () => null } });
   wb.connect({ send: (d: string) => sent.push(JSON.parse(d)) });
   settings.update({ model: "deepseek/deepseek-flash" });
-  expect(sent.at(-1)).toEqual({ type: "settings", settings: { model: "deepseek/deepseek-flash", dataSource: "polygon" } });
+  expect(sent.at(-1)).toEqual({ type: "settings", settings: { ...DEFAULT_SETTINGS, model: "deepseek/deepseek-flash" } });
 });

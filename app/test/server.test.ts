@@ -6,7 +6,8 @@ import { Analyzer, normalizeAsof, normalizeTicker, type Runner } from "../src/an
 import { bookOf, buildFacts, validateCitations, type Analysis } from "../src/citations.ts";
 import { createHandler } from "../src/http.ts";
 import { buildReport } from "../src/report.ts";
-import { SettingsStore } from "../src/settings.ts";
+import { DEFAULT_SETTINGS, SettingsStore } from "../src/settings.ts";
+import { Speaker } from "../src/tts.ts";
 import { SourceLibrary } from "../src/sources.ts";
 import { DEFAULT_WATCHLIST, Watchlist } from "../src/watchlist.ts";
 import nvda from "./fixtures/nvda-analysis.json";
@@ -139,7 +140,8 @@ describe("HTTP 设置", () => {
 
   test("GET 返回当前设置、可选模型（含计费方式）和数据源", async () => {
     const b = await (await call("GET")).json();
-    expect(b.settings).toEqual({ model: "openai-codex/gpt-6.1-sol", dataSource: "polygon" });
+    expect(b.settings).toEqual(DEFAULT_SETTINGS);
+    expect(b.voices.map((v: any) => v.label)).toEqual(["云希", "云扬", "云健", "晓晓", "晓伊", "晓臻"]);
     expect(b.models.map((m: any) => m.billing)).toEqual(["订阅", "按量计费"]);
     expect(b.dataSources.map((d: any) => d.id)).toEqual(["polygon", "yfinance"]);
     expect(JSON.stringify(b)).not.toContain("sk-"); // 不返回 key
@@ -150,5 +152,33 @@ describe("HTTP 设置", () => {
   });
   test("PUT 非法模型返回 400", async () => {
     expect((await call("PUT", { model: "anthropic/claude-opus-5-5" })).status).toBe(400);
+  });
+});
+
+describe("/api/tts", () => {
+  const dir = mkdtempSync(join(tmpdir(), "dma-tts-"));
+  const calls: { text: string; voice: string }[] = [];
+  const handler = createHandler({
+    analyzer: new Analyzer(fakeRunner()), watchlist: new Watchlist(join(dir, "w.json")), library,
+    publicDir: resolve(import.meta.dir, "../public"), settings: new SettingsStore(join(dir, "s.json")),
+    tts: new Speaker(async (text, voice) => { calls.push({ text, voice }); return new Uint8Array([1, 2, 3]); }),
+  });
+  const post = (body: unknown) => handler(new Request("http://x/api/tts", { method: "POST", body: JSON.stringify(body) }));
+
+  test("返回 mp3", async () => {
+    const res = await post({ text: "均线向上。", voice: "zh-CN-YunxiNeural" });
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toBe("audio/mpeg");
+    expect([...new Uint8Array(await res.arrayBuffer())]).toEqual([1, 2, 3]);
+  });
+  test("同一段文字同一个声音只合成一次", async () => {
+    const before = calls.length;
+    await post({ text: "均线向上。", voice: "zh-CN-YunxiNeural" });
+    expect(calls.length).toBe(before);
+  });
+  test("清单外的声音、空文字、过长文字都拒绝", async () => {
+    expect((await post({ text: "hi", voice: "en-US-GuyNeural" })).status).toBe(400);
+    expect((await post({ text: "  ", voice: "zh-CN-YunxiNeural" })).status).toBe(400);
+    expect((await post({ text: "啊".repeat(2001), voice: "zh-CN-YunxiNeural" })).status).toBe(400);
   });
 });

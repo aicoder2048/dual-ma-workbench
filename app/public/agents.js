@@ -1,6 +1,8 @@
 // 两个 agent 面板（中栏分析师、右栏均线参谋）+ WebSocket 连接。
 import { enhance } from "./blocks.js";
 import { renderRich } from "./cite.js";
+import { currentSettings } from "./settings.js";
+import { speak, speakingId, stopSpeaking } from "./speech.js";
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -132,14 +134,15 @@ export class Panel {
     row.classList.toggle("failed", e.phase === "end" && !e.ok);
   }
 
-  /** 回答结束：用最终文字和数据字段重新渲染，引用按校验结果显示。 */
-  endTurn(entry) {
+  /** 回答结束：用最终文字和数据字段重新渲染，引用按校验结果显示。replay = 回放历史记录，不自动朗读。 */
+  endTurn(entry, replay = false) {
     if (!this.live) this.startTurn();
     const { el, body } = this.live;
     el.classList.remove("streaming");
-    renderAssistant(el, body, entry);
+    renderAssistant(el, body, entry, this.o.agent);
     this.live = null;
     this.scrollEnd();
+    if (!replay && entry.text && !entry.aborted && currentSettings()?.autoSpeak) el.querySelector(".speak")?.click();
   }
 
   error(message) {
@@ -158,7 +161,7 @@ export class Panel {
       if (e.role === "user") { this.addUser(e); continue; }
       this.startTurn();
       for (const t of e.tools) this.tool({ label: t.label, phase: "end", ok: t.ok });
-      this.endTurn(e);
+      this.endTurn(e, true);
     }
   }
 
@@ -183,13 +186,36 @@ export class Panel {
   }
 }
 
-function renderAssistant(el, body, entry) {
+let speakSeq = 0;
+
+/** 每条回答右上角的「朗读」开关。声音按 agent 取设置里的选择。 */
+function speakButton(agent, text) {
+  const id = `say-${++speakSeq}`;
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "speak";
+  const paint = (on) => {
+    btn.setAttribute("aria-pressed", String(on));
+    btn.textContent = on ? "■ 停止" : "▶ 朗读";
+    btn.title = on ? "停止朗读" : "朗读这条回答（微软 Edge 在线语音）";
+  };
+  paint(false);
+  btn.addEventListener("click", () => {
+    if (speakingId() === id) return stopSpeaking();
+    const s = currentSettings();
+    speak(id, text, agent === "analyst" ? s?.voiceAnalyst : s?.voiceAdvisor, paint);
+  });
+  return btn;
+}
+
+function renderAssistant(el, body, entry, agent) {
   const who = el.querySelector(".who");
   if (who && entry.model) who.textContent = `${who.textContent.split(" · ")[0]} · ${entry.model.split("/").pop()}`;
   if (!entry.text) {
     body.innerHTML = `<span class="caption">${entry.aborted ? "已中断。" : "（没有文字回答）"}</span>`;
     return;
   }
+  el.querySelector(".who")?.appendChild(speakButton(agent, entry.text));
   renderRich(body, entry.text, entry.book);
   enhance(body); // 表格由 Markdown 直接渲染；流程图、迷你 K 线、底扣价小图异步画出
   const bad = entry.checks.filter((c) => !c.ok).length;

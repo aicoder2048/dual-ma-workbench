@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Analyzer } from "../src/analyze.ts";
 import { assertAllowedModel } from "../src/agents/model.ts";
-import { DEFAULT_SETTINGS, loadEnvKeys, MODEL_OPTIONS, SettingsStore, sourceArg } from "../src/settings.ts";
+import { DEFAULT_SETTINGS, loadEnvKeys, MODEL_OPTIONS, SettingsStore, sourceArg, VOICE_OPTIONS } from "../src/settings.ts";
 
 const tmp = () => mkdtempSync(join(tmpdir(), "dma-set-"));
 
@@ -80,4 +80,23 @@ describe(".env 里的模型 key", () => {
     expect(env2.DEEPSEEK_API_KEY).toBe("from-shell");
   });
   test("没有 .env 文件不报错", () => expect(loadEnvKeys(join(tmp(), ".env"), {})).toEqual([]));
+});
+
+describe("语音设置", () => {
+  test("默认：分析师年轻男声云希，参谋年轻女声晓晓，不自动朗读", () => {
+    expect(DEFAULT_SETTINGS.voiceAnalyst).toBe("zh-CN-YunxiNeural");
+    expect(DEFAULT_SETTINGS.voiceAdvisor).toBe("zh-CN-XiaoxiaoNeural");
+    expect(DEFAULT_SETTINGS.autoSpeak).toBe(false);
+  });
+  test("三男三女", () => {
+    expect(VOICE_OPTIONS.filter((v) => v.gender === "男").length).toBe(3);
+    expect(VOICE_OPTIONS.filter((v) => v.gender === "女").length).toBe(3);
+  });
+  test("清单外的声音拒绝", () => {
+    const s = new SettingsStore(join(tmp(), "s.json"));
+    expect(() => s.update({ voiceAnalyst: "en-US-GuyNeural" } as any)).toThrow();
+    expect(() => s.update({ autoSpeak: "yes" } as any)).toThrow();
+    s.update({ voiceAdvisor: "zh-CN-XiaoyiNeural", autoSpeak: true });
+    expect(s.get().voiceAdvisor).toBe("zh-CN-XiaoyiNeural");
+  });
 });

@@ -34,12 +34,29 @@ export const DATA_OPTIONS: { id: DataSource; label: string; note: string }[] = [
   { id: "yfinance", label: "yfinance", note: "免费，非官方接口，偶尔不稳定。" },
 ];
 
+/** 微软 Edge 在线语音里的普通话声音，三男三女（方言声音不列）。 */
+export const VOICE_OPTIONS: { id: string; label: string; gender: "男" | "女"; note: string }[] = [
+  { id: "zh-CN-YunxiNeural", label: "云希", gender: "男", note: "年轻，阳光" },
+  { id: "zh-CN-YunyangNeural", label: "云扬", gender: "男", note: "新闻播音，沉稳" },
+  { id: "zh-CN-YunjianNeural", label: "云健", gender: "男", note: "激昂，体育解说" },
+  { id: "zh-CN-XiaoxiaoNeural", label: "晓晓", gender: "女", note: "年轻，温暖" },
+  { id: "zh-CN-XiaoyiNeural", label: "晓伊", gender: "女", note: "年轻，活泼" },
+  { id: "zh-TW-HsiaoChenNeural", label: "晓臻", gender: "女", note: "台湾口音，亲切" },
+];
+
 export interface Settings {
   model: string;
   dataSource: DataSource;
+  voiceAnalyst: string;
+  voiceAdvisor: string;
+  /** 回答结束后自动朗读。 */
+  autoSpeak: boolean;
 }
 
-export const DEFAULT_SETTINGS: Settings = { model: MODEL_OPTIONS[0].id, dataSource: "polygon" };
+export const DEFAULT_SETTINGS: Settings = {
+  model: MODEL_OPTIONS[0].id, dataSource: "polygon",
+  voiceAnalyst: "zh-CN-YunxiNeural", voiceAdvisor: "zh-CN-XiaoxiaoNeural", autoSpeak: false,
+};
 
 /** 设置里的数据源 → 脚本的 --source 参数。Polygon 允许回退，否则回放早年日期会失败。 */
 export function sourceArg(s: DataSource): "auto" | "yfinance" {
@@ -48,6 +65,7 @@ export function sourceArg(s: DataSource): "auto" | "yfinance" {
 
 const validModel = (m: unknown): m is string => MODEL_OPTIONS.some((o) => o.id === m);
 const validSource = (s: unknown): s is DataSource => DATA_OPTIONS.some((o) => o.id === s);
+export const validVoice = (v: unknown): v is string => VOICE_OPTIONS.some((o) => o.id === v);
 
 export class SettingsStore {
   private current: Settings;
@@ -69,6 +87,9 @@ export class SettingsStore {
     return {
       model: validModel(raw.model) ? raw.model : DEFAULT_SETTINGS.model,
       dataSource: validSource(raw.dataSource) ? raw.dataSource : DEFAULT_SETTINGS.dataSource,
+      voiceAnalyst: validVoice(raw.voiceAnalyst) ? raw.voiceAnalyst : DEFAULT_SETTINGS.voiceAnalyst,
+      voiceAdvisor: validVoice(raw.voiceAdvisor) ? raw.voiceAdvisor : DEFAULT_SETTINGS.voiceAdvisor,
+      autoSpeak: typeof raw.autoSpeak === "boolean" ? raw.autoSpeak : DEFAULT_SETTINGS.autoSpeak,
     };
   }
 
@@ -83,6 +104,12 @@ export class SettingsStore {
     }
     if (patch.dataSource !== undefined && !validSource(patch.dataSource)) {
       throw new Error(`数据源不合法：${patch.dataSource}`);
+    }
+    for (const k of ["voiceAnalyst", "voiceAdvisor"] as const) {
+      if (patch[k] !== undefined && !validVoice(patch[k])) throw new Error(`声音不在可选清单里：${patch[k]}`);
+    }
+    if (patch.autoSpeak !== undefined && typeof patch.autoSpeak !== "boolean") {
+      throw new Error(`autoSpeak 应为 true 或 false：${patch.autoSpeak}`);
     }
     const prev = this.current;
     this.current = { ...prev, ...patch };

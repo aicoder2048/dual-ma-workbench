@@ -1,8 +1,17 @@
-// 设置面板：大模型、市场数据。改了立刻保存到服务端（data/settings.json）。
+// 设置面板：大模型、市场数据、语音播报。改了立刻保存到服务端（data/settings.json）。
+import { speak, speakingId, stopSpeaking } from "./speech.js";
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
-let view = null; // { settings, models, dataSources }
+let view = null; // { settings, models, dataSources, voices }
+
+/** 当前设置（语音模块按 agent 取声音用）。 */
+export const currentSettings = () => view?.settings ?? null;
+
+const PREVIEW = {
+  voiceAnalyst: "我是分析师。现在六条均线都向下，明显偏空。收盘站上 EMA20，才是第一个转折信号。",
+  voiceAdvisor: "我是均线参谋。底扣价就是均线明天要扣掉的那天收盘价。收盘价高于它，均线就往上走。",
+};
 
 export const shortModel = (id) => String(id ?? "").split("/").pop();
 
@@ -39,6 +48,20 @@ function render() {
           <span class="opt-note">${esc(d.note)}</span>
         </label>`).join("")}
     </fieldset>
+    <fieldset><legend>语音播报 <span>微软 Edge 在线语音，回答的文字会发到微软的服务</span></legend>
+      ${[["voiceAnalyst", "分析师"], ["voiceAdvisor", "均线参谋"]].map(([key, who]) => `
+        <div class="voice-row">
+          <label for="sp-${key}">${who}</label>
+          <select id="sp-${key}" name="${key}">
+            ${["男", "女"].map((g) => `<optgroup label="${g}声">${view.voices.filter((v) => v.gender === g).map((v) => `
+              <option value="${esc(v.id)}" ${v.id === settings[key] ? "selected" : ""}>${esc(v.label)} · ${esc(v.note)}</option>`).join("")}</optgroup>`).join("")}
+          </select>
+          <button type="button" class="ghost preview" data-preview="${key}">试听</button>
+        </div>`).join("")}
+      <label class="opt check"><input type="checkbox" name="autoSpeak" ${settings.autoSpeak ? "checked" : ""}>
+        <span class="opt-main"><b>回答完自动朗读</b></span>
+        <span class="opt-note">关掉时，点每条回答旁的「▶ 朗读」。</span></label>
+    </fieldset>
     <p class="sp-status" id="sp-status" aria-live="polite"></p>`;
 }
 
@@ -61,15 +84,23 @@ export async function initSettings({ onDataSourceChange }) {
   document.addEventListener("mousedown", (e) => {
     if (!panel.hidden && !e.target.closest("#settings-panel, #settings-btn, [data-open-settings]")) close();
   });
-  panel.addEventListener("click", (e) => e.target.closest(".close") && close());
+  panel.addEventListener("click", (e) => {
+    if (e.target.closest(".close")) return close();
+    const btn = e.target.closest("[data-preview]");
+    if (!btn) return;
+    const id = `preview-${btn.dataset.preview}`;
+    if (speakingId() === id) return stopSpeaking();
+    speak(id, PREVIEW[btn.dataset.preview], view.settings[btn.dataset.preview], (on) => (btn.textContent = on ? "停止" : "试听"));
+  });
 
   panel.addEventListener("change", async (e) => {
-    const input = e.target.closest("input[type=radio]");
+    const input = e.target.closest("input[type=radio], input[type=checkbox], select");
     if (!input) return;
+    const value = input.type === "checkbox" ? input.checked : input.value;
     const status = $("sp-status");
     const before = view.settings;
     status.textContent = "保存中…";
-    const res = await fetch("/api/settings", { method: "PUT", body: JSON.stringify({ [input.name]: input.value }) });
+    const res = await fetch("/api/settings", { method: "PUT", body: JSON.stringify({ [input.name]: value }) });
     const body = await res.json();
     if (!res.ok) {
       status.textContent = body.error;
@@ -79,9 +110,9 @@ export async function initSettings({ onDataSourceChange }) {
     }
     view = body;
     render();
-    $("sp-status").textContent = input.name === "model"
-      ? `已切换到 ${shortModel(view.settings.model)}。下一次提问生效，对话上下文保留。`
-      : "已切换数据源，正在重新取数…";
+    $("sp-status").textContent =
+      input.name === "model" ? `已切换到 ${shortModel(view.settings.model)}。下一次提问生效，对话上下文保留。` :
+      input.name === "dataSource" ? "已切换数据源，正在重新取数…" : "已保存。";
     paintModelBadges(view.settings);
     if (input.name === "dataSource" && before.dataSource !== view.settings.dataSource) onDataSourceChange();
   });
