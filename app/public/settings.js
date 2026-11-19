@@ -10,7 +10,7 @@ export const currentSettings = () => view?.settings ?? null;
 
 const PREVIEW = {
   voiceAnalyst: "我是分析师。现在六条均线都向下，明显偏空。收盘站上 EMA20，才是第一个转折信号。",
-  voiceAdvisor: "我是均线参谋。底扣价就是均线明天要扣掉的那天收盘价。收盘价高于它，均线就往上走。",
+  voiceAdvisor: "我是鸿雁。底扣价就是均线明天要扣掉的那天收盘价。收盘价高于它，均线就往上走。",
 };
 
 export const shortModel = (id) => String(id ?? "").split("/").pop();
@@ -30,7 +30,7 @@ function render() {
   const { settings, models, dataSources } = view;
   panel.innerHTML = `
     <div class="sp-head"><b>设置</b><button type="button" class="close" aria-label="关闭">×</button></div>
-    <fieldset><legend>大模型 <span>分析师、均线参谋、动态问法共用</span></legend>
+    <fieldset><legend>大模型 <span>分析师、鸿雁、动态问法共用</span></legend>
       ${models.map((m) => `
         <label class="opt ${m.ready ? "" : "disabled"}">
           <input type="radio" name="model" value="${esc(m.id)}" ${m.id === settings.model ? "checked" : ""} ${m.ready ? "" : "disabled"}>
@@ -50,7 +50,7 @@ function render() {
     </fieldset>
     <fieldset><legend>语音播报 <span>微软 Edge 在线语音，回答的文字会发到微软的服务</span></legend>
       ${!view.voices ? `<p class="bad">服务端还是旧版本，没有语音选项：请重启服务（just wildgoose）后刷新页面。</p>` : `
-      ${[["voiceAnalyst", "分析师"], ["voiceAdvisor", "均线参谋"]].map(([key, who]) => `
+      ${[["voiceAnalyst", "分析师"], ["voiceAdvisor", "鸿雁"]].map(([key, who]) => `
         <div class="voice-row">
           <label for="sp-${key}">${who}</label>
           <select id="sp-${key}" name="${key}">

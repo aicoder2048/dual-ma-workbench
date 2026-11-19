@@ -1,10 +1,10 @@
-// 划选中栏文字 / 点图表 → 浮动"问参谋"按钮 → 右栏上下文条 + 默认问题。
+// 划选中栏文字 / 点图表 → 浮动"问鸿雁"按钮 → 右栏上下文条 + 默认问题。
 const $ = (id) => document.getElementById(id);
 
 /**
  * opts:
  *   chart        createChart 返回的对象（可为 null）
- *   onAttach(sel, question)   用户点了"问参谋"
+ *   onAttach(sel, question)   用户点了"问鸿雁"
  */
 export function initSelection({ chart, onAttach }) {
   const btn = $("ask-advisor");
@@ -35,7 +35,7 @@ export function initSelection({ chart, onAttach }) {
         el.closest(".step")?.querySelector("h2")?.firstChild?.textContent.trim() ??
         (el.closest("#verdict") ? "规则初判" : el.closest("#analyst-thread") ? "分析师的回答" : "");
       const r = s.getRangeAt(0).getBoundingClientRect();
-      showAt(r.left + r.width / 2, r.top, "问参谋", { kind: "text", text: text.slice(0, 1200), where }, "解读一下这段话");
+      showAt(r.left + r.width / 2, r.top, "问鸿雁", { kind: "text", text: text.slice(0, 1200), where }, "解读一下这段话");
     }, 0);
   });
 
@@ -45,7 +45,7 @@ export function initSelection({ chart, onAttach }) {
     const box = $("chart").getBoundingClientRect();
     const sel = { kind: "chart", time: p.time, candle: p.candle, lines: p.lines, drops: p.drops };
     const q = p.drops.length ? `${p.time} 这个小黄点是什么意思？` : `${p.time} 这一天在图上说明了什么？`;
-    showAt(box.left + p.point.x, box.top + p.point.y, `问参谋：${p.time}`, sel, q);
+    showAt(box.left + p.point.x, box.top + p.point.y, `问鸿雁：${p.time}`, sel, q);
   });
 
   btn.addEventListener("click", () => {

@@ -169,7 +169,7 @@ export function showAnalysis(data, asof = null) {
     sec.className = "card step";
     sec.dataset.step = s.key;
     sec.innerHTML = `<div class="step-head"><span class="no">${i + 1}</span><h2>${s.title}</h2><span>${s.subtitle}</span>
-        <button type="button" class="ask-card" data-ask-card="${s.key}" aria-haspopup="menu">问参谋</button></div>
+        <button type="button" class="ask-card" data-ask-card="${s.key}" aria-haspopup="menu">问鸿雁</button></div>
       <div class="step-viz">${stepVisuals(s.key, r.visual)}</div>
       <p class="points-title">要点（规则生成，点标签看出处）</p><ul class="points"></ul>`;
     const ul = sec.querySelector(".points");
@@ -184,7 +184,7 @@ export function showAnalysis(data, asof = null) {
   document.querySelectorAll(".wl-item").forEach((li) =>
     li.classList.toggle("active", li.dataset.ticker === a.label && !asof));
   listeners.forEach((cb) => cb(data));
-  send({ type: "view", ticker: a.label, asof }); // 服务端据此更新问法、给参谋准备数据
+  send({ type: "view", ticker: a.label, asof }); // 服务端据此更新问法、给鸿雁准备数据
 }
 
 $("load-form").addEventListener("submit", (e) => {
@@ -296,7 +296,7 @@ function initAgents() {
   });
 }
 
-// 划选内容：显示在右栏输入框上方，问参谋时一起发出，发完清空
+// 划选内容：显示在右栏输入框上方，问鸿雁时一起发出，发完清空
 let pendingSelection = null;
 export function setSelection(sel) {
   pendingSelection = sel;

@@ -381,7 +381,7 @@ body.offline .status-pill .dot { background: var(--bad); }
 #advisor-thread .msg .who { color: var(--ma120); }
 #analyst-thread .msg .who { color: var(--accent); }
 
-/* ===================== 卡片上的「问参谋」 ===================== */
+/* ===================== 卡片上的「问鸿雁」 ===================== */
 .ask-card { display: inline-flex; align-items: center; gap: 6px; border: 1px solid color-mix(in srgb, var(--ma120) 40%, var(--line)); background: color-mix(in srgb, var(--ma120) 8%, var(--card)); color: var(--ma120); border-radius: 8px; padding: 2px 10px; font-size: 12.5px; cursor: pointer; white-space: nowrap; }
 .ask-card::before { content: "参"; width: 16px; height: 16px; border-radius: 4px; display: grid; place-items: center; background: var(--ma120); color: var(--card); font: 600 10px var(--heading); }
 .ask-card:hover, .ask-card[aria-expanded="true"] { border-color: var(--ma120); }

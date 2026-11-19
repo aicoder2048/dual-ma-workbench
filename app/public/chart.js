@@ -91,7 +91,7 @@ export function createChart(box, legendEl) {
       paint();
       chart.timeScale().fitContent();
     },
-    /** 点图表时回调 { time, candle, lines, drops, point }，给"问参谋"用。 */
+    /** 点图表时回调 { time, candle, lines, drops, point }，给"问鸿雁"用。 */
     onPick(cb) {
       chart.subscribeClick((param) => {
         if (!param.time || !data) return;

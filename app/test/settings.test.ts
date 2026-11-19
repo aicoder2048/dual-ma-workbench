@@ -83,7 +83,7 @@ describe(".env 里的模型 key", () => {
 });
 
 describe("语音设置", () => {
-  test("默认：分析师年轻男声云希，参谋年轻女声晓晓，不自动朗读", () => {
+  test("默认：分析师年轻男声云希，鸿雁年轻女声晓晓，不自动朗读", () => {
     expect(DEFAULT_SETTINGS.voiceAnalyst).toBe("zh-CN-YunxiNeural");
     expect(DEFAULT_SETTINGS.voiceAdvisor).toBe("zh-CN-XiaoxiaoNeural");
     expect(DEFAULT_SETTINGS.autoSpeak).toBe(false);

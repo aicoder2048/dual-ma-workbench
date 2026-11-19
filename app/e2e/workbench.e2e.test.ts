@@ -54,7 +54,7 @@ async function open(setup?: (p: Page) => Promise<void>) {
   return { page, errors };
 }
 
-/** 在参谋面板里放一条回答（不经过模型）。 */
+/** 在鸿雁面板里放一条回答（不经过模型）。 */
 async function addAdvisorAnswer(page: Page, text: string) {
   await page.evaluate(async (text) => {
     const { panels } = await import("/app.js");
@@ -66,7 +66,7 @@ async function addAdvisorAnswer(page: Page, text: string) {
 }
 
 describe("设置", () => {
-  test("能打开，默认分析师云希、参谋晓晓", async () => {
+  test("能打开，默认分析师云希、鸿雁晓晓", async () => {
     const { page, errors } = await open();
     await page.click("#settings-btn");
     await expect(page.isVisible("#settings-panel")).resolves.toBe(true);
@@ -95,7 +95,7 @@ describe("设置", () => {
 });
 
 describe("朗读", () => {
-  test("点「朗读」：用参谋的声音读去掉引用的文字，读完按钮复原", async () => {
+  test("点「朗读」：用鸿雁的声音读去掉引用的文字，读完按钮复原", async () => {
     const { page, errors } = await open();
     await addAdvisorAnswer(page, "底扣价是要扣掉的收盘价 [[S:article#2.3]]。");
     const btn = page.locator("#advisor-thread .speak");

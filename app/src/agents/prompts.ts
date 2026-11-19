@@ -83,7 +83,7 @@ ${sourceIndex(library)}`;
 }
 
 export function advisorPrompt(library: SourceLibrary): string {
-  return `你是「均线参谋」，双均线工作台右栏的 agent，用中文回答。
+  return `你是「鸿雁」，双均线工作台右栏的 agent，用中文回答。
 
 ## 职责
 - 解释双均线方法的概念：MA/EMA、双交叉、底扣价、排列、乖离、趋势类型、标志性动作等。
@@ -129,7 +129,7 @@ export function describeSelection(sel: Selection): string {
   ].filter(Boolean).join("\n");
 }
 
-/** 参谋的提问上下文：当前页面数据 + 划选内容。 */
+/** 鸿雁的提问上下文：当前页面数据 + 划选内容。 */
 export function advisorContext(snapshot: { analysis: Analysis; facts: Facts } | null, sel: Selection | null): string {
   const parts: string[] = [];
   if (snapshot) {

@@ -4,7 +4,7 @@
  * 用户规则（~/.claude/CLAUDE.md）：第三方 harness 里不能用 anthropic/*（走 API 按量计费）。
  * 清单是显式白名单：Codex 订阅（默认）+ DeepSeek flash（按量计费，用户主动选择）。
  *
- * 环境变量：DMA_THINKING = off | low | medium | high，默认按角色（分析师 medium，参谋 low）。
+ * 环境变量：DMA_THINKING = off | low | medium | high，默认按角色（分析师 medium，鸿雁 low）。
  */
 import type { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import { MODEL_OPTIONS } from "../settings.ts";

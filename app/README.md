@@ -1,6 +1,6 @@
 # 归雁 · 双均线工作台
 
-dual-moving-averages skill 的网页版：左「自选股」、中「分析师」、右「均线参谋」。
+dual-moving-averages skill 的网页版：左「自选股」、中「分析师」、右「鸿雁」。
 
 ```bash
 cd app && bun install     # 第一次
@@ -23,11 +23,11 @@ bun test                  # 单元测试（不调模型）
                            ├─ src/workbench.ts   两个 agent + 动态问法 + 当前视图
                            │   ├─ agents/host.ts     Pi 会话 → 浏览器事件，引用校验
                            │   ├─ agents/tools.ts    dma_analyze / search_sources / read_source / suggest_questions
-                           │   ├─ agents/prompts.ts  分析师（方法论取自 SKILL.md）、均线参谋
+                           │   ├─ agents/prompts.ts  分析师（方法论取自 SKILL.md）、鸿雁
                            │   └─ agents/suggest.ts  规则版问法 + 轻量 Pi 会话生成 AI 版
                            ├─ src/http.ts       页面、分析、自选股、原文片段
                            ├─ src/sources.ts    引用库（切片、检索）
                            ├─ src/citations.ts  引用解析、数据字段、校验
                            └─ src/analyze.ts    调 Python 脚本，带缓存
-public/  app.js 页面状态 · agents.js 两个面板 · chart.js 图表 · cite.js 引用渲染 · selection.js 划选问参谋
+public/  app.js 页面状态 · agents.js 两个面板 · chart.js 图表 · cite.js 引用渲染 · selection.js 划选问鸿雁
 ```

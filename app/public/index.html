@@ -86,10 +86,10 @@
 
       <section class="card chart-card">
         <div class="card-head"><h2>日线 · 6 条均线 · 底扣价</h2>
-          <button type="button" class="ask-card" data-ask-card="chart" aria-haspopup="menu">问参谋</button></div>
+          <button type="button" class="ask-card" data-ask-card="chart" aria-haspopup="menu">问鸿雁</button></div>
         <div class="legend" id="legend"></div>
         <div id="chart" class="chart"><p class="caption">加载中……</p></div>
-        <p class="caption">小黄点：明天各条 MA 要扣掉的 K 线（底扣价）。黄色量柱：成交量超过 50 日均量 2 倍。点图表上任一天，可以问参谋。</p>
+        <p class="caption">小黄点：明天各条 MA 要扣掉的 K 线（底扣价）。黄色量柱：成交量超过 50 日均量 2 倍。点图表上任一天，可以问鸿雁。</p>
       </section>
 
       <section class="steps" id="steps"></section>
@@ -115,22 +115,22 @@
     </div>
   </main>
 
-  <div class="splitter" id="split-right" role="separator" aria-orientation="vertical" aria-label="拖动调整均线参谋栏宽度" tabindex="0"><span class="grip"></span></div>
+  <div class="splitter" id="split-right" role="separator" aria-orientation="vertical" aria-label="拖动调整鸿雁栏宽度" tabindex="0"><span class="grip"></span></div>
 
-  <!-- 右栏：均线参谋 -->
-  <aside class="panel right" aria-label="均线参谋">
-    <div class="panel-head"><b>和参谋的对话</b><span>讲概念、解读你划选的内容，句句有出处</span></div>
+  <!-- 右栏：鸿雁 -->
+  <aside class="panel right" aria-label="鸿雁">
+    <div class="panel-head"><b>和鸿雁的对话</b><span>讲概念、解读你划选的内容，句句有出处</span></div>
     <div class="right-scroll" id="advisor-scroll">
       <div class="empty" id="advisor-empty">
-        <p>在中栏<b>划选一段文字</b>，或<b>点一下图表</b>。然后点「问参谋」。</p>
+        <p>在中栏<b>划选一段文字</b>，或<b>点一下图表</b>。然后点「问鸿雁」。</p>
         <p>也可以直接问概念，例如"底扣价的公式是什么"。</p>
       </div>
       <section class="thread" id="advisor-thread" aria-live="polite"></section>
     </div>
     <div class="composer role-advisor">
       <div class="role-bar">
-        <span class="avatar" aria-hidden="true">参</span>
-        <b>均线参谋</b><span class="role-desc">讲概念、解读划选</span>
+        <span class="avatar" aria-hidden="true">雁</span>
+        <b>鸿雁</b><span class="role-desc">讲概念、解读划选</span>
         <span class="model-chip" data-model-badge></span>
         <button id="advisor-reset" type="button" class="ghost">新对话</button>
       </div>
@@ -147,7 +147,7 @@
 <div id="settings-panel" class="settings-panel" role="dialog" aria-label="设置" hidden></div>
 <div id="popover" class="popover" role="dialog" hidden></div>
 <div id="viz-tip" class="viz-tip" role="tooltip" hidden></div>
-<button id="ask-advisor" class="ask-float" type="button" hidden>问参谋</button>
+<button id="ask-advisor" class="ask-float" type="button" hidden>问鸿雁</button>
 <div id="ask-menu" class="ask-menu" role="menu" hidden></div>
 
 <script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>

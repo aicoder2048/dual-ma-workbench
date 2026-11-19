@@ -1,4 +1,4 @@
-// 卡片右上角「问参谋」：按当前数据生成和这张卡相关的问题，点一下带上下文发给参谋。
+// 卡片右上角「问鸿雁」：按当前数据生成和这张卡相关的问题，点一下带上下文发给鸿雁。
 // cardQuestions 是纯函数（bun test 直接测）；initAskMenu 在浏览器里接上菜单。
 
 export const CARD_NAMES = {
@@ -53,12 +53,12 @@ export function cardQuestions(card, analysis, visual) {
   return qs.slice(0, 5);
 }
 
-/** 卡片的上下文说明，随问题发给参谋。 */
+/** 卡片的上下文说明，随问题发给鸿雁。 */
 export function cardContext(card, analysis) {
   return { kind: "view", what: CARD_NAMES[card] ?? card, detail: `${analysis.label} ${analysis.date}${analysis.warning ? "（盘中）" : ""}` };
 }
 
-/** 参谋输入框上方的上下文标签。三种来源：划选文字、点图表、卡片菜单（view）。 */
+/** 鸿雁输入框上方的上下文标签。三种来源：划选文字、点图表、卡片菜单（view）。 */
 export function selectionLabel(sel) {
   if (sel.kind === "text") return `${sel.where ? `「${sel.where}」` : ""}${sel.text}`;
   if (sel.kind === "view") return `「${sel.what}」${sel.detail ? ` · ${sel.detail}` : ""}`;
@@ -70,7 +70,7 @@ const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&
 
 /**
  * getState() → { analysis, visual, aiSuggestions: [{text}] }
- * ask(question, selection) → 发给参谋
+ * ask(question, selection) → 发给鸿雁
  */
 export function initAskMenu({ getState, ask }) {
   const menu = document.getElementById("ask-menu");
@@ -88,7 +88,7 @@ export function initAskMenu({ getState, ask }) {
     const card = btn.dataset.askCard;
     const qs = cardQuestions(card, s.analysis, s.visual);
     const ai = (s.aiSuggestions ?? []).filter((x) => !qs.some((q) => q.text === x.text)).slice(0, 2);
-    menu.innerHTML = `<div class="am-head"><b>问参谋</b> · 关于「${esc(CARD_NAMES[card])}」（${esc(s.analysis.label)}）</div>
+    menu.innerHTML = `<div class="am-head"><b>问鸿雁</b> · 关于「${esc(CARD_NAMES[card])}」（${esc(s.analysis.label)}）</div>
       ${qs.map((q) => `<button type="button" class="q" role="menuitem">${esc(q.text)}</button>`).join("")}
       ${ai.map((q) => `<button type="button" class="q" role="menuitem">${esc(q.text)}<span class="src">AI 生成</span></button>`).join("")}
       <form class="am-free"><input placeholder="或者自己问这张卡……" aria-label="自己输入问题"><button type="submit">问</button></form>`;

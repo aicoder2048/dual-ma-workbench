@@ -35,7 +35,7 @@ describe("模型守卫", () => {
 });
 
 describe("动态问法", () => {
-  test("规则版：分析师四种意图齐全，参谋都是概念题", () => {
+  test("规则版：分析师四种意图齐全，鸿雁都是概念题", () => {
     const s = ruleSuggestions(analysis);
     expect(s.analyst.map((x) => x.intent)).toEqual(["看状态", "要不要动手", "何时拐头", "回放练习"]);
     expect(s.advisor.every((x) => x.intent === "复习概念")).toBe(true);
@@ -87,19 +87,19 @@ describe("提示词", () => {
     expect(p).toContain("- concepts#底扣价：");
     expect(p).not.toContain("网页报告");
   });
-  test("参谋提示强调先查原文", () => expect(advisorPrompt(library)).toContain("search_sources"));
+  test("鸿雁提示强调先查原文", () => expect(advisorPrompt(library)).toContain("search_sources"));
   test("页面上下文", () => {
     expect(analystContext({ ticker: "NVDA", asof: null })).toContain("NVDA，最新行情");
     expect(analystContext({ ticker: "TSLA", asof: "2021-04-14" })).toContain("回放日期 2021-04-14");
   });
-  test("卡片入口：告诉参谋用户在看哪张卡", () => {
+  test("卡片入口：告诉鸿雁用户在看哪张卡", () => {
     expect(describeSelection({ kind: "view", what: "3. 看方向", detail: "NVDA 2026-11-18" })).toContain("「3. 看方向」（NVDA 2026-11-18）");
   });
   test("图表点选：标出小黄点", () => {
     const d = describeSelection({ kind: "chart", time: "2026-10-21", lines: { MA20: 210.5 }, drops: [20] });
     expect(d).toContain("MA20 要扣掉的底扣价");
   });
-  test("参谋上下文包含数据清单和划选文字", () => {
+  test("鸿雁上下文包含数据清单和划选文字", () => {
     const c = advisorContext({ analysis, facts: buildFacts(analysis) }, { kind: "text", text: "MA60 每天大约掉 1.19" });
     expect(c).toContain("D:MA60 = 212.35");
     expect(c).toContain("MA60 每天大约掉 1.19");
