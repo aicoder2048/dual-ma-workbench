@@ -315,6 +315,8 @@ describe("取数失败", () => {
     await page.waitForSelector("#analyst-chips.dim", { state: "attached" });
     expect(await page.$$("#analyst-chips .chip, #advisor-chips .chip")).toHaveLength(0);
     expect(page.url()).toEndWith("#ANT");
+    // 告诉服务端：页面现在是 ANT，取数失败（分析师、鸿雁据此不再用上一只票）
+    expect(wsSent.filter((m) => m.type === "view").at(-1)).toEqual({ type: "view", ticker: "ANT", asof: null, error: "取不到 ANT 的行情" });
     expect(await page.textContent("#data-status-v")).not.toContain("盘中");
     expect(await page.isVisible("#peek")).toBe(false);
     // 重试：按钮先变成不可点，失败后恢复，仍是错误卡片

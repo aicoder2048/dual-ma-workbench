@@ -138,6 +138,53 @@ describe("Workbench", () => {
     expect(sent.filter((e) => e.type === "history").map((e) => e.agent)).toEqual(["analyst", "advisor"]);
     expect(sent.filter((e) => e.type === "suggestions").length).toBe(2);
   });
+  test("页面说这只票取数失败：不再取数，问法清空，两个 agent 都不用上一只票", async () => {
+    const asked: string[] = [];
+    const sent: any[] = [];
+    const wb = new Workbench(new Analyzer(async (args) => {
+      asked.push(args[0]);
+      return JSON.stringify({ analysis: { ...analysis, label: args[0] }, chart: { candles: [], volume: [], lines: {}, drops: [] } });
+    }), library, { settings: tmpSettings(), suggester: { suggest: async () => null } });
+    const prompts: Record<string, string> = {};
+    (wb.analyst as any).prompt = async (text: string) => { prompts.analyst = text; };
+    (wb.advisor as any).prompt = async (text: string) => { prompts.advisor = text; };
+    const client = { send: (d: string) => sent.push(JSON.parse(d)) };
+    wb.connect(client);
+    await wb.handle(client, JSON.stringify({ type: "view", ticker: "NVDA", asof: null }));
+    sent.length = 0;
+    asked.length = 0;
+
+    await wb.handle(client, JSON.stringify({ type: "view", ticker: "ANT", asof: null, error: "数据只有 1 根 K 线" }));
+    expect(asked).toEqual([]);
+    expect(sent.filter((e) => e.type === "error")).toEqual([]);
+    expect(sent.filter((e) => e.type === "suggestions").map((e) => `${e.agent}:${e.items.length}`)).toEqual(["analyst:0", "advisor:0"]);
+
+    await wb.handle(client, JSON.stringify({ type: "prompt", agent: "analyst", text: "现在能买吗" }));
+    await wb.handle(client, JSON.stringify({ type: "prompt", agent: "advisor", text: "这只票怎么样" }));
+    expect(asked).toEqual([]);
+    for (const p of [prompts.analyst, prompts.advisor]) {
+      expect(p).toContain("ANT");
+      expect(p).toContain("数据只有 1 根 K 线");
+      expect(p).not.toContain("NVDA");
+    }
+  });
+  test("上一只票还在取数时页面已经报了失败：晚到的结果不覆盖", async () => {
+    const sent: any[] = [];
+    const wb = new Workbench(new Analyzer(async (args) => {
+      await Bun.sleep(30);
+      return JSON.stringify({ analysis: { ...analysis, label: args[0] }, chart: { candles: [], volume: [], lines: {}, drops: [] } });
+    }), library, { settings: tmpSettings(), suggester: { suggest: async () => null } });
+    let prompt = "";
+    (wb.analyst as any).prompt = async (text: string) => { prompt = text; };
+    const client = { send: (d: string) => sent.push(JSON.parse(d)) };
+    wb.connect(client);
+    const slow = wb.handle(client, JSON.stringify({ type: "view", ticker: "NVDA", asof: null }));
+    await wb.handle(client, JSON.stringify({ type: "view", ticker: "ANT", asof: null, error: "取不到" }));
+    await slow;
+    expect(sent.filter((e) => e.type === "suggestions").every((e) => e.items.length === 0)).toBe(true);
+    await wb.handle(client, JSON.stringify({ type: "prompt", agent: "analyst", text: "现在能买吗" }));
+    expect(prompt).toContain("ANT");
+  });
   test("坏消息不崩溃", async () => {
     const wb = new Workbench(fakeAnalyzer(), library, { settings: tmpSettings(), suggester: { suggest: async () => null } });
     await wb.handle({ send() {} }, "not json");
