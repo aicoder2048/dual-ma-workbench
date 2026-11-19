@@ -140,6 +140,10 @@ describe("设置", () => {
     await page.mouse.click(300, 600); // 压暗的地方
     expect(await page.isVisible("#settings-panel")).toBe(false);
     expect(await scrim()).toBe("rgba(0, 0, 0, 0)");
+    // 面板开着时设置按钮被压在暗幕下：点它（落在暗幕上）也是关
+    await page.click("#settings-btn");
+    await page.click("#settings-btn", { force: true });
+    expect(await page.isVisible("#settings-panel")).toBe(false);
     expect(errors).toEqual([]);
     await page.close();
   }, 30_000);
