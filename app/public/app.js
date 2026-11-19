@@ -2,6 +2,7 @@
 import { connect, Panel, send } from "./agents.js";
 import { createChart } from "./chart.js";
 import { installCitationHandlers, loadSourceIndex, renderInline } from "./cite.js";
+import { initSelection } from "./selection.js";
 
 const $ = (id) => document.getElementById(id);
 const STANCE = { 健康上涨: "bullish", 极度超买: "bullish", 健康下跌: "bearish", 极度超卖: "bearish" };
@@ -235,10 +236,22 @@ function initAgents() {
   });
 }
 
-// 划选内容（Stage 5 填充）：问参谋时一起发出，发完清空
+// 划选内容：显示在右栏输入框上方，问参谋时一起发出，发完清空
 let pendingSelection = null;
-export function setSelection(sel) { pendingSelection = sel; }
-function takeSelection() { const s = pendingSelection; pendingSelection = null; return s; }
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+export function setSelection(sel) {
+  pendingSelection = sel;
+  const pill = $("advisor-context");
+  if (!sel) { pill.hidden = true; pill.innerHTML = ""; return; }
+  const label = sel.kind === "text"
+    ? `${sel.where ? `「${sel.where}」` : ""}${sel.text}`
+    : `图表 ${sel.time}${sel.drops.length ? ` · MA${sel.drops.join("/MA")} 的底扣价` : ""}${sel.candle ? ` · 收 ${sel.candle.close.toFixed(2)}` : ""}`;
+  pill.innerHTML = `<span>${esc(label)}</span><button type="button" aria-label="去掉划选内容">×</button>`;
+  pill.hidden = false;
+  pill.querySelector("button").onclick = () => setSelection(null);
+}
+function takeSelection() { const s = pendingSelection; setSelection(null); return s; }
 
 // ---------- 启动 ----------
 async function main() {
@@ -246,6 +259,16 @@ async function main() {
   initAgents();
   installCitationHandlers(() => (state.data ? `${state.data.analysis.label} ${state.data.analysis.date}` : ""));
   chartApi = createChart($("chart"), $("legend"));
+  initSelection({
+    chart: chartApi,
+    onAttach(sel, question) {
+      setSelection(sel);
+      const input = $("advisor-input");
+      if (!input.value.trim()) input.value = question;
+      input.focus();
+      input.select();
+    },
+  });
   await loadSourceIndex();
   const [t, asof] = decodeURIComponent(location.hash.slice(1)).split("@");
   const wl = refreshWatchlist();

@@ -27,7 +27,7 @@ export const SOURCE_DOCS: SourceDoc[] = [
   { code: "article", title: "学习文章：双均线分析", path: "chat/1118_what-I-want.md" },
   {
     code: "skill", title: "Skill：双均线分析流程", path: `${SKILL}/SKILL.md`,
-    skip: ["拿数据", "回答格式", "网页报告"],
+    skip: ["拿数据", "回答格式", "网页报告", "工作台"],
   },
   { code: "concepts", title: "概念速查", path: `${SKILL}/references/concepts.md` },
   { code: "cases", title: "视频案例", path: `${SKILL}/references/cases.md` },

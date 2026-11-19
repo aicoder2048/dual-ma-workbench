@@ -1,0 +1,30 @@
+# 双均线工作台
+
+dual-moving-averages skill 的网页版：左「自选股」、中「分析师」、右「均线参谋」。
+
+```bash
+cd app && bun install     # 第一次
+bun start                 # 打开 http://127.0.0.1:5178
+bun test                  # 单元测试（不调模型）
+```
+
+- **模型**：Pi SDK，只允许 `openai-codex/*`（Codex 订阅），需要先在 `pi` 里登录 Codex。`DMA_MODEL` 换模型，`DMA_THINKING` 调思考强度。
+- **数据**：调 skill 脚本 `dma_analyze.py --json`（Polygon，失败回退 yfinance），key 在项目根目录 `.env`。
+- **引用**：`[[S:编号]]` 指原文片段（`bun run sources` 列出全部编号），`[[D:字段]]` 指当前分析数据。每轮回答结束后服务端逐条核对，找不到出处的显示红色。
+- **自选股**：存在 `data/watchlist.json`。
+
+## 结构
+
+```
+浏览器 ──HTTP/WebSocket── src/server.ts（Bun）
+                           ├─ src/workbench.ts   两个 agent + 动态问法 + 当前视图
+                           │   ├─ agents/host.ts     Pi 会话 → 浏览器事件，引用校验
+                           │   ├─ agents/tools.ts    dma_analyze / search_sources / read_source / suggest_questions
+                           │   ├─ agents/prompts.ts  分析师（方法论取自 SKILL.md）、均线参谋
+                           │   └─ agents/suggest.ts  规则版问法 + 轻量 Pi 会话生成 AI 版
+                           ├─ src/http.ts       页面、分析、自选股、原文片段
+                           ├─ src/sources.ts    引用库（切片、检索）
+                           ├─ src/citations.ts  引用解析、数据字段、校验
+                           └─ src/analyze.ts    调 Python 脚本，带缓存
+public/  app.js 页面状态 · agents.js 两个面板 · chart.js 图表 · cite.js 引用渲染 · selection.js 划选问参谋
+```
