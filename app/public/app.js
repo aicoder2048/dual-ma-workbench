@@ -114,17 +114,20 @@ function renderKpis(a) {
 }
 
 // ---------- 当前分析 ----------
-/** 成功返回 null，失败返回原因（已在中栏提示过）。 */
+let loadSeq = 0;
+/** 成功返回 null，失败返回原因（已在中栏提示过）。期间又点了别的票，这次的结果直接丢掉。 */
 export async function loadAnalysis(ticker, asof) {
+  const seq = ++loadSeq;
   const box = $("chart");
   box.classList.add("loading");
   try {
     const q = new URLSearchParams({ ticker });
     if (asof) q.set("asof", asof);
     const data = await api(`/api/analyze?${q}`);
-    showAnalysis(data, asof);
+    if (seq === loadSeq) showAnalysis(data, asof);
     return null;
   } catch (err) {
+    if (seq !== loadSeq) return null;
     showLoadError(ticker, asof, err.message);
     return err.message;
   } finally {
@@ -136,7 +139,14 @@ export async function loadAnalysis(ticker, asof) {
 function showPane(ok) {
   for (const el of [$("verdict"), document.querySelector(".chart-card"), $("steps")]) el.hidden = !ok;
   $("load-error").hidden = ok;
-  if (!ok) $("warning").hidden = true; // 盘中提醒属于上一只票
+  $("error").hidden = true; // 操作失败的提示属于上一个页面
+  if (!ok) {
+    $("warning").hidden = true; // 盘中提醒、提示条、数据状态都属于上一只票
+    $("peek").hidden = true;
+    $("data-status").classList.remove("partial");
+    $("data-status-v").textContent = "—";
+    $("data-status").title = "这只票没有取到数据";
+  }
 }
 
 /** 取数失败：中栏换成这只票和错误原因，不留上一只票的内容。 */
@@ -162,7 +172,14 @@ function showLoadError(ticker, asof, message) {
   document.querySelectorAll(".wl-item").forEach((li) =>
     li.classList.toggle("active", li.dataset.ticker === ticker && !asof));
 }
-$("load-error-retry").addEventListener("click", () => state.ticker && loadAnalysis(state.ticker, state.asof));
+$("load-error-retry").addEventListener("click", async (e) => {
+  if (!state.ticker) return;
+  e.currentTarget.disabled = true;
+  e.currentTarget.textContent = "重试中…";
+  await loadAnalysis(state.ticker, state.asof);
+  $("load-error-retry").disabled = false;
+  $("load-error-retry").textContent = "重试";
+});
 
 /** 渲染一份分析结果（HTTP 拿到的，或分析师工具推过来的）。 */
 export function showAnalysis(data, asof = null) {
