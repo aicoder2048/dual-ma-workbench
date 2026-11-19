@@ -171,6 +171,7 @@ function showLoadError(ticker, asof, message) {
   showPane(false);
   document.querySelectorAll(".wl-item").forEach((li) =>
     li.classList.toggle("active", li.dataset.ticker === ticker && !asof));
+  send({ type: "view", ticker, asof, error: message }); // 分析师、鸿雁据此不再用上一只票
 }
 $("load-error-retry").addEventListener("click", async (e) => {
   if (!state.ticker) return;

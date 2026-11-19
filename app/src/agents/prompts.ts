@@ -104,8 +104,15 @@ ${sourceIndex(library)}`;
 }
 
 /** 分析师每条消息开头附带页面状态，让"现在""这只"有指向。 */
-export function analystContext(page: { ticker: string | null; asof: string | null }): string {
+/** 页面当前显示什么。error：这只票取数失败，页面上只有错误，没有任何一只票的分析。 */
+export interface PageView { ticker: string | null; asof: string | null; error?: string | null }
+
+const failedNote = (page: PageView) =>
+  `${page.ticker}${page.asof ? `（回放 ${page.asof}）` : ""}取数失败：${page.error}。页面上没有它的数据，之前看过的票也已经不在页面上了。不要拿之前那只票的数据回答；先告诉用户取不到数据和原因。`;
+
+export function analystContext(page: PageView): string {
   if (!page.ticker) return "【页面】还没有选股票。";
+  if (page.error) return `【页面】${failedNote(page)}`;
   return `【页面】当前显示 ${page.ticker}${page.asof ? `，回放日期 ${page.asof}` : "，最新行情"}。`;
 }
 
@@ -130,7 +137,7 @@ export function describeSelection(sel: Selection): string {
 }
 
 /** 鸿雁的提问上下文：当前页面数据 + 划选内容。 */
-export function advisorContext(snapshot: { analysis: Analysis; facts: Facts } | null, sel: Selection | null): string {
+export function advisorContext(snapshot: { analysis: Analysis; facts: Facts } | null, sel: Selection | null, page?: PageView): string {
   const parts: string[] = [];
   if (snapshot) {
     const a = snapshot.analysis;
@@ -142,6 +149,8 @@ export function advisorContext(snapshot: { analysis: Analysis; facts: Facts } | 
       "规则报告要点：\n" + report.steps.flatMap((s) => s.items).map((i) => `- ${i}`).join("\n"),
       "可引用数据：\n" + factsForPrompt(snapshot.facts),
     );
+  } else if (page?.ticker && page.error) {
+    parts.push(`【当前页面数据】无。${failedNote(page)}`);
   } else {
     parts.push("【当前页面数据】无（用户还没选股票）。");
   }

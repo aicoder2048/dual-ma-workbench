@@ -8,7 +8,7 @@ import type { Analyzer } from "./analyze.ts";
 import { bookOf, buildFacts } from "./citations.ts";
 import { AgentHost, type AgentName, type ImageContent, type ServerEvent, type Suggestion, type TranscriptUser } from "./agents/host.ts";
 import { resolveThinking } from "./agents/model.ts";
-import { advisorContext, advisorPrompt, analystContext, analystPrompt, type Selection } from "./agents/prompts.ts";
+import { advisorContext, advisorPrompt, analystContext, analystPrompt, type PageView, type Selection } from "./agents/prompts.ts";
 import { ruleSuggestions, Suggester } from "./agents/suggest.ts";
 import { analyzeTool, FactsRegistry, sourceTools, suggestTool } from "./agents/tools.ts";
 import { parseAttachments, withAttachments } from "./attachments.ts";
@@ -18,7 +18,7 @@ import type { SourceLibrary } from "./sources.ts";
 /** 浏览器 → 服务端 */
 export type ClientMessage =
   | { type: "hello" }
-  | { type: "view"; ticker: string; asof: string | null }
+  | { type: "view"; ticker: string; asof: string | null; error?: string }
   | { type: "prompt"; agent: "analyst"; text: string; attachments?: unknown }
   | { type: "prompt"; agent: "advisor"; text: string; selection?: Selection | null; attachments?: unknown }
   | { type: "abort"; agent: AgentName }
@@ -40,7 +40,8 @@ export class Workbench {
   readonly advisor: AgentHost;
   private clients = new Set<Client>();
   private registry = new FactsRegistry();
-  private view: { ticker: string | null; asof: string | null } = { ticker: null, asof: null };
+  private view: PageView = { ticker: null, asof: null };
+  private viewSeq = 0; // 页面切换的序号：取数期间又切走了，旧的结果丢掉
   private advisorBook: ReturnType<typeof bookOf> | null = null;
   private suggestions: Record<AgentName, { items: Suggestion[]; source: "ai" | "rules" } | null> = { analyst: null, advisor: null };
 
@@ -117,7 +118,7 @@ export class Workbench {
           }
           return;
         case "view":
-          return await this.setView(msg.ticker, msg.asof);
+          return await this.setView(msg.ticker, msg.asof, typeof msg.error === "string" ? msg.error.slice(0, 500) : null);
         case "prompt": {
           const text = String(msg.text ?? "").trim().slice(0, MAX_TEXT);
           const att = withAttachments(text, parseAttachments(msg.attachments));
@@ -142,9 +143,22 @@ export class Workbench {
     }
   }
 
-  /** 页面切到某只股票：先推规则版问法，再异步换成 AI 生成的。 */
-  private async setView(ticker: string, asof: string | null) {
+  /**
+   * 页面切到某只股票：先推规则版问法，再异步换成 AI 生成的。
+   * 页面说这只票取数失败（error）：照页面记下，不再取数（再取一次可能成功，就和页面对不上了），问法清空。
+   */
+  private async setView(ticker: string, asof: string | null, error: string | null) {
+    const seq = ++this.viewSeq;
+    if (error) {
+      this.view = { ticker, asof, error };
+      for (const agent of ["analyst", "advisor"] as const) {
+        this.broadcast({ type: "suggestions", agent, items: [], source: "rules" });
+      }
+      return;
+    }
+    this.view = { ticker, asof }; // 先记下：取数期间到的提问也按新票，不沿用上一个（可能是失败的）视图
     const r = await this.analyzer.analyze(ticker, asof);
+    if (seq !== this.viewSeq) return;
     const a = r.analysis;
     this.view = { ticker: a.label, asof };
     const rules = ruleSuggestions(a, asof);
@@ -152,14 +166,14 @@ export class Workbench {
     this.broadcast({ type: "suggestions", agent: "advisor", items: rules.advisor, source: "rules" });
     const ai = await this.suggester.suggest(a, buildFacts(a), asof);
     // 生成期间用户可能已经切走了
-    if (!ai || this.view.ticker !== a.label || this.view.asof !== asof) return;
+    if (!ai || seq !== this.viewSeq) return;
     this.broadcast({ type: "suggestions", agent: "analyst", items: ai.analyst, source: "ai" });
     this.broadcast({ type: "suggestions", agent: "advisor", items: ai.advisor, source: "ai" });
   }
 
   private async askAdvisor(text: string, display: TranscriptUser, images: ImageContent[], selection: Selection | null) {
     let snapshot = null;
-    if (this.view.ticker) {
+    if (this.view.ticker && !this.view.error) {
       const r = await this.analyzer.analyze(this.view.ticker, this.view.asof);
       snapshot = { analysis: r.analysis, facts: buildFacts(r.analysis) };
       this.advisorBook = bookOf(r.analysis.label, snapshot.facts);
@@ -170,6 +184,6 @@ export class Workbench {
       : selection.kind === "text" ? `划选：${selection.text.slice(0, 80)}${selection.text.length > 80 ? "…" : ""}`
       : selection.kind === "view" ? `来自卡片：${selection.what}`
       : `图表：${selection.time}`;
-    await this.advisor.prompt(`${advisorContext(snapshot, selection)}\n\n【问题】${text}`, { ...display, context }, images);
+    await this.advisor.prompt(`${advisorContext(snapshot, selection, this.view)}\n\n【问题】${text}`, { ...display, context }, images);
   }
 }
