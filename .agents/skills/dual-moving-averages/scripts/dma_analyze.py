@@ -1,10 +1,20 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.10"
+# dependencies = [
+#     "pandas",
+#     "yfinance",  # 只在 Polygon 不可用时作为回退数据源
+# ]
+# ///
 """双均线分析：MA + EMA（默认 20/60/120），底扣价推演，趋势类型初判。
 
 用法：
-  uv run --with pandas --with yfinance dma_analyze.py TSLA
-  uv run --with pandas --with yfinance dma_analyze.py TSLA --asof 2021-04-14
-  uv run --with pandas dma_analyze.py --csv prices.csv     # 需要 Date, Close 列（Volume 可选）
+  uv run dma_analyze.py TSLA
+  uv run dma_analyze.py TSLA --asof 2021-04-14
+  uv run dma_analyze.py --csv prices.csv     # 需要 Date, Close 列（Volume 可选）
+
+依赖用 PEP 723 写在文件开头，uv run 会自动装好。装了 yfinance 不代表用它：
+实际数据源看报告第一行"数据来源"。
 
 数据来源：默认先用 Polygon/Massive 付费 API（POLYGON_API_KEY，见 find_polygon_key 的查找顺序），
 失败或历史不够长时回退 yfinance。--source polygon|yfinance 可强制只用一个。

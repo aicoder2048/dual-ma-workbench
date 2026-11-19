@@ -26,11 +26,13 @@ description: 用"双均线"方法（每个周期同时看 MA 和 EMA，默认 20
 `<SKILL_DIR>` 是本 SKILL.md 所在目录（Claude Code 和 Pi 加载 skill 时都会给出这个路径）。这是项目级 skill：真身在 `<项目>/.agents/skills/dual-moving-averages`（Pi 直接读），`<项目>/.claude/skills/dual-moving-averages` 是指向它的软链接（给 Claude Code 用）。
 
 ```bash
-uv run --with pandas --with yfinance <SKILL_DIR>/scripts/dma_analyze.py <TICKER> [--asof YYYY-MM-DD]
-uv run --with pandas <SKILL_DIR>/scripts/dma_analyze.py --csv prices.csv   # 列：Date, Close[, Volume]
+uv run <SKILL_DIR>/scripts/dma_analyze.py <TICKER> [--asof YYYY-MM-DD]
+uv run <SKILL_DIR>/scripts/dma_analyze.py --csv prices.csv   # 列：Date, Close[, Volume]
 ```
 
 脚本输出三段 Markdown：各周期 MA/EMA 数值和方向（钟表方向）、排列、间距、乖离率分位、最近交叉、成交量；**启发式**趋势初判和对应策略；三条 MA 的底扣价推演。
+
+依赖（pandas、yfinance）用 PEP 723 写在脚本开头，`uv run` 自动安装。装了 yfinance 只是为了能回退，不代表用了它。
 
 数据来源（报告第一行会写明用的哪个）：
 - **默认先用 Polygon/Massive 付费 API**（`/v2/aggs` 复权日线）。`POLYGON_API_KEY` 按这个顺序找：环境变量 → `--env-file` → 当前目录及父目录的 `.env` → `~/Python/Playground/DualMovingAveragesTrading/.env`。
@@ -94,7 +96,7 @@ N 日 MA 每天加进今天收盘价、扣掉 N 天前的收盘价（底扣价�
 1. 把点评写成 JSON（字段说明在 `scripts/html_report.py` 开头）：`headline` 一句话结论、`stance`（bullish / bearish / neutral）、`summary` 打法，以及 `big_picture`、`strategy`、`direction`、`risks` 四组要点。文字可以用 `**加粗**`。写法和文字回答一样：数字可核对，不下"一定涨跌"的结论。点评 JSON 放在临时目录：有 scratchpad 就放 scratchpad，没有就和 HTML 放同一目录，命名为 `<TICKER>-<收盘日>.commentary.json`。
 2. 生成网页：
    ```bash
-   uv run --with pandas --with yfinance <SKILL_DIR>/scripts/dma_analyze.py <TICKER> \
+   uv run <SKILL_DIR>/scripts/dma_analyze.py <TICKER> \
      --html <输出目录>/<TICKER>-<收盘日>.html --commentary <点评.json>
    ```
    输出目录：在 DualMovingAveragesTrading 项目里就用 `~/Python/Playground/DualMovingAveragesTrading/reports/`，否则用当前项目的 `reports/`。
