@@ -69,7 +69,9 @@ type L = ReturnType<typeof levels>;
 /** "收盘站上 X"；现价已经在 X 上方时说"已经在 X 上方"。 */
 const above = (l: L, name: string, x: number) => (l.close >= x ? `已经在 ${name} ${l.p(x)} 上方` : `收盘站上 ${name} ${l.p(x)}`);
 
-const BUY_TURN = (l: L) => `${above(l, "EMA20", l.ema20)}，EMA20 拐头向上；再${above(l, "MA20 抵扣价", l.drop20).replace(/^收盘/, "")}，MA20 跟着拐头。`;
+const BUY_TURN = (l: L) =>
+  (l.close >= l.ema20 ? `已经在 EMA20 ${l.p(l.ema20)} 上方，等 EMA20 拐头向上` : `收盘先站上 EMA20 ${l.p(l.ema20)}，EMA20 拐头向上`) + "；" +
+  (l.close >= l.drop20 ? `也已经在 MA20 抵扣价 ${l.p(l.drop20)} 上方，MA20 会跟着拐头。` : `再站上 MA20 抵扣价 ${l.p(l.drop20)}，MA20 跟着拐头。`);
 const SIZE: PlanItem = { label: "仓位", text: "盈亏影响心情，就是仓位太大，减到睡得着为止。" };
 const DEATH = (l: L) => l.death ? `20/60 已经双死叉（MA20、EMA20 都在 MA60 ${f2(l.ma60)}、EMA60 ${f2(l.ema60)} 下方）`
   : `20/60 双死叉（MA20 落到 MA60 ${f2(l.ma60)} 下方、EMA20 落到 EMA60 ${f2(l.ema60)} 下方）`;
@@ -298,7 +300,7 @@ const PNL: Record<string, Record<"profit" | "loss", PnlTweak>> = {
  * 这份分析该用哪套打法：按趋势类型，认不出来按过渡态；过渡态里方向和排布打架时用打架的打法。
  * 横盘（以及分数正好 ±0.6 的上涨 / 下跌）也可能带冲突，那时听趋势类型：页面顶部显示的就是它。
  */
-function playKey(a: Analysis): string {
+export function playKey(a: Analysis): string {
   const t = PLAYS[short(a.trend)] ? short(a.trend) : "过渡态";
   if (t === "横盘震荡" && stateOf(a).nearDeath) return "横盘破位";
   return t === "过渡态" && a.lean.conflict ? a.lean.conflict : t;
@@ -338,6 +340,24 @@ const firstHigh = (path: { close: number }[], close: number) => {
   const i = path.findIndex((p) => p.close > close);
   return i < 0 ? null : i + 1;
 };
+
+/**
+ * 看方向结论里对 MA20 的推演（价格不变时）：朝哪边、还会持续几天。和 sideOutlook 的 verdict 一一对应；
+ * 中间档、或明天起就变（"逆风可能快过去""顺风在减弱"）时不下这个结论，返回 null。回放验证用它判对错。
+ */
+export function ma20Claim(a: Analysis): { dir: 1 | -1; days: number } | null {
+  const d20 = a.drops.find((d) => d.period === 20)!;
+  if (a.lean.score <= -0.25) {
+    const turn = d20.first_low;
+    // first_low 是 dma_analyze 在 20 天内找的（和结论"20 天内 MA20 都会向下"一致），不是 path 的长度
+    return turn === null ? { dir: -1, days: 20 } : turn <= 1 ? null : { dir: -1, days: turn - 1 };
+  }
+  if (a.lean.score >= 0.25) {
+    const high = firstHigh(d20.path, a.close);
+    return high === null ? { dir: 1, days: d20.path.length } : high <= 1 ? null : { dir: 1, days: high - 1 };
+  }
+  return null;
+}
 
 export function buildOutlook(a: Analysis): Outlook {
   const o = sideOutlook(a);

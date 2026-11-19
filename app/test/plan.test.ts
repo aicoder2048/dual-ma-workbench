@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { Analysis } from "../src/citations.ts";
-import { buildOutlook, buildPlans } from "../src/plan.ts";
+import { buildOutlook, buildPlans, ma20Claim, playKey } from "../src/plan.ts";
 import nvda from "./fixtures/nvda-analysis.json";
 
 const bear = nvda as Analysis; // 明显偏空 · 极度超卖，三条 MA 未来都扣高值
@@ -430,4 +430,53 @@ test("顺风、明天起 MA20 就扣高值：时机行不说「第 1 天前…�
   const o = buildOutlook(a);
   expect(o.effect.flat.text).not.toMatch(/第 1 天|买点窗口/);
   expect(o.effect.holding.text).not.toContain("第 1 天");
+});
+
+test("下跌类空仓的进场条件：已经站上的那条照实说，读起来通顺", () => {
+  for (const close of [150.96, 195, 230]) {
+    const a = structuredClone(bear);
+    a.close = close;
+    a.drops = a.drops.map((d) => (d.period === 20 ? { ...d, tomorrow: 190 } : d));
+    const t = buildPlans(a).flat.items.find((i) => i.label === "等什么")!.text;
+    expect(t).not.toContain("再已经");
+    expect(t).toContain(close >= 183.08 ? "已经在 EMA20" : "站上 EMA20");
+    expect(t).toContain(close >= 190 ? "已经在 MA20 抵扣价" : "站上 MA20 抵扣价");
+  }
+});
+
+test("playKey：横盘已死叉是横盘破位，过渡态打架用打架的键", () => {
+  expect(playKey(bear)).toBe("极度超卖");
+  const a = structuredClone(bear);
+  a.trend = "横盘震荡";
+  expect(playKey(a)).toBe("横盘破位");
+  a.trend = "过渡态（排列或方向不一致）";
+  a.lean = { ...a.lean, conflict: "反弹受压" };
+  expect(playKey(a)).toBe("反弹受压");
+});
+
+test("ma20Claim 和看方向的结论说的是同一件事", () => {
+  expect(buildOutlook(bear).verdict).toContain("20 天内 MA20 都会向下");
+  expect(ma20Claim(bear)).toEqual({ dir: -1, days: 20 });
+  const b = bullish(); // MA20 第 5 天起扣高值
+  expect(buildOutlook(b).verdict).toContain("未来 4 天 MA20 扣低值");
+  expect(ma20Claim(b)).toEqual({ dir: 1, days: 4 });
+  const flat = structuredClone(bear);
+  flat.lean = { ...flat.lean, score: 0 };
+  expect(ma20Claim(flat)).toBeNull();
+  const soon = structuredClone(bear);
+  soon.drops = soon.drops.map((d) => (d.period === 20 ? { ...d, first_low: 1 } : d));
+  expect(buildOutlook(soon).verdict).toContain("明天起");
+  expect(ma20Claim(soon)).toBeNull();
+  const later = structuredClone(bear);
+  later.drops = later.drops.map((d) => (d.period === 20 ? { ...d, first_low: 6 } : d));
+  expect(buildOutlook(later).verdict).toContain("MA20 还要向下 5 天");
+  expect(ma20Claim(later)).toEqual({ dir: -1, days: 5 });
+  const allLow = bullish();
+  allLow.drops = allLow.drops.map((d) => (d.period === 20 ? { ...d, path: d.path.map((p) => ({ ...p, close: 1 })) } : d));
+  expect(buildOutlook(allLow).verdict).toContain(`未来 ${allLow.drops[0].path.length} 天 MA20 都扣低值`);
+  expect(ma20Claim(allLow)).toEqual({ dir: 1, days: allLow.drops[0].path.length });
+  const weak = bullish();
+  weak.drops = weak.drops.map((d) => (d.period === 20 ? { ...d, path: d.path.map((p) => ({ ...p, close: 999 })) } : d));
+  expect(buildOutlook(weak).verdict).toContain("顺风在减弱");
+  expect(ma20Claim(weak)).toBeNull();
 });
