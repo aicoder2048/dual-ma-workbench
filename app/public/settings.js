@@ -37,7 +37,7 @@ function render() {
           <span class="opt-main"><b>${esc(m.label)}</b>
             <span class="bill ${m.billing === "按量计费" ? "metered" : "sub"}">${esc(m.billing)}</span>
             ${m.id === models[0].id ? '<span class="dflt">默认</span>' : ""}</span>
-          <span class="opt-note">${esc(m.note)}${m.ready ? "" : `<br><b class="bad">缺少 ${esc(m.keyEnv)}，请先在 .env 里配置并重启服务。</b>`}</span>
+          <span class="opt-note">${esc(m.note)}${m.ready ? "" : `<br><b class="bad">${esc(m.authHint)}</b>`}</span>
         </label>`).join("")}
     </fieldset>
     <fieldset><legend>市场数据 <span>图表、报告、分析师取数共用</span></legend>

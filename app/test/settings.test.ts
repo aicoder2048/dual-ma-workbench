@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Analyzer } from "../src/analyze.ts";
 import { assertAllowedModel } from "../src/agents/model.ts";
-import { DEFAULT_SETTINGS, loadEnvKeys, MODEL_OPTIONS, SettingsStore, sourceArg, VOICE_OPTIONS } from "../src/settings.ts";
+import { DEFAULT_SETTINGS, loadEnvKeys, MODEL_OPTIONS, modelReadiness, SettingsStore, sourceArg, VOICE_OPTIONS } from "../src/settings.ts";
 
 const tmp = () => mkdtempSync(join(tmpdir(), "dma-set-"));
 
@@ -98,5 +98,18 @@ describe("语音设置", () => {
     expect(() => s.update({ autoSpeak: "yes" } as any)).toThrow();
     s.update({ voiceAdvisor: "zh-CN-XiaoyiNeural", autoSpeak: true });
     expect(s.get().voiceAdvisor).toBe("zh-CN-XiaoyiNeural");
+  });
+});
+
+describe("模型能不能用：认 Pi 的登录，也认 .env", () => {
+  test("Pi 里登录过 deepseek（或 .env 有 key）就能用；两边都没有就不能用", () => {
+    expect(modelReadiness(() => true)["deepseek/deepseek-flash"]).toBe(true);
+    expect(modelReadiness((p) => p !== "deepseek")["deepseek/deepseek-flash"]).toBe(false);
+  });
+  test("Codex 也按 Pi 的登录状态判断", () => {
+    expect(modelReadiness((p) => p !== "openai-codex")["openai-codex/gpt-6.1-sol"]).toBe(false);
+  });
+  test("每个模型都给出没登录时的提示", () => {
+    for (const m of MODEL_OPTIONS) expect(m.authHint).toMatch(/pi/);
   });
 });

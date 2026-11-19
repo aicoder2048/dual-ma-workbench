@@ -182,3 +182,22 @@ describe("/api/tts", () => {
     expect((await post({ text: "啊".repeat(2001), voice: "zh-CN-YunxiNeural" })).status).toBe(400);
   });
 });
+
+describe("设置：模型凭据来自 Pi", () => {
+  const dir = mkdtempSync(join(tmpdir(), "dma-auth-"));
+  const handler = createHandler({
+    analyzer: new Analyzer(fakeRunner()), watchlist: new Watchlist(join(dir, "w.json")), library,
+    publicDir: resolve(import.meta.dir, "../public"), settings: new SettingsStore(join(dir, "s.json")),
+    hasAuth: async (provider) => provider === "openai-codex", // Pi 只登录了 Codex
+  });
+  const call = (method: string, body?: unknown) =>
+    handler(new Request("http://x/api/settings", { method, body: body ? JSON.stringify(body) : undefined }));
+
+  test("没有 deepseek 凭据：标为不可用，切换被拒绝，并提示去 pi 登录", async () => {
+    const b = await (await call("GET")).json();
+    expect(b.models.find((m: any) => m.id === "deepseek/deepseek-flash").ready).toBe(false);
+    const res = await call("PUT", { model: "deepseek/deepseek-flash" });
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toMatch(/pi/);
+  });
+});

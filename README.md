@@ -58,7 +58,7 @@ npm i -g @earendil-works/pi-coding-agent   # 只为登录用
 pi                                         # 在 pi 里登录 Codex；授权存在 ~/.pi/agent/auth.json
 ```
 
-选 DeepSeek 时不用登录 Codex，在 `.env` 里填 `DEEPSEEK_API_KEY` 就行。
+选 DeepSeek 时不用登录 Codex：在 `pi` 里登录 deepseek，或在 `.env` 里填 `DEEPSEEK_API_KEY`，有一个就行。两边都有时，Pi 用它自己存的那个。模型能不能用由 Pi 判断，设置面板会提示缺什么。
 
 想换掉 Pi 的话，只需要重写 `app/src/agents/host.ts`（创建会话、转发流式事件、注册工具）。工具、提示词、引用校验和前端都和 harness 无关。
 
@@ -76,7 +76,7 @@ uv run .agents/skills/dual-moving-averages/scripts/dma_analyze.py TSLA --asof 20
 | 模型 | 计费 | 说明 |
 |---|---|---|
 | `openai-codex/gpt-6.1-sol`（默认） | 订阅 | 需要先在 `pi` 里登录 Codex |
-| `deepseek/deepseek-flash` | **按量计费** | key 读 `.env` 的 `DEEPSEEK_API_KEY` |
+| `deepseek/deepseek-flash` | **按量计费** | pi 里登录的 key，或 `.env` 的 `DEEPSEEK_API_KEY` |
 
 只允许这两个。`anthropic/*` 在第三方 harness 里会走 API 按量计费，工作台一律拒绝。
 

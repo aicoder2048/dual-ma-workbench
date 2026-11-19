@@ -6,8 +6,9 @@
  *
  * 环境变量：DMA_THINKING = off | low | medium | high，默认按角色（分析师 medium，鸿雁 low）。
  */
-import type { ModelRuntime } from "@earendil-works/pi-coding-agent";
+import { createAgentSessionServices, type ModelRuntime } from "@earendil-works/pi-coding-agent";
 import { MODEL_OPTIONS } from "../settings.ts";
+import { PROJECT_ROOT } from "../sources.ts";
 
 const THINKING = ["off", "low", "medium", "high"] as const;
 export type Thinking = (typeof THINKING)[number];
@@ -43,4 +44,17 @@ export function resolveModel(runtime: ModelRuntime, spec: string) {
     throw new Error(`找不到模型 ${spec}。可用的 ${provider} 模型：${ids.join(", ") || "无"}`);
   }
   return model;
+}
+
+/**
+ * 当前有凭据的 provider：问 Pi（它同时认 ~/.pi/agent/auth.json 里的登录和环境变量里的 key；
+ * 两边都有时 Pi 用 auth.json 的，实测过）。每次现查，在 pi 里刚登录完也立刻生效；一次约 10ms。
+ */
+export async function piAuthedProviders(): Promise<Set<string>> {
+  const services = await createAgentSessionServices({
+    cwd: PROJECT_ROOT,
+    resourceLoaderOptions: { noExtensions: true, noSkills: true, noPromptTemplates: true, noThemes: true, noContextFiles: true },
+  });
+  const providers = new Set(MODEL_OPTIONS.map((o) => parseModelSpec(o.id).provider));
+  return new Set([...providers].filter((p) => services.modelRuntime.hasConfiguredAuth(p)));
 }

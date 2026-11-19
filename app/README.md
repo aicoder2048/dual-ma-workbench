@@ -11,7 +11,7 @@ python3 e2e/ctrl_c.py     # 在真终端里按 Ctrl+C：退出码 0、没有报�
 ```
 
 - **设置**（右上角齿轮，存在 `data/settings.json`）：
-  - 大模型：默认 `openai-codex/gpt-6.1-sol`（Codex 订阅，需先在 `pi` 里登录）；可选 `deepseek/deepseek-flash`（**按量计费**，key 读项目根目录 `.env` 的 `DEEPSEEK_API_KEY`）。只允许这两个，`anthropic/*` 一律拒绝。切换后下一次提问生效，对话上下文保留，不改 Pi 的全局默认模型。
+  - 大模型：默认 `openai-codex/gpt-6.1-sol`（Codex 订阅，需先在 `pi` 里登录）；可选 `deepseek/deepseek-flash`（**按量计费**，用 `pi` 里登录的 key；没登录时读项目根目录 `.env` 的 `DEEPSEEK_API_KEY`，两边都有时用 pi 的）。只允许这两个，`anthropic/*` 一律拒绝。切换后下一次提问生效，对话上下文保留，不改 Pi 的全局默认模型。
   - 市场数据：默认 Polygon/Massive（失败或超出约 5 年时回退 yfinance）；可选 yfinance。
   - `DMA_THINKING` 环境变量调思考强度。
 - **数据**：调 skill 脚本 `dma_analyze.py --json`（Polygon，失败回退 yfinance），key 在项目根目录 `.env`。

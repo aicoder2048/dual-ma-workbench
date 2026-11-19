@@ -4,6 +4,7 @@ import { extname, resolve } from "node:path";
 import { explainError, type Analyzer } from "./analyze.ts";
 import { buildFacts } from "./citations.ts";
 import { buildReport } from "./report.ts";
+import { piAuthedProviders } from "./agents/model.ts";
 import { DATA_OPTIONS, MODEL_OPTIONS, modelReadiness, SettingsStore, VOICE_OPTIONS } from "./settings.ts";
 import type { SourceLibrary } from "./sources.ts";
 import { Speaker } from "./tts.ts";
@@ -17,6 +18,8 @@ export interface Deps {
   settings: SettingsStore;
   /** 语音合成；不传就用微软 Edge 在线语音。 */
   tts?: Speaker;
+  /** provider 有没有凭据；不传就问 Pi（pi 里的登录或 .env 的 key）。 */
+  hasAuth?: (provider: string) => Promise<boolean>;
 }
 
 const json = (data: unknown, status = 200) =>
@@ -32,8 +35,15 @@ const MIME: Record<string, string> = {
 export function createHandler(deps: Deps) {
   const { analyzer, watchlist, library, publicDir, settings } = deps;
   const tts = deps.tts ?? new Speaker();
-  const settingsView = () => {
-    const ready = modelReadiness();
+  const hasAuth = deps.hasAuth ?? (async (p: string) => (await piAuthedProviders()).has(p));
+  /** 每个模型有没有凭据（每次现查）。 */
+  const readiness = async () => {
+    const providers = [...new Set(MODEL_OPTIONS.map((m) => m.id.split("/")[0]))];
+    const ok = new Map(await Promise.all(providers.map(async (p) => [p, await hasAuth(p)] as const)));
+    return modelReadiness((p) => ok.get(p) ?? false);
+  };
+  const settingsView = async () => {
+    const ready = await readiness();
     return {
       settings: settings.get(),
       models: MODEL_OPTIONS.map((m) => ({ ...m, ready: ready[m.id] })),
@@ -62,19 +72,18 @@ export function createHandler(deps: Deps) {
       if (req.method === "DELETE") return json(watchlist.remove(body.ticker ?? ""));
     }
     if (p === "/api/settings") {
-      if (req.method === "GET") return json(settingsView());
+      if (req.method === "GET") return json(await settingsView());
       if (req.method === "PUT") {
         const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
         const patch: Record<string, unknown> = {};
         if ("model" in body) patch.model = body.model;
         for (const k of ["dataSource", "voiceAnalyst", "voiceAdvisor", "autoSpeak"]) if (k in body) patch[k] = body[k];
-        const ready = modelReadiness();
+        const ready = await readiness();
         if (typeof patch.model === "string" && ready[patch.model] === false) {
-          const opt = MODEL_OPTIONS.find((m) => m.id === patch.model)!;
-          return fail(`缺少 ${opt.keyEnv}：请在项目根目录 .env 里加上，再重启服务。`);
+          return fail(MODEL_OPTIONS.find((m) => m.id === patch.model)!.authHint);
         }
         settings.update(patch);
-        return json(settingsView());
+        return json(await settingsView());
       }
     }
     if (p === "/api/tts" && req.method === "POST") {

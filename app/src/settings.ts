@@ -3,7 +3,7 @@
  *
  * 大模型只允许清单里的两个（显式白名单）：
  *   - openai-codex/gpt-6.1-sol：Codex 订阅（默认）
- *   - deepseek/deepseek-flash：DeepSeek API，按量计费；key 从项目根目录 .env 的 DEEPSEEK_API_KEY 读
+ *   - deepseek/deepseek-flash：DeepSeek API，按量计费；用 pi 里登录的 key，没登录时读项目根目录 .env 的 DEEPSEEK_API_KEY
  * anthropic/* 不在清单里，一律拒绝（第三方 harness 用它走 API 按量计费）。
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -15,15 +15,22 @@ export interface ModelOption {
   label: string;
   billing: "订阅" | "按量计费";
   note: string;
-  /** 需要的环境变量（从 .env 读）。 */
+  /** 也可以用的环境变量（从 .env 读）。Pi 里登录过就不需要。 */
   keyEnv?: string;
+  /** 没有凭据时告诉用户怎么办。 */
+  authHint: string;
 }
 
 export const MODEL_OPTIONS: ModelOption[] = [
-  { id: "openai-codex/gpt-6.1-sol", label: "Codex · gpt-6.1-sol", billing: "订阅", note: "Codex 订阅，不额外花钱。需要先在 pi 里登录 Codex。" },
+  {
+    id: "openai-codex/gpt-6.1-sol", label: "Codex · gpt-6.1-sol", billing: "订阅", note: "Codex 订阅，不额外花钱。需要先在 pi 里登录 Codex。",
+    authHint: "没有 Codex 登录：先在终端运行 pi，在里面登录 Codex，再回来刷新。",
+  },
   {
     id: "deepseek/deepseek-flash", label: "DeepSeek · deepseek-flash", billing: "按量计费",
-    note: "DeepSeek 官方 API，按 token 计费（预充值）。key 读项目 .env 的 DEEPSEEK_API_KEY。", keyEnv: "DEEPSEEK_API_KEY",
+    note: "DeepSeek 官方 API，按 token 计费（预充值）。用 pi 里登录的 key；没登录时读项目 .env 的 DEEPSEEK_API_KEY。两边都有时用 pi 的。",
+    keyEnv: "DEEPSEEK_API_KEY",
+    authHint: "没有 DeepSeek 凭据：在 pi 里登录 deepseek，或在项目 .env 里设 DEEPSEEK_API_KEY 后重启服务。",
   },
 ];
 
@@ -142,7 +149,10 @@ export function loadEnvKeys(
   return loaded;
 }
 
-/** 给界面看的：每个模型的 key 是否就绪（不返回 key 本身）。 */
-export function modelReadiness(env: Record<string, string | undefined> = process.env) {
-  return Object.fromEntries(MODEL_OPTIONS.map((o) => [o.id, !o.keyEnv || Boolean(env[o.keyEnv])]));
+/** provider（如 "deepseek"）有没有可用凭据。实际由 Pi 判断：pi 里登录过，或环境变量里有 key（见 agents/model.ts 的 piHasAuth）。 */
+export type HasAuth = (provider: string) => boolean;
+
+/** 给界面看的：每个模型有没有可用凭据（不返回 key 本身）。 */
+export function modelReadiness(hasAuth: HasAuth) {
+  return Object.fromEntries(MODEL_OPTIONS.map((o) => [o.id, hasAuth(o.id.split("/")[0])]));
 }
