@@ -5,8 +5,8 @@
  *   skill 的 references/playbooks.md，价位取自模糊判断的门槛（EMA20、MA20 抵扣价）和均线值。
  *   处境分四种：空仓、持仓（没填成本）、持仓浮盈、持仓浮亏。成本只在浏览器里，文字里写 {cost}，由页面填上。
  * - buildOutlook：看方向的结论（只按模糊判断分三档：≤ -0.25、中间、≥ 0.25）。classify 只在分数 ≥ 0.6 时
- *   给上涨一侧、≤ -0.6 时给下跌一侧，所以只有横盘和过渡态会配上任意一档。抵扣价推演出 20 线组还会朝原方向走多久、最早什么时候会变，
- *   再翻译成"对空仓 / 持仓意味着什么"。
+ *   给上涨一侧、≤ -0.6 时给下跌一侧，所以只有横盘和过渡态会配上任意一档。抵扣价推演出 20 线组还会朝原方向走多久、
+ *   最早什么时候会变，再翻译成"对空仓 / 持仓意味着什么"。方向和排布打架（反弹受压、回调有撑）时，影响服从结构。
  */
 import type { Analysis } from "./citations.ts";
 
@@ -46,7 +46,11 @@ type L = ReturnType<typeof levels>;
 const BUY_TURN = (l: L) => `收盘先站上 EMA20 ${l.p(l.ema20)}，EMA20 拐头向上；再站上 MA20 抵扣价 ${l.p(l.drop20)}，MA20 跟着拐头。`;
 const SIZE: PlanItem = { label: "仓位", text: "盈亏影响心情，就是仓位太大，减到睡得着为止。" };
 
-/** 趋势类型 → 空仓 / 持仓的打法。来源：playbooks.md 各节。 */
+/**
+ * 打法键 → 空仓 / 持仓的打法。键是六种趋势类型，加上过渡态里方向和排布打架的两种（反弹受压、回调有撑）。
+ * 来源：playbooks.md 各节；打架的两种来自 SKILL.md 模糊判断一节、原则 8「排列不合理不做」、
+ * TSLA 2021-04-14 案例，回调有撑的离场底线来自 playbooks「20/60 双死叉」。
+ */
 const PLAYS: Record<string, Record<Position, (l: L) => Plan>> = {
   横盘震荡: {
     flat: () => ({ action: "基本不做，等埋伏信号。", items: [
@@ -115,6 +119,29 @@ const PLAYS: Record<string, Record<Position, (l: L) => Plan>> = {
       SIZE,
     ] }),
   },
+  反弹受压: {
+    flat: (l) => ({ action: "不买：中长期线压着的反弹，多半是假动作。", items: [
+      { label: "等什么", text: `20 线组站上 60 线组（MA60 ${f2(l.ma60)}、EMA60 ${f2(l.ema60)}），排列理顺再看。` },
+      { label: "推演", text: "用抵扣价算 20 线组多久能站上 60 线组；要很多天、价格得一直很强，就别等。" },
+    ] }),
+    holding: (l) => ({ action: "逢高减仓。", items: [
+      { label: "减仓位", text: l.close >= l.ma60
+        ? `已经反弹到 60 线组（MA60 ${l.p(l.ma60)}）上方，现在就是减仓机会。`
+        : `反弹到 60 线组（MA60 ${l.p(l.ma60)}）附近，是减仓机会。` },
+      { label: "为什么", text: "排列不合理时的强反弹，多半撑不住（TSLA 2021-04-14 就是这样）。" },
+      SIZE,
+    ] }),
+  },
+  回调有撑: {
+    flat: (l) => ({ action: "等回调结束再买，不在下跌途中接。", items: [
+      { label: "等什么", text: `20 线组重新拐头向上：收盘站上 EMA20 ${l.p(l.ema20)}。` },
+      { label: "位置", text: `回踩到 60 线组（MA60 ${f2(l.ma60)}）附近止跌，更好。` },
+    ] }),
+    holding: (l) => ({ action: "持有观察，不在急跌里卖。", items: [
+      { label: "离场", text: `20/60 双死叉（MA20、EMA20 都跌到 60 线组 ${f2(l.ma60)} 下方）才算结构坏，那时再走。` },
+      SIZE,
+    ] }),
+  },
 };
 
 const short = (t: string) => t.replace("（排列或方向不一致）", "");
@@ -154,10 +181,19 @@ const PNL: Record<string, Record<"profit" | "loss", PnlTweak>> = {
     profit: { line: `还有浮盈：把止损提到成本 ${COST} 附近保本；排列理顺前不加仓。` },
     loss: { line: "已经浮亏：不加仓摊低；跌破 EMA20 就按离场条件减，不等回本。" },
   },
+  反弹受压: {
+    profit: { line: `还有浮盈：把止损提到成本 ${COST} 附近保本，反弹到减仓位先锁住一部分利润。` },
+    loss: { line: "已经浮亏：不等回本。反弹到减仓位就减，这种反弹多半撑不住。" },
+  },
+  回调有撑: {
+    profit: { line: `还有浮盈：成本 ${COST} 在下方是安全垫，结构还是多头，不在回调里卖。` },
+    loss: { line: "暂时浮亏：结构还是多头，不急着割；但不加仓摊低，20/60 双死叉就走。" },
+  },
 };
 
-/** 这份分析该用哪套打法：按趋势类型，认不出来按过渡态。 */
+/** 这份分析该用哪套打法：打架时用打架的打法，否则按趋势类型，认不出来按过渡态。 */
 function playKey(a: Analysis): string {
+  if (a.lean.conflict) return a.lean.conflict;
   return PLAYS[short(a.trend)] ? short(a.trend) : "过渡态";
 }
 
@@ -192,6 +228,33 @@ const firstHigh = (path: { close: number }[], close: number) => {
 };
 
 export function buildOutlook(a: Analysis): Outlook {
+  const o = sideOutlook(a);
+  return a.lean.conflict ? { ...o, effect: conflictEffect(a, a.lean.conflict) } : o;
+}
+
+/** 打架时，看方向的影响要服从结构（不说"顺风、买点窗口"配"不买"这种话）。 */
+function conflictEffect(a: Analysis, kind: "反弹受压" | "回调有撑"): Record<Situation, Effect> {
+  const l = levels(a);
+  const base = basePlans(a);
+  const act = (k: Situation) => `「${base[k].action.replace(/。$/, "")}」`;
+  if (kind === "反弹受压") {
+    const where = l.close >= l.ma60 ? `现在就在 60 线组 ${f2(l.ma60)} 上方，正好` : `正好在 60 线组 ${f2(l.ma60)} 附近`;
+    const sell = (k: Situation, tail: string): Effect =>
+      ({ tag: "支持", text: `支持${act(k)}：短期反弹还有劲，${where}${tail}。` });
+    return {
+      flat: { tag: "不变", text: `短期在反弹，但 20 线组还压在 60 线组下方：${act("flat")}不变，等排列理顺。` },
+      holding: sell("holding", "减"), profit: sell("profit", "先锁住一部分利润"), loss: sell("loss", "减，不要等涨回成本"),
+    };
+  }
+  const hold = (k: Situation): Effect => ({ tag: "支持", text: `支持${act(k)}：短期在回调，但结构还是多头；20/60 双死叉之前不走。` });
+  return {
+    flat: { tag: "调整时机", text: `调整时机：短期还在回调，等收盘站上 EMA20 ${f2(l.ema20)}、MA20 重新拐头向上再买。` },
+    holding: hold("holding"), profit: hold("profit"), loss: hold("loss"),
+  };
+}
+
+/** 不打架时：按偏空 / 偏多 / 不明给方向结论和对策略的影响。 */
+function sideOutlook(a: Analysis): Outlook {
   const l = levels(a);
   const base = basePlans(a);
   const act = (k: Situation) => `「${base[k].action.replace(/。$/, "")}」`;

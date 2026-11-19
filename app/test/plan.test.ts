@@ -103,19 +103,23 @@ describe("成本价参与策略：浮盈、浮亏分开说", () => {
 
 describe("每种趋势类型的浮盈 / 浮亏都不自相矛盾", () => {
   const TRENDS = ["横盘震荡", "健康上涨", "极度超买", "健康下跌", "极度超卖", "过渡态（排列或方向不一致）"];
-  const withTrend = (t: string, score: number) => {
+  const withTrend = (t: string, score: number, conflict: "反弹受压" | "回调有撑" | null = null) => {
     const a = structuredClone(bear);
     a.trend = t;
-    a.lean = { ...a.lean, score, conflict: null };
+    a.lean = { ...a.lean, score, conflict };
     return a;
   };
   const txt = (p: { action: string; items: { text: string }[] }) => [p.action, ...p.items.map((i) => i.text)].join("｜");
   // 只遍历真实数据里会出现的组合：classify 只在分数 ≥ 0.6 时给上涨一侧、≤ -0.6 时给下跌一侧，
-  // 横盘和过渡态可以配任何分数（看方向分三档：≤ -0.25、中间、≥ 0.25）。
+  // 横盘和过渡态可以配任何分数（看方向分三档：≤ -0.25、中间、≥ 0.25）。打架只出现在过渡态。
   const SCORES: Record<string, number[]> = { 健康上涨: [0.8], 极度超买: [0.8], 健康下跌: [-0.8], 极度超卖: [-0.8] };
-  for (const t of TRENDS) for (const score of SCORES[t] ?? [-0.4, 0, 0.4]) {
-    test(`${t}，lean ${score}`, () => {
-      const p = buildPlans(withTrend(t, score));
+  const CASES: [string, number, "反弹受压" | "回调有撑" | null][] = [
+    ...TRENDS.flatMap((t) => (SCORES[t] ?? [-0.4, 0, 0.4]).map((s): [string, number, null] => [t, s, null])),
+    [TRENDS[5], 0.4, "反弹受压"], [TRENDS[5], -0.4, "回调有撑"],
+  ];
+  for (const [t, score, conflict] of CASES) {
+    test(`${t}${conflict ? `·${conflict}` : ""}，lean ${score}`, () => {
+      const p = buildPlans(withTrend(t, score, conflict));
       expect(txt(p.profit)).toContain("{cost}");
       expect(txt(p.profit)).not.toMatch(/浮亏|不等回本/);
       expect(txt(p.loss)).not.toMatch(/止盈|浮盈|保本/); // 亏着钱谈不上止盈、保本
@@ -135,4 +139,60 @@ describe("每种趋势类型的浮盈 / 浮亏都不自相矛盾", () => {
       }
     });
   }
+});
+
+/** 过渡态里方向和排布打架：反弹受压（多数线向上、20 组在 60 组下方）/ 回调有撑（反过来）。 */
+function conflict(kind: "反弹受压" | "回调有撑"): Analysis {
+  const a = structuredClone(bear);
+  a.trend = "过渡态（排列或方向不一致）";
+  const score = kind === "反弹受压" ? 0.4 : -0.4;
+  a.lean = { ...a.lean, score, label: kind === "反弹受压" ? "偏多" : "偏空", conflict: kind,
+    after: { ...a.lean.after, score, conflict: kind } };
+  return a;
+}
+const all = (p: { action: string; items: { text: string }[] }) => [p.action, ...p.items.map((i) => i.text)].join("");
+
+describe("反弹受压 / 回调有撑进入策略", () => {
+  test("反弹受压：空仓不买，持仓逢高减仓；看方向不说「买点窗口」", () => {
+    const a = conflict("反弹受压");
+    const p = buildPlans(a);
+    expect(p.flat.action).toContain("不买");
+    expect(all(p.flat)).toContain("212.35"); // 等 20 线组站上 60 线组：MA60
+    expect(p.holding.action).toContain("逢高减仓");
+    const o = buildOutlook(a);
+    expect(o.effect.flat.text).not.toMatch(/买点|窗口/);
+    expect(o.effect.flat.text).toContain("不买");
+  });
+  test("回调有撑：空仓等回调结束再买，持仓持有观察，20/60 双死叉才走", () => {
+    const p = buildPlans(conflict("回调有撑"));
+    expect(p.flat.action).toMatch(/回调结束|再买/);
+    expect(p.holding.action).toContain("持有");
+    expect(all(p.holding)).toContain("双死叉");
+    expect(buildOutlook(conflict("回调有撑")).effect.holding.text).toContain("持有");
+  });
+  test("反弹受压：浮盈先锁利保本，浮亏不等回本、反弹到减仓位就减", () => {
+    const p = buildPlans(conflict("反弹受压"));
+    expect(all(p.profit)).toContain("保本");
+    expect(all(p.loss)).toContain("不等回本");
+  });
+  test("回调有撑：浮盈有安全垫、不在回调里卖；浮亏不加仓摊低", () => {
+    const p = buildPlans(conflict("回调有撑"));
+    expect(all(p.profit)).toContain("安全垫");
+    expect(all(p.loss)).toContain("不加仓摊低");
+    expect(all(p.loss)).toContain("双死叉");
+  });
+  test("反弹受压、价格已经在 MA60 上方：减仓位说「现在」，不说「反弹到」", () => {
+    const a = conflict("反弹受压");
+    a.close = 220; // MA60 212.35 在下方
+    const p = buildPlans(a);
+    const sell = p.holding.items.find((i) => i.label === "减仓位")!.text;
+    expect(sell).toContain("现在");
+    expect(sell).not.toMatch(/^反弹到/);
+    expect(p.holding.items[0].text).toContain("现在");
+  });
+  test("没有冲突的过渡态，打法不变", () => {
+    const a = conflict("反弹受压");
+    a.lean = { ...a.lean, conflict: null };
+    expect(buildPlans(a).flat.action).toBe("条件不满足，不做。");
+  });
 });
