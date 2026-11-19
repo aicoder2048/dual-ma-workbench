@@ -468,6 +468,7 @@ async function main() {
   initAgents();
   installCitationHandlers(() => (state.data ? `${state.data.analysis.label} ${state.data.analysis.date}` : ""));
   chartApi = createChart($("chart"), $("legend"));
+  chartApi?.onAnalyzeDate((date) => state.ticker && loadAnalysis(state.ticker, date));
   initDrawer();
   initSelection({
     chart: chartApi,
