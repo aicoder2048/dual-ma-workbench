@@ -120,3 +120,26 @@ describe("朗读", () => {
     await page.close();
   }, 30_000);
 });
+
+describe("搜索框", () => {
+  test("输入中文名「台积电」：换成 TSM 打开，并在搜索框下说明", async () => {
+    const { page, errors } = await open();
+    await page.fill("#load-ticker", "台积电");
+    await page.press("#load-ticker", "Enter");
+    await page.waitForFunction(() => document.getElementById("ticker")?.textContent === "TSM");
+    expect(await page.textContent("#search-msg")).toContain("TSM");
+    expect(errors).toEqual([]);
+    await page.close();
+  }, 30_000);
+
+  test("认不出的输入：搜索框下直接显示原因，不是没反应", async () => {
+    const { page, errors } = await open();
+    await page.fill("#load-ticker", "某某科技");
+    await page.press("#load-ticker", "Enter");
+    await page.waitForSelector("#search-msg.bad", { state: "visible" });
+    expect(await page.textContent("#search-msg")).toContain("某某科技");
+    expect(await page.textContent("#ticker")).toBe("NVDA");
+    expect(errors).toEqual([]);
+    await page.close();
+  }, 30_000);
+});

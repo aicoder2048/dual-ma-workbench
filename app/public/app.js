@@ -5,6 +5,7 @@ import { installCitationHandlers, loadSourceIndex, renderInline } from "./cite.j
 import { initAsofInput, initSplitters } from "./layout.js";
 import { initSelection } from "./selection.js";
 import { initAskMenu, selectionLabel } from "./askmenu.js";
+import { resolveTicker } from "./names.js";
 import { applyRemoteSettings, initSettings, openSettings } from "./settings.js";
 import { installTips, leanCard, leanName, stanceOf, stepVisuals } from "./viz.js";
 
@@ -112,6 +113,7 @@ function renderKpis(a) {
 }
 
 // ---------- 当前分析 ----------
+/** 成功返回 null，失败返回原因（已在中栏提示过）。 */
 export async function loadAnalysis(ticker, asof) {
   const box = $("chart");
   box.classList.add("loading");
@@ -120,8 +122,10 @@ export async function loadAnalysis(ticker, asof) {
     if (asof) q.set("asof", asof);
     const data = await api(`/api/analyze?${q}`);
     showAnalysis(data, asof);
+    return null;
   } catch (err) {
     alertInline(`${ticker}：${err.message}`);
+    return err.message;
   } finally {
     box.classList.remove("loading");
   }
@@ -187,18 +191,36 @@ export function showAnalysis(data, asof = null) {
   send({ type: "view", ticker: a.label, asof }); // 服务端据此更新问法、给鸿雁准备数据
 }
 
-$("load-form").addEventListener("submit", (e) => {
+/** 搜索框下面的一行说明：查的是什么、为什么查不了。bad = 出错。 */
+function searchMsg(text, bad = false) {
+  const el = $("search-msg");
+  el.hidden = !text;
+  el.textContent = text ?? "";
+  el.classList.toggle("bad", bad);
+}
+
+// 搜索看最新行情；回放在中栏标题旁设置
+$("load-form").addEventListener("submit", async (e) => {
   e.preventDefault();
-  const t = $("load-ticker").value.trim();
-  if (t) loadAnalysis(t, null); // 搜索看最新行情；回放在中栏标题旁设置
-  $("load-ticker").value = "";
-  $("load-ticker").blur();
+  const input = $("load-ticker");
+  const r = resolveTicker(input.value);
+  if (r.error) { searchMsg(r.error, true); input.select(); return; }
+  if (!r.ticker) return;
+  const what = r.name ? `${r.name} → ${r.ticker}` : r.ticker;
+  searchMsg(`正在查 ${what}…`);
+  input.value = "";
+  input.blur();
+  const err = await loadAnalysis(r.ticker, null);
+  searchMsg(err ? `${what}：${err}` : r.name ? `${what}（美股代码）` : null, Boolean(err));
 });
+$("load-ticker").addEventListener("input", () => $("search-msg").classList.contains("bad") && searchMsg(null));
 
 // 左栏「＋ 自选」：加输入框里的代码；输入框为空时加中栏当前这只
 $("wl-add").addEventListener("click", async () => {
   const input = $("load-ticker");
-  const t = input.value.trim() || state.ticker;
+  const r = input.value.trim() ? resolveTicker(input.value) : { ticker: state.ticker };
+  if (r.error) { searchMsg(r.error, true); return; }
+  const t = r.ticker;
   if (!t) { input.focus(); return; }
   try {
     await api("/api/watchlist", { method: "POST", body: JSON.stringify({ ticker: t }) });
