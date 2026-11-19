@@ -10,52 +10,77 @@
 <link rel="stylesheet" href="app.css">
 </head>
 <body>
+
+<!-- 顶栏 -->
+<header class="appbar">
+  <div class="brand">
+    <div class="logo" aria-hidden="true"><i></i><i></i><b></b></div>
+    <div>
+      <strong>双均线工作台</strong>
+      <span>均线方向 = 最小阻力方向</span>
+    </div>
+  </div>
+
+  <form id="load-form" class="search" autocomplete="off" role="search">
+    <label class="seg seg-ticker">
+      <svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5 14 14"/></svg>
+      <input id="load-ticker" placeholder="股票代码" maxlength="15" aria-label="股票代码" list="ticker-options" spellcheck="false">
+    </label>
+    <datalist id="ticker-options"></datalist>
+    <label class="seg seg-date" title="回放某一天的收盘；留空为最新行情">
+      <span class="seg-k">回放</span>
+      <input id="load-asof" type="text" placeholder="最新行情" aria-label="回放日期（留空为最新行情）" inputmode="numeric">
+      <button type="button" id="asof-clear" class="seg-x" aria-label="清除回放日期" hidden>×</button>
+    </label>
+    <button type="submit" class="seg-go">分析</button>
+  </form>
+
+  <div class="appbar-right">
+    <div class="data-status" id="data-status" title="数据状态">—</div>
+    <div class="theme-seg" id="theme" role="radiogroup" aria-label="主题">
+      <button type="button" role="radio" data-value="" title="跟随系统">自动</button>
+      <button type="button" role="radio" data-value="light" title="浅色">浅</button>
+      <button type="button" role="radio" data-value="dark" title="深色">深</button>
+      <button type="button" role="radio" data-value="ink" title="水墨">墨</button>
+    </div>
+  </div>
+</header>
+
 <div class="shell">
 
   <!-- 左栏：自选股 -->
-  <aside class="col left" aria-label="自选股">
-    <header class="brand">
-      <div class="logo" aria-hidden="true"><i></i><i></i></div>
-      <div>
-        <strong>双均线工作台</strong>
-        <span>均线方向 = 最小阻力方向</span>
-      </div>
-    </header>
-    <div class="col-title">自选股</div>
+  <aside class="panel left" aria-label="自选股">
+    <div class="panel-head"><b>自选股</b><span>规则初判，不经过 AI</span></div>
     <ul id="watchlist" class="watchlist"></ul>
     <form id="wl-add" class="wl-add" autocomplete="off">
       <input id="wl-input" placeholder="添加代码，如 AMD" maxlength="15" aria-label="添加自选股">
       <button type="submit" aria-label="添加">＋</button>
     </form>
-    <footer class="left-foot">
-      <span>学习与复盘用，不是投资建议</span>
-    </footer>
+    <p class="left-foot">学习与复盘用，不是投资建议。</p>
   </aside>
 
+  <div class="splitter" id="split-left" role="separator" aria-orientation="vertical" aria-label="拖动调整自选股栏宽度" tabindex="0"><span class="grip"></span></div>
+
   <!-- 中栏：分析师 -->
-  <main class="col center" aria-label="分析师">
+  <main class="panel center" aria-label="分析师">
     <div class="center-scroll" id="center-scroll">
-      <header class="topbar">
-        <div class="title">
+      <section class="hero">
+        <div class="hero-title">
           <div class="eyebrow" id="meta-line">选择一只股票开始</div>
-          <h1><span id="ticker">—</span><span class="price num" id="price"></span><span class="chg num" id="chg"></span></h1>
+          <h1><span id="ticker">—</span></h1>
         </div>
-        <form id="load-form" class="load-form" autocomplete="off">
-          <input id="load-ticker" placeholder="代码" maxlength="15" aria-label="股票代码">
-          <input id="load-asof" type="date" aria-label="回放日期（留空为最新）" title="回放日期（留空为最新）">
-          <button type="submit">分析</button>
-        </form>
-      </header>
+        <div class="kpis" id="kpis"></div>
+      </section>
       <div id="warning" class="warn" hidden></div>
       <div id="verdict" class="verdict" hidden></div>
 
       <section class="card chart-card">
-        <div class="legend" id="legend"></div>
-        <div id="chart" class="chart" data-selectable="chart"><p class="caption">加载中……</p></div>
-        <p class="caption">小黄点 = 明天各条 MA 要扣掉的那根 K 线（底扣价）。黄色量柱 = 成交量超过 50 日均量 2 倍。</p>
+        <div class="card-head"><h2>日线 · 6 条均线 · 底扣价</h2><div class="legend" id="legend"></div></div>
+        <div id="chart" class="chart"><p class="caption">加载中……</p></div>
+        <p class="caption">小黄点：明天各条 MA 要扣掉的 K 线（底扣价）。黄色量柱：成交量超过 50 日均量 2 倍。点图表上任一天，可以问参谋。</p>
       </section>
 
-      <section class="steps" id="steps" data-selectable="report"></section>
+      <section class="steps" id="steps"></section>
 
       <section class="thread-wrap">
         <div class="thread-head"><b>分析师</b><span>问这只股票的状态、打法、拐头时间，或回放历史</span><button id="analyst-reset" type="button" class="ghost">新对话</button></div>
@@ -72,27 +97,18 @@
     </div>
   </main>
 
+  <div class="splitter" id="split-right" role="separator" aria-orientation="vertical" aria-label="拖动调整均线参谋栏宽度" tabindex="0"><span class="grip"></span></div>
+
   <!-- 右栏：均线参谋 -->
-  <aside class="col right" aria-label="均线参谋">
-    <header class="right-head">
-      <div class="rh-top">
-        <strong>均线参谋</strong>
-        <div class="theme-seg" id="theme" role="radiogroup" aria-label="主题">
-          <button type="button" role="radio" data-value="" title="跟随系统">自动</button>
-          <button type="button" role="radio" data-value="light" title="浅色">浅</button>
-          <button type="button" role="radio" data-value="dark" title="深色">深</button>
-          <button type="button" role="radio" data-value="ink" title="水墨">墨</button>
-        </div>
-      </div>
-      <div class="rh-sub">
-        <span>解释概念 · 解读你划选的内容 · 每句话都有出处</span>
-        <button id="advisor-reset" type="button" class="ghost">新对话</button>
-      </div>
-    </header>
+  <aside class="panel right" aria-label="均线参谋">
+    <div class="panel-head">
+      <b>均线参谋</b><span>讲概念 · 解读划选 · 有出处</span>
+      <button id="advisor-reset" type="button" class="ghost">新对话</button>
+    </div>
     <div class="right-scroll" id="advisor-scroll">
       <div class="empty" id="advisor-empty">
-        <p>在中间<b>划选一段文字</b>或<b>点一下图表</b>，再点「问参谋」，参谋会结合当前数据解读。</p>
-        <p>也可以直接问概念，比如"底扣价的公式是什么"。</p>
+        <p>在中栏<b>划选一段文字</b>，或<b>点一下图表</b>。然后点「问参谋」。</p>
+        <p>也可以直接问概念，例如"底扣价的公式是什么"。</p>
       </div>
       <section class="thread" id="advisor-thread" aria-live="polite"></section>
     </div>
@@ -108,6 +124,7 @@
 </div>
 
 <div id="popover" class="popover" role="dialog" hidden></div>
+<div id="viz-tip" class="viz-tip" role="tooltip" hidden></div>
 <button id="ask-advisor" class="ask-float" type="button" hidden>问参谋</button>
 
 <script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>

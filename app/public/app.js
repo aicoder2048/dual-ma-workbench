@@ -2,9 +2,11 @@
 import { connect, Panel, send } from "./agents.js";
 import { createChart } from "./chart.js";
 import { installCitationHandlers, loadSourceIndex, renderInline } from "./cite.js";
+import { initAsofInput, initSplitters } from "./layout.js";
 import { initSelection } from "./selection.js";
 
 const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const STANCE = { 健康上涨: "bullish", 极度超买: "bullish", 健康下跌: "bearish", 极度超卖: "bearish" };
 const SHORT_TREND = (t) => t.replace("（排列或方向不一致）", "");
 
@@ -14,6 +16,7 @@ const listeners = new Set();
 export const onAnalysis = (cb) => listeners.add(cb);
 
 let chartApi = null;
+let asofUi = null;
 export const getChart = () => chartApi;
 
 async function api(path, init) {
@@ -28,6 +31,7 @@ const summaries = new Map();
 
 async function refreshWatchlist() {
   const items = await api("/api/watchlist");
+  $("ticker-options").innerHTML = items.map((t) => `<option value="${t}">`).join("");
   const ul = $("watchlist");
   ul.innerHTML = "";
   for (const t of items) {
@@ -99,6 +103,18 @@ $("wl-add").addEventListener("submit", async (e) => {
   }
 });
 
+// ---------- 指标行：收盘 / 趋势 / 乖离 / 量比 ----------
+function renderKpis(a) {
+  const sign = (x, d = 2) => `${x >= 0 ? "+" : ""}${x.toFixed(d)}`;
+  const tiles = [
+    { k: "收盘", v: a.close.toFixed(2), s: `<span class="${a.change_pct >= 0 ? "bullish" : "bearish"}">${sign(a.change_pct)}%</span>` },
+    { k: "规则初判", v: `<span class="${STANCE[a.trend] ?? "neutral"}">${SHORT_TREND(a.trend)}</span>`, s: `MA ${a.arr_ma} · EMA ${a.arr_ema}` },
+    { k: "离 20 线", v: `${sign(a.bias20, 1)}%`, s: `历史 ${Math.round(a.bias_pctl * 100)}% 分位` },
+  ];
+  if (a.volume) tiles.push({ k: "量比", v: `${a.volume.ratio.toFixed(1)}×`, s: `近 20 日大量 ${a.volume.spikes.length} 天` });
+  $("kpis").innerHTML = tiles.map((t) => `<div class="kpi"><div class="k">${t.k}</div><div class="v">${t.v}</div><div class="s">${t.s}</div></div>`).join("");
+}
+
 // ---------- 当前分析 ----------
 export async function loadAnalysis(ticker, asof) {
   const box = $("chart");
@@ -124,13 +140,16 @@ export function showAnalysis(data, asof = null) {
   location.hash = asof ? `${a.label}@${asof}` : a.label;
 
   $("ticker").textContent = a.label;
-  $("price").textContent = a.close.toFixed(2);
-  const chg = $("chg");
-  chg.textContent = `${a.change_pct >= 0 ? "+" : ""}${a.change_pct.toFixed(2)}%`;
-  chg.className = `chg num ${a.change_pct >= 0 ? "bullish" : "bearish"}`;
-  $("meta-line").textContent = `${asof ? "回放 · " : ""}${a.date} 收盘 · ${a.source}`;
+  $("meta-line").textContent = asof ? `回放 · 以 ${a.date} 收盘为准` : `${a.date} 收盘`;
   $("load-ticker").value = a.label;
   $("load-asof").value = asof ?? "";
+  $("load-asof").type = asof ? "date" : "text";
+  asofUi?.sync();
+  renderKpis(a);
+  const status = $("data-status");
+  status.classList.toggle("partial", Boolean(a.warning));
+  status.innerHTML = `<span class="dot"></span>${a.warning ? "盘中，K 线未完成" : `${a.date} 收盘`} · ${esc(a.source)}`;
+  status.title = a.warning ?? `数据来源：${a.source}`;
 
   const warn = $("warning");
   warn.hidden = !a.warning;
@@ -238,8 +257,6 @@ function initAgents() {
 
 // 划选内容：显示在右栏输入框上方，问参谋时一起发出，发完清空
 let pendingSelection = null;
-const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-
 export function setSelection(sel) {
   pendingSelection = sel;
   const pill = $("advisor-context");
@@ -256,6 +273,9 @@ function takeSelection() { const s = pendingSelection; setSelection(null); retur
 // ---------- 启动 ----------
 async function main() {
   initTheme();
+  initSplitters();
+  asofUi = initAsofInput();
+  await loadSourceIndex(); // 先有原文目录，再回放对话记录，否则原文引用会被误判为找不到
   initAgents();
   installCitationHandlers(() => (state.data ? `${state.data.analysis.label} ${state.data.analysis.date}` : ""));
   chartApi = createChart($("chart"), $("legend"));
@@ -269,7 +289,6 @@ async function main() {
       input.select();
     },
   });
-  await loadSourceIndex();
   const [t, asof] = decodeURIComponent(location.hash.slice(1)).split("@");
   const wl = refreshWatchlist();
   const first = t || (await api("/api/watchlist"))[0];
