@@ -72,7 +72,7 @@ export function createHandler(deps: Deps) {
       }
     }
     if (p === "/api/sources" && req.method === "GET") {
-      return json(library.chunks.map((c) => ({ id: c.id, doc: c.docTitle, heading: c.heading })));
+      return json(library.index());
     }
     if (p === "/api/source" && req.method === "GET") {
       const c = library.get(q.get("id") ?? "");

@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { chunkMarkdown, queryTerms, sectionKey, SourceLibrary, type SourceDoc } from "../src/sources.ts";
+import { existsSync } from "node:fs";
+import { resolve } from "node:path";
+import { chunkMarkdown, FALLBACK, PROJECT_ROOT, queryTerms, sectionKey, SOURCE_DOCS, SourceLibrary, type SourceDoc } from "../src/sources.ts";
 
 const DOC: SourceDoc = { code: "t", title: "测试文档", path: "t.md", skip: ["跳过"] };
 
@@ -29,7 +31,9 @@ describe("chunkMarkdown", () => {
   });
 });
 
-describe("SourceLibrary（真实项目资料）", () => {
+const HAS_PRIVATE = existsSync(resolve(PROJECT_ROOT, "chat/1118_what-I-want.md"));
+
+describe.skipIf(!HAS_PRIVATE)("SourceLibrary（本地完整资料，公开仓库里没有）", () => {
   const lib = SourceLibrary.load();
 
   test("关键片段存在", () => {
@@ -52,4 +56,29 @@ describe("SourceLibrary（真实项目资料）", () => {
 
 test("queryTerms：英文按词，中文按二字组", () => {
   expect(queryTerms("MA20 底扣价")).toEqual(["ma20", "底扣", "扣价"]);
+});
+
+describe("公开版：转载内容不在仓库里", () => {
+  // 只用 skill 自带的文档，模拟从 GitHub clone 下来的情况
+  const publicLib = SourceLibrary.load(undefined, SOURCE_DOCS.filter((d) => d.path.startsWith(".agents/")));
+
+  test("缺文件不报错：load 跳过不存在的文档", () => {
+    const docs: SourceDoc[] = [...SOURCE_DOCS, { code: "nope", title: "不存在", path: "no/such/file.md" }];
+    expect(() => SourceLibrary.load(undefined, docs)).not.toThrow();
+  });
+  test("报告里写死的外部引用都能落到 skill 自带的片段", () => {
+    for (const id of Object.keys(FALLBACK)) {
+      const c = publicLib.get(id);
+      expect(c, id).toBeDefined();
+      expect(c!.doc === "skill" || c!.doc === "concepts" || c!.doc === "playbook").toBe(true);
+    }
+  });
+  test("替代只在原文缺失时生效", () => {
+    const full = SourceLibrary.load();
+    if (full.chunks.some((c) => c.doc === "article")) expect(full.get("article#2.3")!.doc).toBe("article");
+    expect(publicLib.get("article#2.3")!.id).toBe("concepts#底扣价");
+  });
+  test("目录里列出替代条目，前端不会把它标红", () => {
+    expect(publicLib.index().some((e) => e.id === "article#2.3" && e.aliasOf === "concepts#底扣价")).toBe(true);
+  });
 });

@@ -6,7 +6,7 @@
  *
  * 命令行：`bun src/sources.ts` 列出全部片段编号（检查切片结果用）。
  */
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 export const PROJECT_ROOT = resolve(import.meta.dir, "../..");
@@ -37,6 +37,22 @@ export const SOURCE_DOCS: SourceDoc[] = [
   { code: "ta15", title: "TA15 用均线判断趋势与震荡", path: "docs/moving-averages/TA15-Trend-Summary-from-MA.md" },
   { code: "memo", title: "用户看片笔记", path: "memo/模糊正确.md" },
 ];
+
+/**
+ * 公开仓库不含转载内容（学习文章、底扣价笔记、TA 笔记、看片笔记）。
+ * 这些文件不在时，报告和提示词里写死的引用改指 skill 自带的同主题片段。原文在时不生效。
+ */
+export const FALLBACK: Record<string, string> = {
+  "article#1": "concepts#底层逻辑",
+  "article#2.2": "concepts#两种均线",
+  "article#2.3": "concepts#底扣价",
+  "article#2.7": "concepts#标志性动作与构造",
+  "article#3.2": "concepts#趋势生命周期",
+  "article#4": "concepts#五种趋势类型",
+  "article#7.3": "playbook#仓位",
+  "dropoff#定义与公式": "concepts#底扣价",
+  "dropoff#示例": "concepts#底扣价",
+};
 
 export interface Chunk {
   id: string;
@@ -119,17 +135,32 @@ export class SourceLibrary {
     if (this.byId.size !== chunks.length) throw new Error("引用库里有重复的片段编号");
   }
 
+  /** 不存在的文档跳过（公开仓库里没有转载内容）。 */
   static load(root = PROJECT_ROOT, docs = SOURCE_DOCS): SourceLibrary {
-    const chunks = docs.flatMap((d) => chunkMarkdown(d, readFileSync(resolve(root, d.path), "utf8")));
+    const present = docs.filter((d) => existsSync(resolve(root, d.path)));
+    const chunks = present.flatMap((d) => chunkMarkdown(d, readFileSync(resolve(root, d.path), "utf8")));
     return new SourceLibrary(chunks);
   }
 
+  /** 先找原文；原文缺失时按 FALLBACK 找替代片段。 */
   get(id: string): Chunk | undefined {
-    return this.byId.get(id);
+    return this.byId.get(id) ?? (FALLBACK[id] ? this.byId.get(FALLBACK[id]) : undefined);
   }
 
   has(id: string): boolean {
-    return this.byId.has(id);
+    return this.get(id) !== undefined;
+  }
+
+  /** 前端用的目录：真实片段 + 生效中的替代条目。 */
+  index(): { id: string; doc: string; heading: string; aliasOf?: string }[] {
+    const real = this.chunks.map((c) => ({ id: c.id, doc: c.docTitle, heading: c.heading }));
+    const aliases = Object.entries(FALLBACK)
+      .filter(([from, to]) => !this.byId.has(from) && this.byId.has(to))
+      .map(([from, to]) => {
+        const c = this.byId.get(to)!;
+        return { id: from, doc: c.docTitle, heading: `${c.heading}（公开版替代）`, aliasOf: to };
+      });
+    return [...real, ...aliases];
   }
 
   /** 关键词检索：英文按词、中文按二字组，标题命中权重更高。 */

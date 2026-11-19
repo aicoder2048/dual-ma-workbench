@@ -1,6 +1,7 @@
 # secrets
 .env
 .env.*
+!.env.example
 .claude/settings.local.json
 
 # python
@@ -12,3 +13,12 @@ __pycache__/
 .DS_Store
 node_modules/
 data/settings.json
+
+# 转载内容：不进公开仓库（本地保留，引用库会自动读取）
+chat/
+study-notes/
+memo/
+docs/moving-averages/
+# 生成的报告含第三方行情数据；个人自选股
+reports/
+data/
