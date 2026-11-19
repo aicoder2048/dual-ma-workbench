@@ -19,10 +19,41 @@ const ma20At = (closes: number[], i: number) => closes.slice(i - 19, i + 1).redu
 export interface Outcome {
   /** 之后 horizon 天的收益（小数）。 */
   ret: number;
-  /** 5 天后 MA20 比当天高（1）、低（-1）、一样（0）。 */
-  ma20Dir5: -1 | 0 | 1;
-  /** 进场条件（收盘站上前一天的 EMA20，且高于 MA20 抵扣价 = 20 天前的收盘）在 horizon 天内第一次满足：第几天、之后 horizon 天收益（数据不够为 null）。 */
-  trigger: { day: number; ret: number | null } | null;
+  /**
+   * 进场条件（收盘站上前一天的 EMA20，且高于 MA20 抵扣价 = 20 天前的收盘，和 dma_analyze 的 drops[20].tomorrow 一致）
+   * 在 horizon 天内第一次满足：第几天；之后 horizon 天收益；同样卖在那天、但回放当天就买的收益（数据不够都为 null）。
+   */
+  trigger: { day: number; ret: number | null; fromStart: number | null } | null;
+}
+
+type Sign = -1 | 0 | 1;
+const sign = (x: number): Sign => (x > 0 ? 1 : x < 0 ? -1 : 0);
+
+/** 看方向对 MA20 的推演，和两个不看分数的基准，在 k = min(5, 推演天数) 天后各自对不对。 */
+export interface Ma20Check {
+  k: number;
+  /** 推演的方向（plan.ts 的 ma20Claim）。 */
+  claim: 1 | -1;
+  /** k 天后 MA20 实际比当天高 / 低。 */
+  actual: Sign;
+  /** 基准一：价格不变时按抵扣价推出的方向（去掉最早 k 天、补 k 个今天的价）。 */
+  dropRule: Sign;
+  /** 基准二：MA20 当前的方向（今天的价比 20 天前高还是低）。 */
+  slope: Sign;
+}
+
+export function ma20Check(closes: number[], i: number, claim: { dir: 1 | -1; days: number } | null): Ma20Check | null {
+  if (!claim || i < 20) return null;
+  const k = Math.min(5, claim.days);
+  if (i + k >= closes.length) return null;
+  let dropped = 0;
+  for (let t = 0; t < k; t++) dropped += closes[i - 19 + t];
+  return {
+    k, claim: claim.dir,
+    actual: sign(ma20At(closes, i + k) - ma20At(closes, i)),
+    dropRule: sign(k * closes[i] - dropped),
+    slope: sign(closes[i] - closes[i - 20]),
+  };
 }
 
 /** 第 i 天之后发生了什么；后面不够 horizon 天返回 null。 */
@@ -30,15 +61,15 @@ export function forwardOutcome(bars: Bar[], i: number, horizon: number): Outcome
   const closes = bars.map((b) => b.close);
   if (i < 19 || i + horizon >= closes.length) return null;
   const e = ema(closes, 20);
-  const d = ma20At(closes, i + 5) - ma20At(closes, i);
   let trigger: Outcome["trigger"] = null;
   for (let j = i + 1; j <= i + horizon; j++) {
     if (closes[j] > e[j - 1] && closes[j] > closes[j - 20]) {
-      trigger = { day: j - i, ret: j + horizon < closes.length ? closes[j + horizon] / closes[j] - 1 : null };
+      const end = j + horizon < closes.length ? closes[j + horizon] : null;
+      trigger = { day: j - i, ret: end === null ? null : end / closes[j] - 1, fromStart: end === null ? null : end / closes[i] - 1 };
       break;
     }
   }
-  return { ret: closes[i + horizon] / closes[i] - 1, ma20Dir5: d > 0 ? 1 : d < 0 ? -1 : 0, trigger };
+  return { ret: closes[i + horizon] / closes[i] - 1, trigger };
 }
 
 /** 一个回放点：当时的判断 + 之后的结果。 */
@@ -53,9 +84,12 @@ export interface Sample extends Outcome {
   flat: string;
   /** 空仓计划的进场条件是不是"站上 EMA20 + MA20 抵扣价"。 */
   buyTurn: boolean;
+  /** 看方向的 MA20 推演对不对（没推演为 null）。 */
+  ma20: Ma20Check | null;
 }
 
-export interface Row { key: string; n: number; mean: number; median: number; up: number; hit: number | null }
+/** dates：不同日期数。同一天几只票常一起涨跌，它比样本数更接近"独立的几次"。 */
+export interface Row { key: string; n: number; dates: number; mean: number; median: number; up: number; hit: number | null }
 
 const LEAN_ORDER: LeanLabel[] = ["明显偏多", "偏多", "不明", "偏空", "明显偏空"];
 const leanSign = (l: LeanLabel) => (l.includes("多") ? 1 : l.includes("空") ? -1 : 0);
@@ -69,7 +103,7 @@ function median(xs: number[]) {
 function row(key: string, xs: Sample[], sign = 0): Row {
   const r = xs.map((x) => x.ret);
   return {
-    key, n: xs.length, mean: mean(r), median: median(r), up: r.filter((x) => x > 0).length / r.length,
+    key, n: xs.length, dates: new Set(xs.map((x) => x.date)).size, mean: mean(r), median: median(r), up: r.filter((x) => x > 0).length / r.length,
     hit: sign === 0 ? null : r.filter((x) => Math.sign(x) === sign).length / r.length,
   };
 }
@@ -83,12 +117,12 @@ function groupBy<T>(xs: T[], key: (x: T) => string): Map<string, T[]> {
 export interface Summary {
   all: Row;
   byLean: Row[];
-  /** 看方向的推演：分数 ≤ -0.25 说 MA20 向下、≥ 0.25 说向上；5 天后对了几成。 */
-  ma20: { n: number; hit: number };
+  /** 看方向的 MA20 推演命中率，和两个基准（抵扣价规则、当前斜率）在同一批样本上的命中率。 */
+  ma20: { n: number; hit: number; dropRule: number; slope: number };
   byPlay: Row[];
   byFlat: Row[];
   /** 空仓计划带"站上 EMA20 + MA20 抵扣价"进场条件的：horizon 天内触发几次、触发后 horizon 天平均收益。 */
-  entry: { n: number; triggered: number; afterN: number; afterMean: number | null; afterUp: number | null };
+  entry: { n: number; triggered: number; afterN: number; afterMean: number | null; afterUp: number | null; startMean: number | null };
 }
 
 export function summarize(samples: Sample[]): Summary {
@@ -96,19 +130,23 @@ export function summarize(samples: Sample[]): Summary {
     const xs = samples.filter((s) => s.lean === l);
     return xs.length ? [row(l, xs, leanSign(l))] : [];
   });
-  const said = samples.filter((s) => Math.abs(s.score) >= 0.25);
+  const checks = samples.flatMap((s) => (s.ma20 ? [s.ma20] : []));
+  const rate = (f: (c: Ma20Check) => boolean) => checks.filter(f).length / checks.length;
   const rows = (m: Map<string, Sample[]>) => [...m].map(([k, xs]) => row(k, xs)).sort((a, b) => b.n - a.n);
   const entries = samples.filter((s) => s.buyTurn);
-  const after = entries.flatMap((s) => (s.trigger?.ret == null ? [] : [s.trigger.ret]));
+  const done = entries.filter((s) => s.trigger?.ret != null);
+  const after = done.map((s) => s.trigger!.ret!);
+  const start = done.map((s) => s.trigger!.fromStart!);
   return {
     all: row("全部", samples),
     byLean,
-    ma20: { n: said.length, hit: said.filter((s) => s.ma20Dir5 === Math.sign(s.score)).length / said.length },
+    ma20: { n: checks.length, hit: rate((c) => c.actual === c.claim), dropRule: rate((c) => c.actual === c.dropRule), slope: rate((c) => c.actual === c.slope) },
     byPlay: rows(groupBy(samples, (s) => s.play)),
     byFlat: rows(groupBy(samples, (s) => s.flat)),
     entry: {
       n: entries.length, triggered: entries.filter((s) => s.trigger).length, afterN: after.length,
       afterMean: after.length ? mean(after) : null, afterUp: after.length ? after.filter((x) => x > 0).length / after.length : null,
+      startMean: start.length ? mean(start) : null,
     },
   };
 }
@@ -119,9 +157,9 @@ const FEW = 10;
 
 function table(rows: Row[], head: string, withHit = false) {
   const lines = [
-    `| ${head} | 样本 | 平均 | 中位数 | 上涨占比 |${withHit ? " 方向命中 |" : ""}`,
-    `|---|---:|---:|---:|---:|${withHit ? "---:|" : ""}`,
-    ...rows.map((r) => `| ${r.key}${r.n < FEW ? "（样本少）" : ""} | ${r.n} | ${pc(r.mean)} | ${pc(r.median)} | ${pct0(r.up)} |${withHit ? ` ${pct0(r.hit)} |` : ""}`),
+    `| ${head} | 样本 | 日期数 | 平均 | 中位数 | 上涨占比 |${withHit ? " 方向命中 |" : ""}`,
+    `|---|---:|---:|---:|---:|---:|${withHit ? "---:|" : ""}`,
+    ...rows.map((r) => `| ${r.key}${r.dates < FEW ? "（日期少）" : ""} | ${r.n} | ${r.dates} | ${pc(r.mean)} | ${pc(r.median)} | ${pct0(r.up)} |${withHit ? ` ${pct0(r.hit)} |` : ""}`),
   ];
   return lines.join("\n");
 }
@@ -134,7 +172,8 @@ export function renderReport(sum: Summary, m: ReportMeta): string {
     `# 回放验证：${m.from} ~ ${m.to}`,
     "",
     `股票：${m.tickers.join(" ")}。样本 ${sum.all.n} 个（每个是"某只票在某一天"），对照之后 ${h} 个交易日。数据：${m.source}。`,
-    `全部样本 ${h} 日平均 ${pc(sum.all.mean)}、上涨占比 ${pct0(sum.all.up)}，是下面各行的基准。样本少于 ${FEW} 的行标"样本少"，别当结论。`,
+    `全部样本 ${h} 日平均 ${pc(sum.all.mean)}、上涨占比 ${pct0(sum.all.up)}，是下面各行的基准。`,
+    `"日期数"是不同日期的个数：同一天几只票常一起涨跌，它比样本数更接近独立的几次。日期数少于 ${FEW} 的行标"日期少"，别当结论。`,
     "样本之间不独立：同一天的几只票常常一起涨跌，整段时间的大盘方向也会压过一切，百分比只当方向参考。",
     "",
     `## 模糊判断 → 之后 ${h} 日涨跌`,
@@ -145,8 +184,15 @@ export function renderReport(sum: Summary, m: ReportMeta): string {
     "",
     "## 看方向：MA20 推演",
     "",
-    `分数 ≤ -0.25 时看方向说 MA20 向下（逆风），≥ 0.25 说向上（顺风）。5 个交易日后 MA20 真的朝那边走：${pct0(sum.ma20.hit)}（样本 ${sum.ma20.n}）。`,
-    "推演的前提是\"价格不变\"，这里用的是真实价格，所以命中率也包含了价格本身的延续。",
+    `看方向的结论说"MA20 还要向下 / 向上 N 天"时，看 min(5, N) 个交易日后 MA20 实际朝哪边（${sum.ma20.n} 个；中间档、"明天起就变"不下结论，不算）：`,
+    "",
+    `| 怎么推 | 命中 |`,
+    `|---|---:|`,
+    `| 看方向的结论（按模糊判断分数定方向） | ${pct0(sum.ma20.hit)} |`,
+    `| 基准一：价格不变，按抵扣价推 | ${pct0(sum.ma20.dropRule)} |`,
+    `| 基准二：MA20 现在朝哪边，就说接着朝哪边 | ${pct0(sum.ma20.slope)} |`,
+    "",
+    "看方向的结论如果不如基准，说明拿模糊判断的正负号当 MA20 方向不合适，应该直接用抵扣价推。",
     "",
     `## 打法 → 之后 ${h} 日涨跌`,
     "",
@@ -164,7 +210,9 @@ export function renderReport(sum: Summary, m: ReportMeta): string {
     "",
     sum.entry.n
       ? `带这条进场条件的空仓计划 ${sum.entry.n} 个，${h} 天内触发 ${sum.entry.triggered} 个（${pct0(sum.entry.triggered / sum.entry.n)}）。` +
-        `触发后 ${h} 日（数据够的 ${sum.entry.afterN} 个）平均 ${pc(sum.entry.afterMean)}、上涨占比 ${pct0(sum.entry.afterUp)}。`
+        `触发后 ${h} 日（数据够的 ${sum.entry.afterN} 个）平均 ${pc(sum.entry.afterMean)}、上涨占比 ${pct0(sum.entry.afterUp)}；` +
+        `同样卖在那天、但回放当天就买，平均 ${pc(sum.entry.startMean)}。两者的差就是"等拐头"付出的代价（或省下的亏损）。` +
+        `最后 ${h} 天内才触发的样本数据不够，不算。`
       : "没有带这条进场条件的样本。",
     "",
   ].join("\n");

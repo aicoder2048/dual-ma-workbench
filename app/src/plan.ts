@@ -341,6 +341,24 @@ const firstHigh = (path: { close: number }[], close: number) => {
   return i < 0 ? null : i + 1;
 };
 
+/**
+ * 看方向结论里对 MA20 的推演（价格不变时）：朝哪边、还会持续几天。和 sideOutlook 的 verdict 一一对应；
+ * 中间档、或明天起就变（"逆风可能快过去""顺风在减弱"）时不下这个结论，返回 null。回放验证用它判对错。
+ */
+export function ma20Claim(a: Analysis): { dir: 1 | -1; days: number } | null {
+  const d20 = a.drops.find((d) => d.period === 20)!;
+  if (a.lean.score <= -0.25) {
+    const turn = d20.first_low;
+    // first_low 是 dma_analyze 在 20 天内找的（和结论"20 天内 MA20 都会向下"一致），不是 path 的长度
+    return turn === null ? { dir: -1, days: 20 } : turn <= 1 ? null : { dir: -1, days: turn - 1 };
+  }
+  if (a.lean.score >= 0.25) {
+    const high = firstHigh(d20.path, a.close);
+    return high === null ? { dir: 1, days: d20.path.length } : high <= 1 ? null : { dir: 1, days: high - 1 };
+  }
+  return null;
+}
+
 export function buildOutlook(a: Analysis): Outlook {
   const o = sideOutlook(a);
   const kind = conflictOf(a);
