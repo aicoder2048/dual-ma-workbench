@@ -14,7 +14,7 @@
 
 | 部分 | 位置 | 作用 |
 |---|---|---|
-| Skill | `.agents/skills/dual-moving-averages/` | 方法论（SKILL.md + references）和分析脚本 `dma_analyze.py`。Claude Code、Pi 都能直接用 |
+| Skill | `.agents/skills/dual-moving-averages/` | 方法论（SKILL.md + references）和分析脚本 `dma_analyze.py`。Pi 直接识别 `.agents/skills/` |
 | 工作台 | `app/` | 三栏网页：左「自选股」、中「分析师」、右「均线参谋」。AI 部分基于 Pi SDK |
 
 工作台的主要功能：
@@ -75,18 +75,30 @@ uv run .agents/skills/dual-moving-averages/scripts/dma_analyze.py TSLA --asof 20
 
 只允许这两个。`anthropic/*` 在第三方 harness 里会走 API 按量计费，工作台一律拒绝。
 
-## 没有放进仓库的内容
+## 市场数据
 
-方法来自一段中文教学视频和几份均线讲义的学习笔记。这些转载内容（学习文章、底扣价笔记、讲义笔记、看片笔记）**不在公开仓库里**。
+所有数字都来自日线收盘价，图表、报告和两个 agent 用同一次计算的结果。右上角「设置」里选数据源：
 
-- 本地有这些文件时，引用库会读取它们。
-- 没有时，报告里的原文引用自动改指 skill 自带的概念速查（`references/concepts.md`）里同主题的段落，不会报错，也不会标红。
+| 数据源 | 需要 | 说明 |
+|---|---|---|
+| Polygon / Massive（默认） | `.env` 的 `POLYGON_API_KEY` | 付费 API，复权日线。失败、没有 key、或历史不够长时，自动回退 yfinance |
+| yfinance | 不需要 key | 免费的非官方接口，偶尔不稳定 |
+
+- **看清用的是哪个**：顶栏的「数据」胶囊和报告第一行都写明数据源。回退时会写明原因。
+- **历史长度**：Polygon 的付费档位可能只有最近几年的数据（例如约 5 年）。回放更早的日期时，会自动改用 yfinance。
+- **复权价**：两个数据源都按拆股、分红复权，价格可能和券商图上的绝对值不同。均线方向和相对关系不受影响。
+- **盘中**：最后一根 K 线是今天、且美东时间还没到 16:15 时，页面会提醒"K 线未完成"。这时的结论相当于"假如今天收在这里"。
+- **缓存**：最新行情缓存 10 分钟；回放某一天的结果一直缓存。切换数据源后自动重新取数。
+
+命令行里用 `--source` 指定：`auto`（默认，先 Polygon 再 yfinance）、`polygon`（只用 Polygon）、`yfinance`。
+
+```bash
+uv run .agents/skills/dual-moving-averages/scripts/dma_analyze.py NVDA --source yfinance
+```
 
 ## 目录
 
 ```
 .agents/skills/dual-moving-averages/   skill：SKILL.md、references/、scripts/、tests/
-.claude/skills/dual-moving-averages    → 指向上面的软链接（Claude Code 只认 .claude/skills）
 app/                                   工作台（说明见 app/README.md）
-references/ref-tools-from-learnoptions/  Polygon 取数参考脚本
 ```

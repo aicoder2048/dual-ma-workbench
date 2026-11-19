@@ -2,7 +2,8 @@
 .env
 .env.*
 !.env.example
-.claude/settings.local.json
+# 本地 Claude Code 配置（插件、指向 skill 的软链接），项目用 Pi，不需要
+.claude/
 
 # python
 __pycache__/

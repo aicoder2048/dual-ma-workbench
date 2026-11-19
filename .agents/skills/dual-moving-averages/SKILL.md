@@ -32,7 +32,7 @@ description: 用"双均线"方法（每个周期同时看 MA 和 EMA，默认 20
 
 ### 第 0 步：拿数据
 
-`<SKILL_DIR>` 是本 SKILL.md 所在目录（Claude Code 和 Pi 加载 skill 时都会给出这个路径）。这是项目级 skill：真身在 `<项目>/.agents/skills/dual-moving-averages`（Pi 直接读），`<项目>/.claude/skills/dual-moving-averages` 是指向它的软链接（给 Claude Code 用）。
+`<SKILL_DIR>` 是本 SKILL.md 所在目录（Claude Code 和 Pi 加载 skill 时都会给出这个路径）。这是项目级 skill，放在 `<项目>/.agents/skills/dual-moving-averages`，Pi 直接识别。想在 Claude Code 里用，自己建一个软链接：`ln -s ../../.agents/skills/dual-moving-averages .claude/skills/`。
 
 ```bash
 uv run <SKILL_DIR>/scripts/dma_analyze.py <TICKER> [--asof YYYY-MM-DD]
