@@ -280,7 +280,7 @@ export function createChart(box, legendEl) {
       <span class="replay-menu" role="menu" hidden>
         <button type="button" data-start="click">点图选择</button>
         <label>选日期 <input type="date"></label>
-        <button type="button" data-start="earliest" title="MA120 有值的第一天">最早一天</button>
+        <button type="button" data-start="earliest" title="图上 6 条线都有值的第一天">最早一天</button>
         <button type="button" data-start="random">随机一天</button>
       </span>
     </span>
@@ -377,9 +377,8 @@ export function createChart(box, legendEl) {
   menu.addEventListener("click", (e) => {
     const how = e.target.closest("[data-start]")?.dataset.start;
     if (!how || !data) return;
-    const n = data.candles.length;
     if (how === "click") { dispatch({ type: "enter" }); return; }
-    dispatch({ type: "pick", index: how === "earliest" ? earliestIndex(n) : randomIndex(n) });
+    dispatch({ type: "pick", index: how === "earliest" ? earliestIndex(data) : randomIndex(data) });
   });
   menu.querySelector("input").addEventListener("change", (e) => {
     const i = data ? indexOnOrBefore(data.candles, e.target.value) : -1;

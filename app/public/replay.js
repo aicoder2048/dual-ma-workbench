@@ -62,12 +62,21 @@ export function indexOnOrBefore(candles, date) {
   return i;
 }
 
-/** 最早一天：MA120 有值的第一根；不够 120 根就从第一根开始。 */
-export const earliestIndex = (total) => (total > 119 ? 119 : 0);
+/**
+ * 最早一天：6 条线都有值的第一根。服务端用 3 年历史算线，图上的 K 线通常从第一根起就都有值；
+ * 历史不够的票（刚上市不久）长均线会晚开始。没有一根齐全时从第一根开始。
+ */
+export function earliestIndex(d) {
+  const starts = Object.values(d.lines).map((pts) => pts[0]?.time).filter(Boolean);
+  const from = starts.reduce((a, b) => (a > b ? a : b), "");
+  const i = d.candles.findIndex((c) => c.time >= from);
+  return i < 0 ? 0 : i;
+}
 
 /** 随机一天：最早一天到倒数第二根之间（至少留一根可放）。 */
-export function randomIndex(total, rand = Math.random) {
-  const lo = earliestIndex(total);
+export function randomIndex(d, rand = Math.random) {
+  const total = d.candles.length;
+  const lo = Math.min(earliestIndex(d), Math.max(0, total - 2));
   const hi = Math.max(lo, total - 2);
   return lo + Math.floor(rand() * (hi - lo + 1));
 }

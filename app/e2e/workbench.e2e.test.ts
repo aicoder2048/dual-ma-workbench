@@ -932,16 +932,16 @@ describe("K 线回放", () => {
     await page.close();
   }, 30_000);
 
-  test("最早一天从 MA120 有值的那根开始；随机一天落在中间；× 退出", async () => {
+  test("最早一天：6 条线都有值的第一根（假数据从第一根起就齐）；随机一天落在中间；× 退出", async () => {
     const { page } = await start("RPLD");
     await page.click(".replay-toggle");
     await page.click(".replay-start");
     await page.click(".replay-menu [data-start=earliest]");
-    expect(await rp(page)).toMatchObject({ mode: "replay", index: 119 });
+    expect(await rp(page)).toMatchObject({ mode: "replay", index: 0 });
     await page.click(".replay-start");
     await page.click(".replay-menu [data-start=random]");
     const r = await rp(page);
-    expect(r.index).toBeGreaterThanOrEqual(119);
+    expect(r.index).toBeGreaterThanOrEqual(0);
     expect(r.index).toBeLessThanOrEqual(298);
     await page.click(".replay-exit");
     expect(await rp(page)).toMatchObject({ mode: "off", bars: 300 });
@@ -969,7 +969,7 @@ describe("K 线回放", () => {
     await page.click(".replay-toggle");
     await page.click(".replay-start");
     await page.click(".replay-menu [data-start=earliest]");
-    const date = CHART.candles[119].time;
+    const date = CHART.candles[0].time;
     await page.click(".replay-analyze");
     await page.waitForFunction((h) => location.hash === h, `#RPLG@${date}`);
     await page.waitForFunction(() => document.getElementById("meta-line")!.textContent!.includes("回放"));

@@ -112,13 +112,16 @@ describe("选起点的几种方式", () => {
     const gap = candles.filter((_, i) => i !== 31);
     expect(indexOnOrBefore(gap, days[31])).toBe(30);
   });
-  test("最早一天：MA120 有值的第一根；不够 120 根就从第一根开始", () => {
-    expect(earliestIndex(N)).toBe(119);
-    expect(earliestIndex(119)).toBe(0);
+  test("最早一天：6 条线都有值的第一根（按数据算，不写死 120）", () => {
+    expect(earliestIndex(D)).toBe(119); // 这份数据的 MA120 从第 119 根才有
+    // 真数据：服务端用 3 年历史算线，图上 260 根从第一根起就都有值
+    const full = { ...D, lines: Object.fromEntries(Object.keys(D.lines).map((k) => [k, line(0)])) };
+    expect(earliestIndex(full)).toBe(0);
   });
   test("随机一天：在最早一天和倒数第二根之间", () => {
-    expect(randomIndex(N, () => 0)).toBe(119);
-    expect(randomIndex(N, () => 0.999999)).toBe(N - 2);
-    expect(randomIndex(2, () => 0.5)).toBe(0);
+    expect(randomIndex(D, () => 0)).toBe(119);
+    expect(randomIndex(D, () => 0.999999)).toBe(N - 2);
+    const two = { ...D, candles: D.candles.slice(0, 2), lines: Object.fromEntries(Object.keys(D.lines).map((k) => [k, line(0)])) };
+    expect(randomIndex(two, () => 0.5)).toBe(0);
   });
 });
