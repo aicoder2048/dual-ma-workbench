@@ -37,6 +37,7 @@ const ttsCalls: { text: string; voice: string }[] = [];
 const wsSent: any[] = [];
 let staleNext = false;
 let warningNext: string | null = null;
+const sockets = new Set<any>(); // 连着的页面，用来模拟服务端推消息
 const lastPrompt = () => wsSent.filter((m) => m.type === "prompt").at(-1);
 let server: ReturnType<typeof Bun.serve>;
 let browser: Browser;
@@ -45,8 +46,11 @@ let base = "";
 beforeAll(async () => {
   const dir = mkdtempSync(join(tmpdir(), "dma-e2e-"));
   const handler = createHandler({
-    analyzer: new Analyzer(async (args) =>
-      JSON.stringify({ analysis: { ...(nvda as Analysis), label: args[0], warning: warningNext ?? nvda.warning }, chart: CHART })),
+    analyzer: new Analyzer(async (args) => {
+      if (args[0] === "ANT") throw new Error("取不到 ANT 的行情");
+      if (args[0] === "SLOW") { await Bun.sleep(1500); throw new Error("SLOW 超时"); }
+      return JSON.stringify({ analysis: { ...(nvda as Analysis), label: args[0], warning: warningNext ?? nvda.warning }, chart: CHART });
+    }),
     watchlist: new Watchlist(join(dir, "w.json")),
     library: SourceLibrary.load(),
     publicDir: resolve(import.meta.dir, "../public"),
@@ -60,10 +64,12 @@ beforeAll(async () => {
     websocket: {
       maxPayloadLength: 24 * 1024 * 1024,
       open(ws) {
+        sockets.add(ws);
         if (staleNext) ws.send(JSON.stringify({ type: "stale", message: "服务端代码更新过：按 Ctrl+C 后运行 just wildgoose" }));
         for (const agent of ["analyst", "advisor"]) ws.send(JSON.stringify({ type: "status", agent, busy: false }));
       },
       message(_ws, m) { wsSent.push(JSON.parse(String(m))); },
+      close(ws) { sockets.delete(ws); },
     },
   });
   base = `http://127.0.0.1:${server.port}`;
@@ -265,6 +271,85 @@ describe("盘中提醒", () => {
       await p.addInitScript(() => localStorage.setItem("dma-partial-dismissed", "2000-01-03"));
     }, "INTC").finally(() => { warningNext = null; });
     expect(await page.isVisible("#warning")).toBe(true);
+    expect(errors).toEqual([]);
+    await page.close();
+  }, 30_000);
+});
+
+describe("取数失败", () => {
+  /** 从搜索框打开一只票，等中栏标题换过去。 */
+  async function search(page: Page, ticker: string) {
+    await page.fill("#load-ticker", ticker);
+    await page.press("#load-ticker", "Enter");
+    await page.waitForFunction((t) => document.getElementById("ticker")?.textContent === t, ticker);
+  }
+
+  test("中栏直接显示这只票的错误，不留上一只票的内容和盘中提醒", async () => {
+    warningNext = "今日 K 线未完成（美东 13:03，收盘 16:00）。";
+    const { page, errors } = await open(undefined, "AMZN").finally(() => { warningNext = null; });
+    expect(await page.isVisible("#warning")).toBe(true);
+    // 分析师对话很长、滚过了总结：提示条出现
+    await page.evaluate(async () => {
+      const { panels } = await import("/app.js");
+      panels.analyst.history([{ role: "user", text: "长对话" },
+        { role: "assistant", text: "很长的回答。\n\n".repeat(400), tools: [], checks: [], book: null }]);
+      const s = document.getElementById("center-scroll")!;
+      s.scrollTop = 1500;
+      s.dispatchEvent(new Event("scroll"));
+    });
+    await page.waitForSelector("#peek", { state: "visible" });
+    await search(page, "ANT");
+    await page.waitForSelector("#load-error", { state: "visible" });
+    const msg = await page.textContent("#load-error");
+    expect(msg).toContain("ANT");
+    expect(msg).toContain("取不到 ANT 的行情");
+    for (const sel of ["#verdict", ".chart-card", "#steps", "#warning"]) {
+      expect(await page.isVisible(sel)).toBe(false);
+    }
+    expect((await page.textContent("#kpis"))?.trim()).toBe("");
+    // 推荐问法是按上一只票生成的，也要清掉；之后才到的也不显示
+    const late = { type: "suggestions", agent: "analyst", items: [{ intent: "看状态", text: "AMZN 现在什么状态？" }], source: "ai" };
+    // WebSocket 按顺序到：后面这条生效了，前面那条一定处理过
+    const marker = { type: "status", agent: "analyst", busy: true };
+    for (const ws of sockets) { ws.send(JSON.stringify(late)); ws.send(JSON.stringify(marker)); }
+    await page.waitForSelector("#analyst-chips.dim", { state: "attached" });
+    expect(await page.$$("#analyst-chips .chip, #advisor-chips .chip")).toHaveLength(0);
+    expect(page.url()).toEndWith("#ANT");
+    expect(await page.textContent("#data-status-v")).not.toContain("盘中");
+    expect(await page.isVisible("#peek")).toBe(false);
+    // 重试：按钮先变成不可点，失败后恢复，仍是错误卡片
+    await page.click("#load-error-retry");
+    await page.waitForSelector("#load-error-retry:not([disabled])");
+    expect(await page.isVisible("#load-error")).toBe(true);
+    expect(errors).toEqual([]);
+    await page.close();
+  }, 30_000);
+
+  test("慢的那只后来失败了，不会盖掉已经打开的票", async () => {
+    const { page, errors } = await open();
+    const slow = page.waitForResponse((r) => r.url().includes("ticker=SLOW"));
+    await page.fill("#load-ticker", "SLOW");
+    await page.press("#load-ticker", "Enter");
+    await search(page, "TSLA");
+    await slow; // SLOW 的失败回来了
+    await page.evaluate(() => new Promise(requestAnimationFrame));
+    expect(await page.textContent("#ticker")).toBe("TSLA");
+    expect(await page.isVisible("#load-error")).toBe(false);
+    expect(page.url()).toEndWith("#TSLA");
+    expect(errors).toEqual([]);
+    await page.close();
+  }, 30_000);
+
+  test("再打开一只能取到的票：错误消失，内容回来", async () => {
+    const { page, errors } = await open();
+    await search(page, "ANT");
+    await page.waitForSelector("#load-error", { state: "visible" });
+    await search(page, "NVDA");
+    await page.waitForSelector(".lean-label");
+    expect(await page.isVisible("#load-error")).toBe(false);
+    for (const sel of ["#verdict", ".chart-card", "#steps"]) {
+      expect(await page.isVisible(sel)).toBe(true);
+    }
     expect(errors).toEqual([]);
     await page.close();
   }, 30_000);

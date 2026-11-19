@@ -114,23 +114,72 @@ function renderKpis(a) {
 }
 
 // ---------- 当前分析 ----------
-/** 成功返回 null，失败返回原因（已在中栏提示过）。 */
+let loadSeq = 0;
+/** 成功返回 null，失败返回原因（已在中栏提示过）。期间又点了别的票，这次的结果直接丢掉。 */
 export async function loadAnalysis(ticker, asof) {
+  const seq = ++loadSeq;
   const box = $("chart");
   box.classList.add("loading");
   try {
     const q = new URLSearchParams({ ticker });
     if (asof) q.set("asof", asof);
     const data = await api(`/api/analyze?${q}`);
-    showAnalysis(data, asof);
+    if (seq === loadSeq) showAnalysis(data, asof);
     return null;
   } catch (err) {
-    alertInline(`${ticker}：${err.message}`);
+    if (seq !== loadSeq) return null;
+    showLoadError(ticker, asof, err.message);
     return err.message;
   } finally {
     box.classList.remove("loading");
   }
 }
+
+/** 中栏两种状态：有分析结果（总结、K 线图、三步），或这只票取数失败（只有错误卡片）。 */
+function showPane(ok) {
+  for (const el of [$("verdict"), document.querySelector(".chart-card"), $("steps")]) el.hidden = !ok;
+  $("load-error").hidden = ok;
+  $("error").hidden = true; // 操作失败的提示属于上一个页面
+  if (!ok) {
+    $("warning").hidden = true; // 盘中提醒、提示条、数据状态都属于上一只票
+    $("peek").hidden = true;
+    $("data-status").classList.remove("partial");
+    $("data-status-v").textContent = "—";
+    $("data-status").title = "这只票没有取到数据";
+  }
+}
+
+/** 取数失败：中栏换成这只票和错误原因，不留上一只票的内容。 */
+function showLoadError(ticker, asof, message) {
+  collapseDrawer();
+  state.ticker = ticker;
+  state.asof = asof;
+  state.data = null;
+  location.hash = asof ? `${ticker}@${asof}` : ticker;
+  $("ticker").textContent = ticker;
+  $("meta-line").textContent = asof ? "回放：只用这一天及以前的数据" : "";
+  $("load-asof").value = asof ?? "";
+  $("load-asof").type = asof ? "date" : "text";
+  $("load-asof").closest(".asof").classList.toggle("replay", Boolean(asof));
+  asofUi?.sync();
+  paintStar();
+  $("kpis").innerHTML = "";
+  $("steps").innerHTML = "";
+  for (const p of Object.values(panels)) p.suggestions([], ""); // 推荐问法是按上一只票生成的
+  $("load-error-title").textContent = `${ticker}${asof ? `（${asof}）` : ""} 取数失败`;
+  $("load-error-msg").textContent = message;
+  showPane(false);
+  document.querySelectorAll(".wl-item").forEach((li) =>
+    li.classList.toggle("active", li.dataset.ticker === ticker && !asof));
+}
+$("load-error-retry").addEventListener("click", async (e) => {
+  if (!state.ticker) return;
+  e.currentTarget.disabled = true;
+  e.currentTarget.textContent = "重试中…";
+  await loadAnalysis(state.ticker, state.asof);
+  $("load-error-retry").disabled = false;
+  $("load-error-retry").textContent = "重试";
+});
 
 /** 渲染一份分析结果（HTTP 拿到的，或分析师工具推过来的）。 */
 export function showAnalysis(data, asof = null) {
@@ -156,10 +205,9 @@ export function showAnalysis(data, asof = null) {
   status.title = a.warning ?? `数据来源：${a.source}`;
 
   // 盘中提醒关掉一次，同一交易日不再弹出；顶部「盘中」标记和悬停全文照旧
-  const warn = $("warning");
-  warn.dataset.date = a.warning ? a.date : "";
-  warn.hidden = !a.warning || partialDismissed(a.date);
+  $("warning").hidden = !a.warning || partialDismissed(a.date);
   $("warning-text").textContent = a.warning ?? "";
+  showPane(true);
 
   const r = data.report;
   const v = $("verdict");
@@ -251,7 +299,7 @@ $("load-form").addEventListener("submit", async (e) => {
   input.value = "";
   input.blur();
   const err = await loadAnalysis(r.ticker, null);
-  searchMsg(err ? `${what}：${err}` : r.name ? `${what}（美股代码）` : null, Boolean(err));
+  searchMsg(!err && r.name ? `${what}（美股代码）` : null); // 失败的原因在中栏
 });
 $("load-ticker").addEventListener("input", () => $("search-msg").classList.contains("bad") && searchMsg(null));
 
@@ -293,22 +341,21 @@ $("star").addEventListener("click", async () => {
 });
 document.querySelectorAll("[data-open-settings]").forEach((b) => b.addEventListener("click", () => openSettings()));
 
+/** 操作失败（加自选、取消自选）：单独一行，和盘中提醒分开。 */
 function alertInline(message) {
-  const warn = $("warning");
-  warn.dataset.date = "";
-  warn.hidden = false;
-  $("warning-text").textContent = message;
+  $("error").hidden = false;
+  $("error-text").textContent = message;
 }
+$("error-close").addEventListener("click", () => { $("error").hidden = true; });
 
 const PARTIAL_KEY = "dma-partial-dismissed";
 function partialDismissed(date) {
   try { return localStorage.getItem(PARTIAL_KEY) === date; } catch { return false; }
 }
 $("warning-close").addEventListener("click", () => {
-  const warn = $("warning");
-  warn.hidden = true;
-  if (!warn.dataset.date) return; // 出错提示：只关这一次
-  try { localStorage.setItem(PARTIAL_KEY, warn.dataset.date); } catch { /* 隐私模式：只在本页有效 */ }
+  $("warning").hidden = true;
+  const date = state.data?.analysis.date;
+  if (date) try { localStorage.setItem(PARTIAL_KEY, date); } catch { /* 隐私模式：只在本页有效 */ }
 });
 
 // ---------- 主题（跟随系统 / 浅 / 深 / 水墨）----------
@@ -377,6 +424,7 @@ function initAgents() {
       case "tool": return p.tool(e);
       case "turn_end": return p.endTurn(e.entry);
       case "suggestions":
+        if (!state.data && state.ticker) return; // 取数失败时：晚到的上一只票的问法不显示
         if (e.agent === "advisor") advisorSuggestions = e.items;
         return p.suggestions(e.items, e.source);
       case "error": return p.error(e.message);
