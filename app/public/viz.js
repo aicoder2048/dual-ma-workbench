@@ -244,9 +244,29 @@ export function pnlText(cost, close) {
   return `现价 ${f2(close)} / 成本 ${f2(c)}：浮${d >= 0 ? "盈" : "亏"} <b class="${d >= 0 ? "bullish" : "bearish"}">${pct(d)}</b>`;
 }
 
-/** 第 2 步：空仓 / 持仓切换，一句做法 + 带价位的条件。 */
+/**
+ * 处境：空仓；持仓没填成本；持仓且价格不低于成本（浮盈）；低于成本（浮亏）。
+ * 和服务端 plan.ts 的 Situation 一一对应。
+ */
+export function situationOf(p, close) {
+  if (p.pos !== "holding") return "flat";
+  const c = Number(p.cost);
+  if (!p.cost || !Number.isFinite(c) || c <= 0) return "holding";
+  return close >= c ? "profit" : "loss";
+}
+const SITUATION_LABEL = { flat: "空仓", holding: "持仓", profit: "持仓 · 浮盈", loss: "持仓 · 浮亏" };
+
+/** 计划正文（做法 + 条件）；成本占位 {cost} 填上用户输入的成本。输入成本时只重画这一块。 */
+export function planBody(plans, p, close) {
+  const k = situationOf(p, close);
+  const fill = (t) => esc(t).replaceAll("{cost}", k === "profit" || k === "loss" ? f2(Number(p.cost)) : "成本");
+  const plan = plans[k];
+  return `<b class="big">${fill(plan.action)}</b>
+      <ul class="plan-items">${plan.items.map((i) => `<li${i.label === "时机" ? ' class="timing"' : ""}><span class="pl">${i.label === "时机" ? "时机 · 来自看方向" : esc(i.label)}</span>${fill(i.text)}</li>`).join("")}</ul>`;
+}
+
+/** 第 2 步：空仓 / 持仓切换（持仓可填成本价），一句做法 + 带价位的条件。 */
 export function planAnswer(plans, p, close) {
-  const plan = plans[p.pos];
   const seg = Object.entries(POS).map(([k, label]) =>
     `<button type="button" data-pos="${k}" aria-pressed="${k === p.pos}">${label}</button>`).join("");
   const cost = p.pos === "holding"
@@ -255,17 +275,23 @@ export function planAnswer(plans, p, close) {
   return `<div class="answer plan">
       <div class="pos-row"><span class="ak">你现在</span><div class="pos-seg" role="group" aria-label="有没有仓位">${seg}</div></div>
       ${cost}
-      <b class="big">${esc(plan.action)}</b>
-      <ul class="plan-items">${plan.items.map((i) => `<li${i.label === "时机" ? ' class="timing"' : ""}><span class="pl">${i.label === "时机" ? "时机 · 来自看方向" : esc(i.label)}</span>${esc(i.text)}</li>`).join("")}</ul>
+      <div class="plan-body">${planBody(plans, p, close)}</div>
     </div>`;
 }
 
+/** 看方向对策略的影响（一行），跟着处境变。 */
+export function effectLine(o, p, close) {
+  const k = situationOf(p, close);
+  // 正文已经以"支持 / 调整时机 / 方向不明…"开头，标签里不再重复 tag
+  return `<span class="pl">对上面的策略（${SITUATION_LABEL[k]}）</span>${esc(o.effect[k].text)}`;
+}
+
 /** 第 3 步：方向结论 + 最早何时会变 + 对你意味着什么。 */
-export function outlookAnswer(o, pos) {
+export function outlookAnswer(o, p, close) {
   return `<div class="answer">
       <span class="ak">结论</span><b class="big">${esc(o.verdict)}</b>
       <p><span class="pl">会变吗</span>${esc(o.change)}</p>
-      <p class="effect"><span class="pl">对上面的策略（${POS[pos]}）：${esc(o.effect[pos].tag)}</span>${esc(o.effect[pos].text)}</p>
+      <p class="effect">${effectLine(o, p, close)}</p>
     </div>`;
 }
 

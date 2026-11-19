@@ -23,6 +23,8 @@ function bullish(): Analysis {
   return a;
 }
 
+const bullishPlans = () => buildPlans(bullish());
+
 describe("定策略：按有没有仓位给出做法和价位", () => {
   const plans = buildPlans(bear);
   test("空仓：一句话做法 + 等什么条件，条件里有具体价位", () => {
@@ -68,5 +70,33 @@ describe("看方向和定策略互相引用", () => {
       const timing = plans[pos].items.find((i) => i.label === "时机");
       expect(timing?.text).toBe(o.effect[pos].text);
     }
+  });
+});
+
+describe("成本价参与策略：浮盈、浮亏分开说", () => {
+  const plans = buildPlans(bear);
+  const o = buildOutlook(bear);
+  const text = (k: "holding" | "profit" | "loss") => [plans[k].action, ...plans[k].items.map((i) => i.text)].join("");
+
+  test("浮盈：先保住利润，止损提到成本附近（成本由页面填进 {cost}）", () => {
+    expect(text("profit")).toContain("{cost}");
+    expect(text("profit")).toMatch(/保本|锁住|利润/);
+    expect(text("profit")).not.toMatch(/浮亏|涨回成本/);
+  });
+  test("浮亏：不等回本", () => {
+    expect(text("loss")).toMatch(/不等回本|不要等涨回成本/);
+  });
+  test("没填成本时，不提浮盈浮亏，也不提回本", () => {
+    expect(text("holding")).not.toMatch(/浮盈|浮亏|回本|涨回成本/);
+  });
+  test("看方向的影响也按浮盈 / 浮亏分开，和计划第一行「时机」一致", () => {
+    for (const k of ["flat", "holding", "profit", "loss"] as const) {
+      expect(plans[k].items[0]).toEqual({ label: "时机", text: o.effect[k].text });
+    }
+    expect(o.effect.profit.text).not.toContain("涨回成本");
+    expect(o.effect.loss.text).toContain("涨回成本");
+  });
+  test("偏多时浮亏：不在浮亏时加仓摊低", () => {
+    expect([bullishPlans().loss.action, ...bullishPlans().loss.items.map((i) => i.text)].join("")).toContain("摊低");
   });
 });

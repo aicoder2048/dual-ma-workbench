@@ -8,7 +8,7 @@ import { initAskMenu, selectionLabel } from "./askmenu.js";
 import { collapseDrawer, initDrawer, updatePeek } from "./drawer.js";
 import { resolveTicker } from "./names.js";
 import { applyRemoteSettings, initSettings, openSettings } from "./settings.js";
-import { installTips, leanCard, leanName, outlookAnswer, planAnswer, pnlText, stanceOf, stepVisuals, trendAnswer } from "./viz.js";
+import { effectLine, installTips, leanCard, leanName, outlookAnswer, planAnswer, planBody, pnlText, stanceOf, stepVisuals, trendAnswer } from "./viz.js";
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -211,7 +211,7 @@ function paintAnswers(r, a, p) {
   const box = (key) => document.querySelector(`[data-step="${key}"] .step-answer`);
   box("big_picture").innerHTML = trendAnswer(r.trend);
   box("strategy").innerHTML = planAnswer(r.plans, p, a.close);
-  box("direction").innerHTML = outlookAnswer(r.outlook, p.pos);
+  box("direction").innerHTML = outlookAnswer(r.outlook, p, a.close);
   const plan = box("strategy");
   plan.querySelectorAll("[data-pos]").forEach((b) => b.addEventListener("click", () => {
     const next = { ...p, pos: b.dataset.pos };
@@ -221,7 +221,11 @@ function paintAnswers(r, a, p) {
   plan.querySelector("#pos-cost")?.addEventListener("input", (e) => {
     const next = { ...p, cost: e.target.value };
     savePosition(a.label, next);
+    p = next; // 之后点空仓/持仓时带上最新的成本
     plan.querySelector(".pnl").innerHTML = pnlText(next.cost, a.close);
+    // 只重画计划正文和看方向那一行，输入框不动（边打字边更新，不丢焦点）
+    plan.querySelector(".plan-body").innerHTML = planBody(r.plans, next, a.close);
+    box("direction").querySelector(".effect").innerHTML = effectLine(r.outlook, next, a.close);
   });
 }
 

@@ -1,20 +1,26 @@
 /**
  * 定策略、看方向的输出（规则生成，不经过模型）。
  *
- * - buildPlans：按"趋势类型 × 有没有仓位"给一句做法 + 两三条带价位的条件。规则取自
+ * - buildPlans：按"趋势类型 × 你的处境"给一句做法 + 两三条带价位的条件。规则取自
  *   skill 的 references/playbooks.md，价位取自模糊判断的门槛（EMA20、MA20 抵扣价）和均线值。
+ *   处境分四种：空仓、持仓（没填成本）、持仓浮盈、持仓浮亏。成本只在浏览器里，文字里写 {cost}，由页面填上。
  * - buildOutlook：看方向的结论。抵扣价推演出 20 线组还会朝原方向走多久、最早什么时候会变，
  *   再翻译成"对空仓 / 持仓意味着什么"。
  */
 import type { Analysis } from "./citations.ts";
 
 export type Position = "flat" | "holding";
+/** 你的处境：空仓；持仓但没填成本；持仓浮盈；持仓浮亏。页面按"空仓/持仓"和成本价选一个。 */
+export type Situation = "flat" | "holding" | "profit" | "loss";
+export const SITUATIONS: Situation[] = ["flat", "holding", "profit", "loss"];
+/** 计划文字里成本价的占位，页面填上用户输入的成本。 */
+export const COST = "{cost}";
 export interface PlanItem { label: string; text: string }
 export interface Plan { action: string; items: PlanItem[] }
 export type EffectTag = "支持" | "调整时机" | "不变";
 /** 看方向对上面策略的影响：支持原做法、调整执行时机，或方向不明、策略不变。 */
 export interface Effect { tag: EffectTag; text: string }
-export interface Outlook { verdict: string; change: string; effect: Record<Position, Effect> }
+export interface Outlook { verdict: string; change: string; effect: Record<Situation, Effect> }
 
 const f2 = (x: number) => x.toFixed(2);
 
@@ -37,7 +43,7 @@ function levels(a: Analysis) {
 type L = ReturnType<typeof levels>;
 
 const BUY_TURN = (l: L) => `收盘先站上 EMA20 ${l.p(l.ema20)}，EMA20 拐头向上；再站上 MA20 抵扣价 ${l.p(l.drop20)}，MA20 跟着拐头。`;
-const SIZE: PlanItem = { label: "仓位", text: "浮亏影响心情，就是仓位太大，减到睡得着为止。" };
+const SIZE: PlanItem = { label: "仓位", text: "盈亏影响心情，就是仓位太大，减到睡得着为止。" };
 
 /** 趋势类型 → 空仓 / 持仓的打法。来源：playbooks.md 各节。 */
 const PLAYS: Record<string, Record<Position, (l: L) => Plan>> = {
@@ -83,7 +89,7 @@ const PLAYS: Record<string, Record<Position, (l: L) => Plan>> = {
     ] }),
     holding: (l) => ({ action: "反弹到均线附近，减仓或离场。", items: [
       { label: "减仓位", text: `反弹到 EMA20 ${l.p(l.ema20)}、MA20 ${f2(l.ma20)} 附近。` },
-      { label: "别指望", text: "连涨几天改变不了空头排列，涨回成本要很久。" },
+      { label: "别指望", text: "连涨几天改变不了空头排列，跌下去的价格要很久才回来。" },
       SIZE,
     ] }),
   },
@@ -112,19 +118,46 @@ const PLAYS: Record<string, Record<Position, (l: L) => Plan>> = {
 
 const short = (t: string) => t.replace("（排列或方向不一致）", "");
 
-/** 只按趋势类型定的打法（还没加看方向给的时机）。 */
-function basePlans(a: Analysis): Record<Position, Plan> {
+/** 持仓时趋势站在哪一边：决定浮盈 / 浮亏该怎么说。 */
+type Side = "bull" | "bear" | "range";
+function sideOf(a: Analysis): Side {
+  const t = short(a.trend);
+  if (t === "健康上涨" || t === "极度超买") return "bull";
+  if (t === "健康下跌" || t === "极度超卖") return "bear";
+  return a.lean.score <= -0.25 ? "bear" : a.lean.score >= 0.25 ? "bull" : "range";
+}
+
+/** 浮盈 / 浮亏时多出来的一行。来源：资金原则（文章 7.3）和"有仓位分批止盈或上移止损"（playbooks 极度超买）。 */
+const PNL: Record<Side, Record<"profit" | "loss", PlanItem>> = {
+  bear: {
+    profit: { label: "盈亏", text: `还有浮盈：先把止损提到成本 ${COST} 附近保本，反弹时先减一部分，别让盈利变成亏损。` },
+    loss: { label: "盈亏", text: "已经浮亏：不等回本。反弹到减仓位就执行，减到浮亏不影响心情为止。" },
+  },
+  bull: {
+    profit: { label: "盈亏", text: `还有浮盈：成本 ${COST} 在下方是安全垫，按趋势规则拿着，不因小回调卖掉。` },
+    loss: { label: "盈亏", text: "暂时浮亏：趋势还向上，不急着割；但不在浮亏时加仓摊低，等回调获支撑、小级别确认后再加。" },
+  },
+  range: {
+    profit: { label: "盈亏", text: `还有浮盈：把止损提到成本 ${COST} 附近保本；磨蹭不涨就先走。` },
+    loss: { label: "盈亏", text: "已经浮亏：守住离场底线，不在没方向的时候加仓摊低成本。" },
+  },
+};
+
+/** 只按趋势类型定的打法（还没加看方向给的时机）。浮盈 / 浮亏在持仓打法的做法之后加一行。 */
+function basePlans(a: Analysis): Record<Situation, Plan> {
   const play = PLAYS[short(a.trend)] ?? PLAYS["过渡态"];
   const l = levels(a);
-  return { flat: play.flat(l), holding: play.holding(l) };
+  const holding = play.holding(l);
+  const withPnl = (k: "profit" | "loss"): Plan => ({ ...holding, items: [PNL[sideOf(a)][k], ...holding.items] });
+  return { flat: play.flat(l), holding, profit: withPnl("profit"), loss: withPnl("loss") };
 }
 
 /** 打法 + 第一行"时机"：来自看方向（buildOutlook 的 effect），两处说的是同一句话。 */
-export function buildPlans(a: Analysis): Record<Position, Plan> {
+export function buildPlans(a: Analysis): Record<Situation, Plan> {
   const base = basePlans(a);
   const { effect } = buildOutlook(a);
-  const withTiming = (pos: Position): Plan => ({ ...base[pos], items: [{ label: "时机", text: effect[pos].text }, ...base[pos].items] });
-  return { flat: withTiming("flat"), holding: withTiming("holding") };
+  const withTiming = (k: Situation): Plan => ({ ...base[k], items: [{ label: "时机", text: effect[k].text }, ...base[k].items] });
+  return Object.fromEntries(SITUATIONS.map((k) => [k, withTiming(k)])) as Record<Situation, Plan>;
 }
 
 /** 抵扣价路径里第一次高于现价是第几天（1 起）。偏多时，从那天起回调容易让 MA 拐头。 */
@@ -136,7 +169,10 @@ const firstHigh = (path: { close: number }[], close: number) => {
 export function buildOutlook(a: Analysis): Outlook {
   const l = levels(a);
   const base = basePlans(a);
-  const act = (pos: Position) => `「${base[pos].action.replace(/。$/, "")}」`;
+  const act = (k: Situation) => `「${base[k].action.replace(/。$/, "")}」`;
+  /** 持仓三种处境（没填成本 / 浮盈 / 浮亏）共用同一句，只在需要时改说法。 */
+  const held = (text: (k: Situation) => string, tag: EffectTag) =>
+    ({ holding: { tag, text: text("holding") }, profit: { tag, text: text("profit") }, loss: { tag, text: text("loss") } });
   const d20 = a.drops.find((d) => d.period === 20)!;
   const after = `价格不变 ${a.lean.after.days} 天后，模糊判断是${a.lean.after.label}。`;
   if (a.lean.score <= -0.25) {
@@ -151,7 +187,8 @@ export function buildOutlook(a: Analysis): Outlook {
         flat: { tag: "支持", text: turn === null
           ? `支持${act("flat")}：20 天内进场条件都不会出现，不用盯盘；收盘站上 ${f2(l.ema20)} 再来看。`
           : `支持${act("flat")}：第 ${turn} 天前不会转向，不用急；之后看 MA20 能不能拐头向上。` },
-        holding: { tag: "支持", text: `支持${act("holding")}：逆风还会持续，反弹到 EMA20 ${f2(l.ema20)} 附近就执行，不要等涨回成本。` },
+        ...held((k) => `支持${act(k)}：逆风还会持续，反弹到 EMA20 ${f2(l.ema20)} 附近就执行${
+          k === "loss" ? "，不要等涨回成本" : k === "profit" ? "，先锁住一部分利润" : ""}。`, "支持"),
       },
     };
   }
@@ -165,10 +202,10 @@ export function buildOutlook(a: Analysis): Outlook {
         : `第 ${high} 天起 MA20 扣高值，那时一回调就容易拐头向下。先盯 EMA20 ${l.p(l.ema20)}。`,
       effect: high === null ? {
         flat: { tag: "支持", text: `支持${act("flat")}：未来 ${d20.path.length} 天回调都有 MA20 托着，回踩 ${f2(l.ma20)} 附近就是机会。` },
-        holding: { tag: "支持", text: `支持${act("holding")}：顺风还在，收盘跌破 EMA20 ${f2(l.ema20)} 才需要警惕。` },
+        ...held((k) => `支持${act(k)}：顺风还在，收盘跌破 EMA20 ${f2(l.ema20)} 才需要警惕。`, "支持"),
       } : {
         flat: { tag: "调整时机", text: `调整时机：第 ${high} 天前回调有 MA20 托着，是买点窗口；之后再买要更小心。` },
-        holding: { tag: "调整时机", text: `调整时机：第 ${high} 天后 MA20 扣高值，回调更容易破位；那时把离场价收紧到 EMA20 ${f2(l.ema20)}。` },
+        ...held(() => `调整时机：第 ${high} 天后 MA20 扣高值，回调更容易破位；那时把离场价收紧到 EMA20 ${f2(l.ema20)}。`, "调整时机"),
       },
     };
   }
@@ -177,7 +214,7 @@ export function buildOutlook(a: Analysis): Outlook {
     change: a.lean.flips[0] ? `${a.lean.flips[0].text}，方向才会清楚。` : "等均线理顺，方向才会清楚。",
     effect: {
       flat: { tag: "不变", text: `方向不明，${act("flat")}不变，等方向出来。` },
-      holding: { tag: "不变", text: `方向不明，${act("holding")}不变：不加仓，减到心态稳得住。` },
+      ...held((k) => `方向不明，${act(k)}不变：不加仓，减到心态稳得住。`, "不变"),
     },
   };
 }
