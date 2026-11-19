@@ -39,6 +39,10 @@ function modelNote(m) {
 
 function modelSection() {
   const { settings, models } = view;
+  // 旧服务端（pull 了新页面、旧进程还在跑）：没有动态清单和思考程度，别按新格式硬画
+  if (!view.thinkingLevels) {
+    return `<fieldset><legend>大模型</legend><p class="bad">服务端还是旧版本，没有模型清单和思考程度：请重启服务（just wildgoose）后刷新页面。当前模型 ${esc(settings.model)}。</p></fieldset>`;
+  }
   const groups = [...new Set(models.map((m) => m.provider))];
   const current = models.find((m) => m.id === settings.model);
   return `<fieldset><legend>大模型 <span>分析师、鸿雁、动态问法共用；列的是你在 pi 里登录过的</span></legend>
@@ -177,4 +181,11 @@ export function applyRemoteSettings(settings, { onDataSourceChange }) {
   if (view) view.settings = settings;
   paintModelBadges(settings);
   if (changedSource) onDataSourceChange();
+  // 实际用的思考程度、清单也可能变了：重新取一遍，面板开着就重画
+  fetch("/api/settings").then((r) => r.json()).then((v) => {
+    if (!v.settings) return;
+    view = v;
+    paintModelBadges(view.settings);
+    if (!$("settings-panel").hidden) render();
+  }).catch(() => {});
 }

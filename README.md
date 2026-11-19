@@ -88,9 +88,10 @@ uv run .agents/skills/dual-moving-averages/scripts/dma_analyze.py TSLA --asof 20
 
 右上角「设置」里选。列表从 pi 动态读：你在 pi 里登录过的 provider（[第 2 步](#2-安装后第一步在-pi-里登录设置模型)），它们的模型都能选，按 provider 分组。
 
-- **计费按登录方式推断**：订阅登录（oauth）标"订阅"；API key 标"**按量计费**"，选它时要先确认一次。只是推断，以各家账单为准。
+- **计费按登录方式推断**：Pi 标明是订阅的登录（如 Codex、Copilot）标"订阅"；API key 标"**按量计费**"；其他标"未知"。不是订阅的，选它时要先确认一次。只是推断，以各家账单为准。
 - **已验证**：`openai-codex/gpt-6.1-sol`（订阅，默认）和 `deepseek/deepseek-flash`（按量计费）实测过引用格式和工具调用。其他模型标"未验证"，回答里的引用可能标红；不能看图的模型会标出来。
-- `anthropic/*` 能选，但不会被当成默认：在第三方 harness 里它走 API 按量计费。
+- `anthropic/*` 能选，但一律标按量计费、不会被当成默认：在第三方 harness 里它走 API 计费，用 Claude Pro 登录也一样。没选过模型时用 pi 的默认模型，但只在它是订阅时才用。
+- 在 pi 里新登录了 provider：刷新页面就能看到它的模型。pi 更新了模型目录本身（新模型上架）：要重启工作台。
 - **思考程度**：分析师、鸿雁分开设，默认都是 medium。模型不支持某一档时用最近的一档（两边一样近取低的，例如 DeepSeek flash 没有 medium，实际用 low），设置里会写明。
 
 ## 市场数据

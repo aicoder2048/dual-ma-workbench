@@ -179,7 +179,14 @@ describe("HTTP 设置", () => {
   test("清单外（没在 pi 里登录）的模型拒绝，提示去 pi 登录", async () => {
     const res = await call(handler(), "PUT", { model: "openrouter/some-model" });
     expect(res.status).toBe(400);
-    expect((await res.json()).error).toMatch(/pi/);
+    expect((await res.json()).error).toMatch(/登录/);
+  });
+  test("provider 登录了、但没有这个模型：说「目录里没有」，不说没登录", async () => {
+    const res = await call(handler(), "PUT", { model: "openai-codex/gpt-typo" });
+    expect(res.status).toBe(400);
+    const { error } = await res.json();
+    expect(error).toContain("没有");
+    expect(error).not.toContain("没在 pi 里登录");
   });
   test("分析师、鸿雁的思考程度分开设；非法档位拒绝", async () => {
     const h = handler();

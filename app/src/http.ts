@@ -81,8 +81,14 @@ export function createHandler(deps: Deps) {
         for (const k of ["model", "thinkingAnalyst", "thinkingAdvisor", "dataSource", "voiceAnalyst", "voiceAdvisor", "autoSpeak"]) {
           if (k in body) patch[k] = body[k];
         }
-        if ("model" in patch && !(await catalog.list()).some((m) => m.id === patch.model)) {
-          return fail(`${patch.model} 不能用：它的 provider 还没在 pi 里登录。在终端运行 pi，输入 /login 登录后刷新页面。`);
+        if ("model" in patch) {
+          const list = await catalog.list();
+          const provider = String(patch.model).split("/")[0];
+          if (!list.some((m) => m.id === patch.model)) {
+            return fail(list.some((m) => m.provider === provider)
+              ? `${patch.model} 不能用：${provider} 的模型目录里没有它（套餐里没有，或名字写错了）。`
+              : `${patch.model} 不能用：${provider} 还没在 pi 里登录。在终端运行 pi，输入 /login 登录后刷新页面。`);
+          }
         }
         settings.update(patch);
         return json(await settingsView());

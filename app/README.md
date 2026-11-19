@@ -15,7 +15,7 @@ bun scripts/replay.ts     # 回放验证：近 2 年每 20 个交易日一个点
 - **回放验证**（`scripts/replay.ts`，评估逻辑在 `src/replay.ts`）：默认 NVDA TSLA AAPL GOOG META MSFT AMZN SPY QQQ，可传代码和 `--years --step --horizon --jobs --refresh`。每只票取一次 yfinance 日线（只取到昨天）存 `reports/replay/data/`；缓存覆盖不到所需历史、超过 7 天没更新、或给了 `--refresh` 就重新取。每个点只用当天往前 3 年，和工作台一致，不够 3 年直接报错。看四件事：模糊判断各档之后涨跌、看方向的 MA20 推演对不对、空仓计划（"不买"类）之后涨跌、"站上 EMA20 + MA20 抵扣价"进场条件触发后表现。
 
 - **设置**（右上角齿轮，存在 `data/settings.json`）：
-  - 大模型：从 pi 动态读（`src/agents/catalog.ts`），列出在 pi 里登录过的 provider 的全部模型；计费按登录方式推断（oauth 订阅 / api_key 按量计费，后者切换前要确认）。默认 `openai-codex/gpt-6.1-sol`；没选过时用 pi 的默认模型（不是 anthropic 才用）。切换后下一次提问生效，对话上下文保留，不改 Pi 的全局默认模型。
+  - 大模型：从 pi 动态读（`src/agents/catalog.ts`），列出在 pi 里登录过的 provider 的全部模型；计费：Pi 标明是订阅的 OAuth 算订阅，api_key 算按量计费，anthropic 一律按量，其他未知；不是订阅的切换前要确认。默认 `openai-codex/gpt-6.1-sol`；没选过时用 pi 的默认模型（是订阅才用）。切换后下一次提问生效，对话上下文保留，不改 Pi 的全局默认模型。
   - 思考程度：分析师、鸿雁分开设，默认 medium；模型不支持时用最近的一档（`thinkingFor`）。
   - 市场数据：默认 Polygon/Massive（失败或超出约 5 年时回退 yfinance）；可选 yfinance。
 - **数据**：调 skill 脚本 `dma_analyze.py --json`（Polygon，失败回退 yfinance），key 在项目根目录 `.env`。

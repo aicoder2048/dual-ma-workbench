@@ -2,7 +2,9 @@
  * 模型清单：从 Pi 动态读，用户在 pi 里登录了哪些 provider，这里就列哪些模型。
  *
  * - 凭据只认 pi 存的（~/.pi/agent/auth.json），不认环境变量：免得"shell 里 export 了 key 所以能用"这种看不见的来源。
- * - 计费按登录方式推断：oauth（订阅登录）→ 订阅；api_key → 按量计费；其他 → 未知。推断，不是保证。
+ * - 计费：Pi 标明是订阅的 OAuth 登录（auth.oauth.isSubscription）→ 订阅；api_key → 按量计费；anthropic 一律按量计费
+ *   （在 Pi 里走 API 计费，Claude Pro 登录也一样）；其他 → 未知。推断，不是保证；不是订阅的切换前都要确认。
+ * - 模型按 provider 自己的规则过滤（如 Copilot 只列套餐里有的）。
  * - 验证过的两个模型（提示词、引用格式、工具调用实测过）排最前；其他标"未验证"。
  * - 不挡 anthropic，但它不会被当成默认（第三方 harness 里走 API 按量计费）。
  */
@@ -35,8 +37,16 @@ export interface CatalogModel {
 /** Pi 模型对象里用到的字段。 */
 export interface PiModel { provider: string; id: string; name: string; input: readonly string[] }
 
-export function billingOf(credentialType: string | undefined): Billing {
-  return credentialType === "oauth" ? "订阅" : credentialType === "api_key" ? "按量计费" : "未知";
+/** 一个登录过的 provider：登录方式、OAuth 是不是订阅、按凭据过滤模型。 */
+export interface ProviderInfo {
+  credentialType: string;
+  isSubscription?: boolean;
+  filter?: <M extends PiModel>(models: M[]) => readonly M[];
+}
+
+export function billingOf(provider: string, info: ProviderInfo): Billing {
+  if (provider === "anthropic" || info.credentialType === "api_key") return "按量计费";
+  return info.credentialType === "oauth" && info.isSubscription === true ? "订阅" : "未知";
 }
 
 /** 想要的档位模型不支持时，取最近的一档；两边一样近取低的。模型不支持思考时是 off。 */
@@ -47,19 +57,26 @@ export function nearestThinking(want: Thinking, supported: readonly string[]): T
   return ok.reduce((best, l) => (Math.abs(at(l) - at(want)) < Math.abs(at(best) - at(want)) ? l : best));
 }
 
-export function buildCatalog(
-  models: readonly PiModel[],
-  credentialType: (provider: string) => string | undefined,
-  levels: (m: PiModel) => readonly string[],
+/** providerInfo 返回 undefined 表示没在 pi 里登录：它的模型不列。 */
+export function buildCatalog<M extends PiModel>(
+  models: readonly M[],
+  providerInfo: (provider: string) => ProviderInfo | undefined,
+  levels: (m: M) => readonly string[],
 ): CatalogModel[] {
   const rank = (id: string) => (VERIFIED.includes(id) ? VERIFIED.indexOf(id) : VERIFIED.length);
-  return models
-    .filter((m) => credentialType(m.provider) !== undefined)
-    .map((m) => {
+  const providers = [...new Set(models.map((m) => m.provider))];
+  return providers
+    .flatMap((p) => {
+      const info = providerInfo(p);
+      if (!info) return [];
+      const own = models.filter((m) => m.provider === p);
+      return (info.filter ? info.filter(own) : own).map((m) => ({ m, info }));
+    })
+    .map(({ m, info }) => {
       const id = `${m.provider}/${m.id}`;
       return {
         id, provider: m.provider, name: m.name,
-        billing: billingOf(credentialType(m.provider)),
+        billing: billingOf(m.provider, info),
         verified: VERIFIED.includes(id),
         image: m.input.includes("image"),
         thinking: THINKING_LEVELS.filter((l) => levels(m).includes(l)),
@@ -68,14 +85,10 @@ export function buildCatalog(
     .sort((a, b) => rank(a.id) - rank(b.id) || a.id.localeCompare(b.id));
 }
 
-/** 没设置过模型时的初始值：pi 的默认模型（能用、不是 anthropic），否则 Codex。 */
+/** 没设置过模型时的初始值：pi 的默认模型（能用、而且是订阅），否则 Codex。按量计费的不悄悄用。 */
 export function initialModel(list: readonly CatalogModel[], piDefault: string | undefined): string {
   const m = list.find((x) => x.id === piDefault);
-  return m && m.provider !== "anthropic" ? m.id : DEFAULT_MODEL;
-}
-
-export function piCredentialType(provider: string, authPath?: string): string | undefined {
-  return readStoredCredential(provider, authPath)?.type;
+  return m && m.billing === "订阅" ? m.id : DEFAULT_MODEL;
 }
 
 /** pi 里设的默认模型（~/.pi/agent/settings.json），读不到就是 undefined。 */
@@ -93,15 +106,26 @@ export interface ModelCatalog {
   list(): Promise<CatalogModel[]>;
 }
 
-/** 真实清单：模型目录建一次；登录状态每次现查（在 pi 里刚登录完，刷新页面就生效）。 */
+/**
+ * 真实清单：模型目录在启动时建一次（pi 里更新了模型目录，要重启工作台）；
+ * 登录状态每次现查（在 pi 里刚登录完，刷新页面就生效）。
+ */
 export function piCatalog(authPath?: string): ModelCatalog {
   let runtime: Promise<ModelRuntime> | null = null;
   return {
     async list() {
-      runtime ??= ModelRuntime.create();
+      runtime ??= ModelRuntime.create().catch((err) => { runtime = null; throw err; }); // 失败了下次重试
       const rt = await runtime;
-      return buildCatalog(rt.getModels(), (p) => piCredentialType(p, authPath),
-        (m) => getSupportedThinkingLevels(m as Parameters<typeof getSupportedThinkingLevels>[0]));
+      return buildCatalog(rt.getModels(), (id) => {
+        const credential = readStoredCredential(id, authPath);
+        if (!credential) return undefined;
+        const p = rt.getProvider(id);
+        return {
+          credentialType: credential.type,
+          isSubscription: p?.auth.oauth?.isSubscription,
+          filter: p?.filterModels ? (ms) => p.filterModels!(ms as any, credential) as any : undefined,
+        };
+      }, (m) => getSupportedThinkingLevels(m));
     },
   };
 }

@@ -173,19 +173,24 @@ describe("设置", () => {
     await page.close();
   }, 30_000);
 
-  test("服务端是旧版本（没有语音选项）时，设置照样能打开，并提示重启", async () => {
+  test("服务端是旧版本（pull 了新页面、旧进程还在跑）：设置照样能打开，提示重启，不显示 undefined", async () => {
     const { page, errors } = await open(async (p) => {
-      await p.route("**/api/settings", async (route) => {
-        const res = await route.fetch();
-        const body = await res.json();
-        delete body.voices;
-        body.settings = { model: body.settings.model, dataSource: body.settings.dataSource };
-        await route.fulfill({ response: res, json: body });
-      });
+      // main 上旧服务端真实返回的样子：两个写死的模型，没有 provider、思考程度、effective
+      await p.route("**/api/settings", (route) => route.fulfill({ json: {
+        settings: { model: "openai-codex/gpt-6.1-sol", dataSource: "polygon", voiceAnalyst: "zh-CN-YunxiNeural", voiceAdvisor: "zh-CN-XiaoxiaoNeural", autoSpeak: false },
+        models: [
+          { id: "openai-codex/gpt-6.1-sol", label: "Codex · gpt-6.1-sol", billing: "订阅", note: "", authHint: "", ready: true },
+          { id: "deepseek/deepseek-flash", label: "DeepSeek · deepseek-flash", billing: "按量计费", note: "", authHint: "", ready: true },
+        ],
+        dataSources: [{ id: "polygon", label: "Polygon / Massive", note: "" }, { id: "yfinance", label: "yfinance", note: "" }],
+        voices: [{ id: "zh-CN-YunxiNeural", label: "云希", gender: "男", note: "" }],
+      } }));
     });
     await page.click("#settings-btn");
     await expect(page.isVisible("#settings-panel")).resolves.toBe(true);
-    expect(await page.textContent("#settings-panel")).toContain("重启");
+    const text = await page.textContent("#settings-panel");
+    expect(text).toContain("重启");
+    expect(text).not.toContain("undefined");
     expect(errors).toEqual([]);
     await page.close();
   }, 30_000);
