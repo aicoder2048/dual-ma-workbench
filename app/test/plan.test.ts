@@ -259,7 +259,7 @@ describe("每份计划都有止损和失效（判断错了的标志）", () => {
         const stop = items.find((i) => i.label === "止损");
         const wrong = items.find((i) => i.label === "失效");
         expect({ k, stop: !!stop, wrong: !!wrong }).toEqual({ k, stop: true, wrong: true });
-        expect(wrong!.text).toMatch(/\d+\.\d{2}|0\.6/); // 失效要带价位（过渡态带的是分数门槛）
+        expect(wrong!.text).toMatch(/\d+\.\d{2}/); // 失效要带价位
         expect(items.some((i) => i.label === "离场")).toBe(false); // 硬离场就叫止损，不另起一条
         // 顺序：时机 → 盈亏 → …… → 止损 → 失效 → 仓位
         const idx = LABEL_ORDER.map((l) => items.findIndex((i) => i.label === l)).filter((i) => i >= 0);
@@ -279,7 +279,7 @@ describe("所有打法：价位相对现价说对", () => {
       const texts = [...Object.values(p).flatMap((x) => [x.action, ...x.items.map((i) => i.text)]),
         ...Object.values(o.effect).map((e) => e.text), o.verdict, o.change];
       for (const t of texts) {
-        for (const m of t.matchAll(/(站上|反弹到|高于|回踩到|跌破)[^。；，：]*?(\d+\.\d{2})/g)) {
+        for (const m of t.matchAll(/(站上|反弹到|高于|回踩到|跌破|收紧到)[^。；，：]*?(\d+\.\d{2})/g)) {
           const price = Number(m[2]);
           const up = ["站上", "反弹到", "高于"].includes(m[1]);
           expect({ t, ok: up ? price > a.close : price < a.close }).toEqual({ t, ok: true });
@@ -316,12 +316,12 @@ describe("止损和失效的内容来自 playbooks", () => {
 });
 
 /** 改均线排布和方向：20/60 两对的上下（1 在上、-1 在下）、EMA20 方向。 */
-function shaped(trend: string, score: number, o: { r2060: -1 | 0 | 1; ema20Dir: -1 | 0 | 1; close?: number }): Analysis {
+function shaped(trend: string, score: number, o: { r2060: -1 | 0 | 1; ema20Dir: -1 | 0 | 1; close?: number; emaRel?: -1 | 0 | 1 }): Analysis {
   const a = structuredClone(bear);
   a.trend = trend;
   a.close = o.close ?? a.close;
   a.lean = { ...a.lean, score, conflict: null,
-    pairs: a.lean.pairs.map((x) => (x.pair === "MA20/MA60" || x.pair === "EMA20/EMA60" ? { ...x, rel: o.r2060 } : x)),
+    pairs: a.lean.pairs.map((x) => (x.pair === "MA20/MA60" ? { ...x, rel: o.r2060 } : x.pair === "EMA20/EMA60" ? { ...x, rel: o.emaRel ?? o.r2060 } : x)),
     dirs: { ...a.lean.dirs, EMA20: o.ema20Dir } };
   return a;
 }
@@ -390,4 +390,44 @@ describe("空仓「不做」的计划，看方向不说「机会 / 买点」", (
       expect(buildOutlook(a).effect.flat.text).not.toMatch(/机会|买点/); // 顺风在减弱那一支
     });
   }
+});
+
+describe("只成立一半的条件也照实说（第二轮审查）", () => {
+  test("横盘：MA20 已在 MA60 下方、EMA20 贴着 EMA60（即将死叉）→ 也按横盘破位离场", () => {
+    const p = buildPlans(shaped("横盘震荡", 0, { r2060: -1, emaRel: 0, ema20Dir: -1 }));
+    expect(p.holding.action).toContain("离场");
+  });
+  test("横盘：两对都在上方 → 照旧拿着", () => {
+    expect(buildPlans(shaped("横盘震荡", 0, { r2060: 1, ema20Dir: 1 })).holding.action).toBe("拿着，但守住底线。");
+  });
+  test("过渡态分数接近 0：失效也带价位，分数不显示 -0.00", () => {
+    const a = shaped("过渡态（排列或方向不一致）", -1e-17, { r2060: 1, ema20Dir: 1 });
+    a.lean.flips = [];
+    const w = label(buildPlans(a).flat, "失效");
+    expect(w).toMatch(/\d+\.\d{2}/);
+    expect(w).not.toContain("-0.00");
+  });
+  test("反弹受压、已在 MA60 上方：止损不再说「没到减仓位」", () => {
+    const a = shaped("过渡态（排列或方向不一致）", 0.4, { r2060: -1, ema20Dir: 1, close: 230 });
+    a.lean = { ...a.lean, conflict: "反弹受压" };
+    expect(label(buildPlans(a).holding, "止损")).not.toContain("没到减仓位");
+  });
+  test("健康上涨空仓、价格已在 MA20 抵扣价下方：不说「仍在抵扣价上方」，止损先说别买", () => {
+    const a = shaped("健康上涨", 0.8, { r2060: 1, ema20Dir: 1, close: 200 }); // 夹具 MA20 抵扣价 212.21
+    const p = buildPlans(a);
+    expect(label(p.flat, "等什么")).not.toContain("仍在");
+    expect(label(p.flat, "止损")).toContain("先别买");
+  });
+  test("过渡态空仓、20/60 已经金叉：等什么不再说「升到 60 线组上方」", () => {
+    const p = buildPlans(shaped("过渡态（排列或方向不一致）", 0.4, { r2060: 1, ema20Dir: 1 }));
+    expect(label(p.flat, "等什么")).not.toContain("升到");
+  });
+});
+
+test("顺风、明天起 MA20 就扣高值：时机行不说「第 1 天前…买点窗口」", () => {
+  const a = bullish();
+  a.drops = a.drops.map((d) => (d.period === 20 ? { ...d, path: d.path.map((p) => ({ ...p, close: 999 })) } : d));
+  const o = buildOutlook(a);
+  expect(o.effect.flat.text).not.toMatch(/第 1 天|买点窗口/);
+  expect(o.effect.holding.text).not.toContain("第 1 天");
 });
