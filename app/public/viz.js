@@ -62,7 +62,7 @@ function leanFlips(l, close) {
   const verb = l.score < 0 ? "站上" : "跌破";
   const rows = l.flips.filter((f) => !f.line.endsWith("120")).map((f) => {
     const what = f.line.startsWith("EMA") ? f.line : `${f.line} 扣价`;
-    const role = f.line.startsWith("EMA") ? `${f.line} 先拐（第 1 个动作）` : `过了底扣价，${f.line} 跟着拐（第 2 个动作）`;
+    const role = f.line.startsWith("EMA") ? `${f.line} 先拐（第 1 个动作）` : `过了抵扣价，${f.line} 跟着拐（第 2 个动作）`;
     const dist = (f.price / close - 1) * 100;
     return `<li class="${f.crossed ? "crossed" : ""}" ${tip(f.text)}>
         <span class="fv">${f.crossed ? "已" : ""}${verb} ${what}</span>
@@ -164,7 +164,7 @@ export function trendTable(v) {
 
 // ---------- 3. 看方向 ----------
 /**
- * 底扣价小多图：每条 MA 一张，横轴是未来第 1–10 天，纵轴价格（三张共用）。
+ * 抵扣价小多图：每条 MA 一张，横轴是未来第 1–10 天，纵轴价格（三张共用）。
  * 中线 = 现价；棒棒糖从现价伸到当天要扣的价格：在上方 = 扣高值（MA 往下拉），在下方 = 扣低值（MA 往上抬）。
  */
 export function dropMultiples(v, opts = {}) {
@@ -191,7 +191,7 @@ export function dropMultiples(v, opts = {}) {
     return `<figure class="viz drop">
       <div class="drop-head"><b><i class="sw" style="--c: var(--ma${d.period})"></i>MA${d.period}</b>
         <span>扣高 <b class="bearish">${high}</b> · 扣低 <b class="bullish">${d.below}</b></span></div>
-      <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="MA${d.period} 未来 ${n} 天的底扣价">
+      <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="MA${d.period} 未来 ${n} 天的抵扣价">
         <line x1="${L}" x2="${W - R}" y1="${cy}" y2="${cy}" class="mid"/>
         <text x="${L}" y="${d.below * 2 >= n ? cy - 4 : cy + 11}" class="tick">现价 ${f2(v.close)}</text>
         ${sticks}
@@ -214,7 +214,7 @@ export function projectionFlow(v) {
   return `<div class="flow">
       <div class="node"><div class="nk">① 假设</div><div class="nv">价格停在 <b class="num">${f2(v.close)}</b><br>${p.days} 个交易日</div></div>
       <div class="edge">→</div>
-      <div class="node"><div class="nk">② 底扣价决定方向</div><ul class="proj">${rows(p.ma)}</ul><ul class="proj ema">${rows(p.ema)}</ul></div>
+      <div class="node"><div class="nk">② 抵扣价决定方向</div><ul class="proj">${rows(p.ma)}</ul><ul class="proj ema">${rows(p.ema)}</ul></div>
       <div class="edge">→</div>
       <div class="node"><div class="nk">③ 排列</div><div class="nv">MA：${arr(p.arrNow.ma, p.arrAfter.ma)}<br>EMA：${arr(p.arrNow.ema, p.arrAfter.ema)}</div></div>
     </div>`;

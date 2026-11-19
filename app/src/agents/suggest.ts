@@ -47,7 +47,7 @@ export function ruleSuggestions(a: Analysis, asof: string | null = null): Sugges
 
   const ma60 = line(60).ma, ma120 = line(120).ma;
   const advisor: Suggestion[] = [
-    { text: `底扣价怎么推演？用 ${T} 的 MA20 举个例子`, intent: "复习概念" },
+    { text: `抵扣价怎么推演？用 ${T} 的 MA20 举个例子`, intent: "复习概念" },
     Math.abs(ma60 / ma120 - 1) < 0.01
       ? { text: "MA60 和 MA120 快交叉了，什么叫双交叉？", intent: "复习概念" }
       : { text: "什么叫双交叉？为什么只看一组不够？", intent: "复习概念" },
@@ -82,7 +82,7 @@ const PROMPT = `你为"双均线工作台"生成可点击的问题按钮。只�
  "advisor":[{"text":"…","intent":"复习概念"}, …3 条]}
 要求：
 - analyst 是问"分析师"的：围绕这只股票当前最值得关心的点（例如即将发生的交叉、哪条均线快拐头、扣高值还是扣低值、能不能加仓/抄底），四种 intent 各一条，回放练习可以用这只股票的历史日期或视频案例 "回放 TSLA 2021-04-14"。
-- advisor 是问"鸿雁"的概念题：从当前数据里挑出用户最可能看不懂的概念（例如底扣价、双交叉、乖离分位、排列混乱），用当前数据举例。
+- advisor 是问"鸿雁"的概念题：从当前数据里挑出用户最可能看不懂的概念（例如抵扣价、双交叉、乖离分位、排列混乱），用当前数据举例。
 - 每条不超过 30 个字，口语化，具体，不要重复，不要出现"投资建议"。`;
 
 export class Suggester {

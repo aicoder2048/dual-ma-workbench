@@ -130,7 +130,7 @@ def test_flat_series_has_no_lean():
 def test_flip_levels_name_what_would_change_a_bearish_read():
     a = dma.analyze(make_df([float(i) for i in range(300, 100, -1)]), "TEST", "synthetic")
     flips = {f["line"]: f["price"] for f in a["lean"]["flips"]}
-    # 偏空时：收盘站上 EMA20（EMA20 先拐）、站上 MA20 明天的底扣价（MA20 后拐）
+    # 偏空时：收盘站上 EMA20（EMA20 先拐）、站上 MA20 明天的抵扣价（MA20 后拐）
     assert flips["EMA20"] == pytest.approx(a["lines"][0]["ema"])
     assert flips["MA20"] == pytest.approx(a["drops"][0]["tomorrow"])
 

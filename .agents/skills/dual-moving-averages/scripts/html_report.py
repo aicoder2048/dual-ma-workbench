@@ -216,7 +216,7 @@ footer {{ font-size: 12px; color: var(--muted); display: grid; gap: 4px; }}
   <section class="card" aria-label="K 线与均线">
     <div class="legend" id="legend"></div>
     <div id="chart"><p class="caption">图表加载中……如果一直不出现，说明图表库没能从 CDN 加载。</p></div>
-    <p class="caption"><span class="dot"></span> 小黄点 = 明天各条 MA 要扣掉的那根 K 线（底扣价）。今天收盘高于它，那条 MA 明天上升；低于它就下降。实线为 MA，虚线为 EMA。</p>
+    <p class="caption"><span class="dot"></span> 小黄点 = 明天各条 MA 要扣掉的那根 K 线（抵扣价）。今天收盘高于它，那条 MA 明天上升；低于它就下降。实线为 MA，虚线为 EMA。</p>
   </section>
 
   <div class="steps">
@@ -239,7 +239,7 @@ footer {{ font-size: 12px; color: var(--muted); display: grid; gap: 4px; }}
       {_bullets(c.get('strategy'))}
     </section>
     <section class="card step">
-      <h2>看方向 <span>底扣价推演</span></h2>
+      <h2>看方向 <span>抵扣价推演</span></h2>
       <div class="tbl"><table>
         <thead><tr><th></th><th>明天扣</th><th>明天</th><th>扣低值</th><th>价不变时</th><th>首次扣低</th></tr></thead>
         <tbody>{drop_rows}</tbody></table></div>

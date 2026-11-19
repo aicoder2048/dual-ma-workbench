@@ -21,7 +21,7 @@ export function sourceTools(library: SourceLibrary): ToolDefinition[] {
     name: "search_sources",
     label: "查原文",
     description: "在方法论引用库里按关键词搜原文片段，返回片段编号、标题和摘要。引用前不确定编号时先搜。",
-    parameters: Type.Object({ query: Type.String({ description: "关键词，如 底扣价 公式、双交叉、极度超卖" }) }),
+    parameters: Type.Object({ query: Type.String({ description: "关键词，如 抵扣价 公式、双交叉、极度超卖" }) }),
     async execute(_id: string, p: { query: string }) {
       const hits = library.search(p.query, 6);
       if (!hits.length) return text(`没有找到和"${p.query}"相关的原文片段。`);

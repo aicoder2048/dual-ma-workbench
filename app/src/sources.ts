@@ -32,26 +32,26 @@ export const SOURCE_DOCS: SourceDoc[] = [
   { code: "concepts", title: "概念速查", path: `${SKILL}/references/concepts.md` },
   { code: "cases", title: "视频案例", path: `${SKILL}/references/cases.md` },
   { code: "playbook", title: "打法细则", path: `${SKILL}/references/playbooks.md` },
-  { code: "dropoff", title: "底扣价学习笔记", path: "study-notes/261118-ma-drop-off-price.md" },
+  { code: "dropoff", title: "抵扣价学习笔记", path: "study-notes/261118-ma-drop-off-price.md" },
   { code: "ta01", title: "TA01 均线实战要点", path: "docs/moving-averages/TA01-MA-Practical-Essentials.md" },
   { code: "ta15", title: "TA15 用均线判断趋势与震荡", path: "docs/moving-averages/TA15-Trend-Summary-from-MA.md" },
   { code: "memo", title: "用户看片笔记", path: "memo/模糊正确.md" },
 ];
 
 /**
- * 公开仓库不含转载内容（学习文章、底扣价笔记、TA 笔记、看片笔记）。
+ * 公开仓库不含转载内容（学习文章、抵扣价笔记、TA 笔记、看片笔记）。
  * 这些文件不在时，报告和提示词里写死的引用改指 skill 自带的同主题片段。原文在时不生效。
  */
 export const FALLBACK: Record<string, string> = {
   "article#1": "concepts#底层逻辑",
   "article#2.2": "concepts#两种均线",
-  "article#2.3": "concepts#底扣价",
+  "article#2.3": "concepts#抵扣价",
   "article#2.7": "concepts#标志性动作与构造",
   "article#3.2": "concepts#趋势生命周期",
   "article#4": "concepts#五种趋势类型",
   "article#7.3": "playbook#仓位",
-  "dropoff#定义与公式": "concepts#底扣价",
-  "dropoff#示例": "concepts#底扣价",
+  "dropoff#定义与公式": "concepts#抵扣价",
+  "dropoff#示例": "concepts#抵扣价",
 };
 
 export interface Chunk {
@@ -67,7 +67,7 @@ export interface Chunk {
 }
 
 const HEADING = /^(#{1,3})\s+(.+?)\s*$/;
-// "2.3 底扣价" 或 "1. 双均线是干什么的"；不匹配 "2020 年的例子"
+// "2.3 抵扣价" 或 "1. 双均线是干什么的"；不匹配 "2020 年的例子"
 const SECTION_NO = /^(\d+\.\d+(?:\.\d+)*|\d+)\.?\s+(?=\D)/;
 const DOTTED_OR_DOT = /^(\d+\.\d+(?:\.\d+)*\s|\d+\.\s)/;
 

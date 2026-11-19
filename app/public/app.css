@@ -34,7 +34,7 @@
   --hi: #2c2614; --shadow: none;
   color-scheme: dark;
 }
-/* 水墨：宣纸底、墨色字；MA20 墨、MA60 朱砂、MA120 黛青，底扣价用藤黄 */
+/* 水墨：宣纸底、墨色字；MA20 墨、MA60 朱砂、MA120 黛青，抵扣价用藤黄 */
 :root[data-theme="ink"] {
   --bg: #ebe4d6; --panel: #f3eee3; --card: #fbf8f1; --fg: #1f1c18; --muted: #6e665a; --faint: #9a917f; --line: #d6cdbb; --grid: #ebe4d5;
   --accent: #9e2b20; --accent-soft: #f1e1d8; --on-accent: #fbf8f1;

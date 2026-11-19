@@ -1,7 +1,7 @@
 // 把含 [[S:编号]] / [[D:字段]] 的 Markdown 渲染成 HTML，引用变成可点开的标签。
 const DOC_SHORT = {
   article: "文章", skill: "流程", concepts: "概念", cases: "案例",
-  dropoff: "底扣价笔记", ta01: "TA01", ta15: "TA15", memo: "看片笔记",
+  dropoff: "抵扣价笔记", ta01: "TA01", ta15: "TA15", memo: "看片笔记",
 };
 
 let sourceIndex = new Map(); // id → { id, doc, heading }

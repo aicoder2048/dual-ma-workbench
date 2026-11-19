@@ -117,14 +117,14 @@ export function buildFacts(a: Analysis): Facts {
   }
   for (const d of a.drops) {
     const n = d.period;
-    put(`扣${n}.明天`, `MA${n} 明天的底扣价`, `${f2(d.tomorrow)}（明天 MA${n} ${d.direction}）`);
-    put(`扣${n}.均值`, `MA${n} 未来 ${d.count} 天底扣价均值`, f2(d.mean));
-    put(`扣${n}.最高`, `MA${n} 未来 ${d.count} 天底扣价最高`, f2(d.max));
-    put(`扣${n}.扣低天数`, `MA${n} 未来 ${d.count} 天里底扣价低于现价的天数`, `${d.below}/${d.count}`);
+    put(`扣${n}.明天`, `MA${n} 明天的抵扣价`, `${f2(d.tomorrow)}（明天 MA${n} ${d.direction}）`);
+    put(`扣${n}.均值`, `MA${n} 未来 ${d.count} 天抵扣价均值`, f2(d.mean));
+    put(`扣${n}.最高`, `MA${n} 未来 ${d.count} 天抵扣价最高`, f2(d.max));
+    put(`扣${n}.扣低天数`, `MA${n} 未来 ${d.count} 天里抵扣价低于现价的天数`, `${d.below}/${d.count}`);
     put(`扣${n}.价平变化`, `价格不变时 ${d.count} 天后 MA${n} 的变化`, pct(d.ma_flat_change_pct));
     put(`扣${n}.首次扣低`, `MA${n} 第几天首次扣到低于现价`, d.first_low ? `第 ${d.first_low} 天` : `${n} 天内都不会`);
   }
-  // 价格保持不变时的推演（MA 由底扣价推出；EMA 用精确公式）
+  // 价格保持不变时的推演（MA 由抵扣价推出；EMA 用精确公式）
   const p = project(a);
   for (const [k, v] of [...Object.entries(p.ma), ...Object.entries(p.ema)]) {
     put(`推演.${k}`, `价格不变 ${p.days} 天后的 ${k}`, `${f2(v.now)} → ${f2(v.after)}`);

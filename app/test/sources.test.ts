@@ -6,7 +6,7 @@ import { chunkMarkdown, FALLBACK, PROJECT_ROOT, queryTerms, sectionKey, SOURCE_D
 const DOC: SourceDoc = { code: "t", title: "测试文档", path: "t.md", skip: ["跳过"] };
 
 describe("sectionKey", () => {
-  test("带点的章节号", () => expect(sectionKey("2.3 底扣价")).toBe("2.3"));
+  test("带点的章节号", () => expect(sectionKey("2.3 抵扣价")).toBe("2.3"));
   test("一级章节号", () => expect(sectionKey("1. 双均线是干什么的")).toBe("1"));
   test("年份不是章节号", () => expect(sectionKey("2020 年的例子：一个死叉")).toBe("2020年的例子"));
   test("取冒号前、去括号", () => expect(sectionKey("第 1 步：看大局（现在是什么趋势）")).toBe("第1步"));
@@ -44,8 +44,8 @@ describe.skipIf(!HAS_PRIVATE)("SourceLibrary（本地完整资料，公开仓库
   test("不收录 skill 的操作说明章节", () => {
     expect(lib.chunks.some((c) => c.doc === "skill" && c.heading.includes("网页报告"))).toBe(false);
   });
-  test("搜索底扣价公式能命中定义片段", () => {
-    const ids = lib.search("底扣价的公式").map((r) => r.chunk.id);
+  test("搜索抵扣价公式能命中定义片段", () => {
+    const ids = lib.search("抵扣价的公式").map((r) => r.chunk.id);
     expect(ids).toContain("dropoff#定义与公式");
   });
   test("搜索双交叉命中讲两组算法的片段", () => {
@@ -55,7 +55,7 @@ describe.skipIf(!HAS_PRIVATE)("SourceLibrary（本地完整资料，公开仓库
 });
 
 test("queryTerms：英文按词，中文按二字组", () => {
-  expect(queryTerms("MA20 底扣价")).toEqual(["ma20", "底扣", "扣价"]);
+  expect(queryTerms("MA20 抵扣价")).toEqual(["ma20", "抵扣", "扣价"]);
 });
 
 describe("公开版：转载内容不在仓库里", () => {
@@ -76,9 +76,9 @@ describe("公开版：转载内容不在仓库里", () => {
   test("替代只在原文缺失时生效", () => {
     const full = SourceLibrary.load();
     if (full.chunks.some((c) => c.doc === "article")) expect(full.get("article#2.3")!.doc).toBe("article");
-    expect(publicLib.get("article#2.3")!.id).toBe("concepts#底扣价");
+    expect(publicLib.get("article#2.3")!.id).toBe("concepts#抵扣价");
   });
   test("目录里列出替代条目，前端不会把它标红", () => {
-    expect(publicLib.index().some((e) => e.id === "article#2.3" && e.aliasOf === "concepts#底扣价")).toBe(true);
+    expect(publicLib.index().some((e) => e.id === "article#2.3" && e.aliasOf === "concepts#抵扣价")).toBe(true);
   });
 });

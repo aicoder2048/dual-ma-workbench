@@ -115,7 +115,7 @@ describe("HTTP", () => {
   });
   test("/api/source 读原文片段", async () => {
     const body = await (await get(`/api/source?id=${encodeURIComponent("article#2.3")}`)).json();
-    expect(body.heading).toContain("底扣价");
+    expect(body.heading).toContain("抵扣价");
   });
   test("自选股增删", async () => {
     const add = await get("/api/watchlist", { method: "POST", body: JSON.stringify({ ticker: "amd" }) });

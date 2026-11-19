@@ -2,7 +2,7 @@
  * 规则版三步报告：完全由脚本的分析结果生成，不经过 LLM。
  *
  * 两部分：
- * - visual：给前端画图用的结构化数据（均线状态、价位梯子、乖离分位、交叉表、趋势判定表、底扣价路径、推演）。
+ * - visual：给前端画图用的结构化数据（均线状态、价位梯子、乖离分位、交叉表、趋势判定表、抵扣价路径、推演）。
  * - steps[].items：按 ASD-STE100 简明中文写的短句，一句一事，每句带引用。
  */
 import type { Analysis, Lean } from "./citations.ts";
@@ -59,7 +59,7 @@ export const TREND_TABLE: { type: string; look: string; play: string[] }[] = [
   { type: "极度超买", look: "多头排列，价格远离均线", play: ["不追，只看不做。", "有仓位就分批止盈，或上移止损。"] },
   { type: "健康下跌", look: "空头排列，都向下", play: ["不抄底。", "反弹到均线附近，减仓或离场。"] },
   { type: "极度超卖", look: "空头排列，价格远离均线", play: ["不抢反弹。", "均线理顺成多头排列前，不买。"] },
-  { type: "过渡态", look: "排列混乱，或方向不一致", play: ["条件不满足，就不做。", "看底扣价：均线多久能理顺。", "中长期线压着反弹时，反弹多半是假动作。"] },
+  { type: "过渡态", look: "排列混乱，或方向不一致", play: ["条件不满足，就不做。", "看抵扣价：均线多久能理顺。", "中长期线压着反弹时，反弹多半是假动作。"] },
 ];
 
 export const shortTrend = (t: string) => t.replace("（排列或方向不一致）", "");
@@ -82,7 +82,7 @@ function arrangementOf(values: number[]): string {
   return "混乱";
 }
 
-/** 价格保持不变 days 天后的均线。MA 由底扣价推出；EMA 有精确解：EMA' = c + (EMA − c)(1 − α)^days。 */
+/** 价格保持不变 days 天后的均线。MA 由抵扣价推出；EMA 有精确解：EMA' = c + (EMA − c)(1 − α)^days。 */
 export function project(a: Analysis, days = 10): Projection {
   const c = a.close;
   const ma: Projection["ma"] = {};
@@ -182,7 +182,7 @@ export function buildReport(a: Analysis): Report {
   direction.push(
     `价格不变 ${p.days} 天后：MA 排列 ${p.arrAfter.ma} [[D:推演.排列.MA]]，EMA 排列 ${p.arrAfter.ema} [[D:推演.排列.EMA]]。`,
     `价格不变 ${p.days} 天后，模糊判断是${nameOf(ln.after)} [[D:模糊判断.10天后]]。`,
-    "收盘价高于底扣价，MA 就上升 [[S:article#2.3]]。推演链：底扣价 → 方向 → 排列 [[S:skill#第3步]]。",
+    "收盘价高于抵扣价，MA 就上升 [[S:article#2.3]]。推演链：抵扣价 → 方向 → 排列 [[S:skill#第3步]]。",
   );
 
   return {
@@ -191,7 +191,7 @@ export function buildReport(a: Analysis): Report {
     steps: [
       { key: "big_picture", title: "看大局", subtitle: "现在是什么趋势", items: big },
       { key: "strategy", title: "定策略", subtitle: "该怎么做", items: strategy },
-      { key: "direction", title: "看方向", subtitle: "底扣价推演", items: direction },
+      { key: "direction", title: "看方向", subtitle: "抵扣价推演", items: direction },
     ],
     visual: {
       close: a.close,

@@ -72,7 +72,7 @@ describe("可视化数据", () => {
     const cur = report.visual.trendTable.filter((r) => r.current).map((r) => r.type);
     expect(cur).toEqual(["极度超卖"]);
   });
-  test("底扣价路径每条 10 天", () => {
+  test("抵扣价路径每条 10 天", () => {
     expect(report.visual.drops.map((d) => d.path.length)).toEqual([10, 10, 10]);
   });
 });

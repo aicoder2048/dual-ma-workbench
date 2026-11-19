@@ -38,6 +38,6 @@ describe("selectionLabel", () => {
   test("划选文字", () => expect(selectionLabel({ kind: "text", where: "看方向", text: "扣高值" })).toBe("「看方向」扣高值"));
   test("点图表", () => {
     expect(selectionLabel({ kind: "chart", time: "2026-10-22", drops: [20], candle: { close: 180 } }))
-      .toBe("图表 2026-10-22 · MA20 的底扣价 · 收 180.00");
+      .toBe("图表 2026-10-22 · MA20 的抵扣价 · 收 180.00");
   });
 });

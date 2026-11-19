@@ -222,7 +222,7 @@ function renderAssistant(el, body, entry, agent) {
   }
   el.querySelector(".who")?.appendChild(speakButton(agent, entry.text));
   renderRich(body, entry.text, entry.book);
-  enhance(body); // 表格由 Markdown 直接渲染；流程图、迷你 K 线、底扣价小图异步画出
+  enhance(body); // 表格由 Markdown 直接渲染；流程图、迷你 K 线、抵扣价小图异步画出
   const bad = entry.checks.filter((c) => !c.ok).length;
   const total = entry.checks.length;
   const foot = document.createElement("div");

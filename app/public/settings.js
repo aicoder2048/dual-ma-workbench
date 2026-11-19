@@ -10,7 +10,7 @@ export const currentSettings = () => view?.settings ?? null;
 
 const PREVIEW = {
   voiceAnalyst: "我是分析师。现在六条均线都向下，明显偏空。收盘站上 EMA20，才是第一个转折信号。",
-  voiceAdvisor: "我是鸿雁。底扣价就是均线明天要扣掉的那天收盘价。收盘价高于它，均线就往上走。",
+  voiceAdvisor: "我是鸿雁。抵扣价就是均线明天要扣掉的那天收盘价。收盘价高于它，均线就往上走。",
 };
 
 export const shortModel = (id) => String(id ?? "").split("/").pop();

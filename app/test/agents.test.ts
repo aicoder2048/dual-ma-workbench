@@ -74,8 +74,8 @@ describe("工具", () => {
   });
   test("search_sources：结果带可直接引用的编号", async () => {
     const [search] = sourceTools(library) as any[];
-    const res = await search.execute("id", { query: "底扣价 公式" });
-    // 本地有底扣价笔记时命中笔记，公开仓库里命中概念速查
+    const res = await search.execute("id", { query: "抵扣价 公式" });
+    // 本地有抵扣价笔记时命中笔记，公开仓库里命中概念速查
     expect(res.content[0].text).toContain(`[[S:${library.get("dropoff#定义与公式")!.id}]]`);
   });
 });
@@ -84,7 +84,7 @@ describe("提示词", () => {
   test("分析师提示里有 skill 方法论和引用库目录", () => {
     const p = analystPrompt(library);
     expect(p).toContain("[[S:skill#原则]]");
-    expect(p).toContain("- concepts#底扣价：");
+    expect(p).toContain("- concepts#抵扣价：");
     expect(p).not.toContain("网页报告");
   });
   test("鸿雁提示强调先查原文", () => expect(advisorPrompt(library)).toContain("search_sources"));
@@ -97,7 +97,7 @@ describe("提示词", () => {
   });
   test("图表点选：标出小黄点", () => {
     const d = describeSelection({ kind: "chart", time: "2026-10-21", lines: { MA20: 210.5 }, drops: [20] });
-    expect(d).toContain("MA20 要扣掉的底扣价");
+    expect(d).toContain("MA20 要扣掉的抵扣价");
   });
   test("鸿雁上下文包含数据清单和划选文字", () => {
     const c = advisorContext({ analysis, facts: buildFacts(analysis) }, { kind: "text", text: "MA60 每天大约掉 1.19" });

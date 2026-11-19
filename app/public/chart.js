@@ -1,4 +1,4 @@
-// K 线 + 6 条均线 + 底扣价小黄点 + 成交量（TradingView lightweight-charts 4.2.0）。
+// K 线 + 6 条均线 + 抵扣价小黄点 + 成交量（TradingView lightweight-charts 4.2.0）。
 const SPECS = [];
 [20, 60, 120].forEach((n) => ["MA", "EMA"].forEach((k) =>
   SPECS.push({ key: k + n, token: `--${k.toLowerCase()}${n}`, dashed: k === "EMA", width: k === "MA" ? 2 : 1 })));

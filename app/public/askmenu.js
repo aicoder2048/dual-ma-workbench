@@ -48,7 +48,7 @@ export function cardQuestions(card, analysis, visual) {
     add(p.arrNow.ma !== p.arrAfter.ma, `价格不变 ${p.days} 天，MA 排列为什么会从${p.arrNow.ma}变成${p.arrAfter.ma}？`);
     add(p.arrNow.ma === p.arrAfter.ma, `价格不变 ${p.days} 天，MA 排列为什么还是${p.arrAfter.ma}？`);
     add(true, "棒棒糖图怎么读？在现价上方和下方有什么区别？");
-    add(true, "EMA 没有底扣价，推演公式是什么？");
+    add(true, "EMA 没有抵扣价，推演公式是什么？");
   }
   return qs.slice(0, 5);
 }
@@ -62,7 +62,7 @@ export function cardContext(card, analysis) {
 export function selectionLabel(sel) {
   if (sel.kind === "text") return `${sel.where ? `「${sel.where}」` : ""}${sel.text}`;
   if (sel.kind === "view") return `「${sel.what}」${sel.detail ? ` · ${sel.detail}` : ""}`;
-  return `图表 ${sel.time}${sel.drops?.length ? ` · MA${sel.drops.join("/MA")} 的底扣价` : ""}${sel.candle ? ` · 收 ${sel.candle.close.toFixed(2)}` : ""}`;
+  return `图表 ${sel.time}${sel.drops?.length ? ` · MA${sel.drops.join("/MA")} 的抵扣价` : ""}${sel.candle ? ` · 收 ${sel.candle.close.toFixed(2)}` : ""}`;
 }
 
 // ---------- 浏览器 ----------

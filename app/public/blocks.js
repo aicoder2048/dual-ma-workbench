@@ -1,4 +1,4 @@
-// agent 回答里的可视化代码块：mermaid（流程图）、dma-chart（迷你 K 线图）、dma-drops（底扣价小多图）。
+// agent 回答里的可视化代码块：mermaid（流程图）、dma-chart（迷你 K 线图）、dma-drops（抵扣价小多图）。
 // parseBlockSpec 是纯函数，bun test 直接测；enhance 在浏览器里把代码块换成图。
 import { dropMultiples } from "./viz.js";
 

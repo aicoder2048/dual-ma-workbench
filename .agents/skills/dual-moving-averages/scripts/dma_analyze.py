@@ -6,7 +6,7 @@
 #     "yfinance",  # 只在 Polygon 不可用时作为回退数据源
 # ]
 # ///
-"""双均线分析：MA + EMA（默认 20/60/120），底扣价推演，趋势类型初判。
+"""双均线分析：MA + EMA（默认 20/60/120），抵扣价推演，趋势类型初判。
 
 用法：
   uv run dma_analyze.py TSLA
@@ -44,7 +44,7 @@ FLAT_SLOPE_PCT = 0.05       # 日均变化 < 0.05% 视为走平（3 点钟）
 STEEP_SLOPE_PCT = 0.5       # 20 线日均变化 > 0.5% 视为陡峭（1 点钟方向）
 TANGLE_SPREAD_PCT = 4.0     # 三条 MA 最大最小差 / 价格 < 4% 视为缠绕
 EXTREME_PCTL = 0.95         # 20 线乖离率处于自身历史 95% 分位以上 = 大幅乖离
-PROJECT_DAYS = 10           # 底扣价推演天数
+PROJECT_DAYS = 10           # 抵扣价推演天数
 VOLUME_SPIKE = 2.0          # 成交量 > 50 日均量 2 倍 = 大量
 ORDER_TIE_PCT = 0.5         # 两条线相差 < 价格的 0.5% 视为"贴在一起"，不算上下
 LEAN_DIR_WEIGHT = 0.6       # 模糊判断：方向占 60%，排布占 40%
@@ -211,12 +211,12 @@ def last_cross(df: pd.DataFrame, kind: str, fast: int, slow: int) -> str:
 
 
 def drop_off(df: pd.DataFrame, n: int) -> dict:
-    """MA(n) 的底扣价推演。明天要扣的是 close[-n]，第 k 天扣 close[-n+k-1]。"""
+    """MA(n) 的抵扣价推演。明天要扣的是 close[-n]，第 k 天扣 close[-n+k-1]。"""
     close = df["Close"]
     c = close.iloc[-1]
     future = close.iloc[-n:-n + PROJECT_DAYS] if n > PROJECT_DAYS else close.iloc[-n:]
     below = int((future < c).sum())
-    # 未来 n 天内，底扣价第一次低于现价是第几天（视频里"约 12 个交易日后扣到低值区"）
+    # 未来 n 天内，抵扣价第一次低于现价是第几天（视频里"约 12 个交易日后扣到低值区"）
     all_future = close.iloc[-n:].reset_index(drop=True)
     hits = all_future[all_future < c]
     first_low = int(hits.index[0]) + 1 if len(hits) else None
@@ -231,7 +231,7 @@ def drop_off(df: pd.DataFrame, n: int) -> dict:
         "count": len(future),
         "first_low": first_low,
         "ma_flat_change_pct": (ma_flat / ma_now - 1) * 100,
-        # 未来每天要扣的那根 K 线（日期 + 收盘价），网页画底扣价小图用
+        # 未来每天要扣的那根 K 线（日期 + 收盘价），网页画抵扣价小图用
         "path": [{"date": str(d.date()), "close": float(v)} for d, v in future.items()],
     }
 
@@ -291,7 +291,7 @@ def flip_levels(a_lines: list[dict], drops: list[dict], score: float, close: flo
     out = []
     for ln, d in zip(a_lines, drops):
         n = ln["period"]
-        for line, price, what in ((f"EMA{n}", ln["ema"], f"EMA{n}"), (f"MA{n}", d["tomorrow"], f"MA{n} 的底扣价")):
+        for line, price, what in ((f"EMA{n}", ln["ema"], f"EMA{n}"), (f"MA{n}", d["tomorrow"], f"MA{n} 的抵扣价")):
             crossed = close > price if up else close < price
             text = (f"已经{verb} {what}（{price:.2f}）：{line} {turn}拐的力量已出现" if crossed
                     else f"收盘{verb} {what}（{price:.2f}），{line} 拐头{turn}")
@@ -316,7 +316,7 @@ STRATEGY = {
     "极度超买": "不追，只看不做。有仓位分批止盈或上移止损，等回落后重新组织均线。",
     "健康下跌": "不抄底。反弹到均线附近是减仓/离场机会。",
     "极度超卖": "不抢反弹。均线理顺成多头排列前不买。",
-    "过渡态（排列或方向不一致）": "条件不满足就不做。看底扣价推演：均线能否在合理时间内理顺？反弹若被中长期线压着多半是假动作。",
+    "过渡态（排列或方向不一致）": "条件不满足就不做。看抵扣价推演：均线能否在合理时间内理顺？反弹若被中长期线压着多半是假动作。",
 }
 
 LEAN_PLAY = {
@@ -326,7 +326,7 @@ LEAN_PLAY = {
     "偏空": "空头略占上风：不买；有仓位就在反弹时减仓。",
     "明显偏空": "顺着空头看：不抄底，反弹到均线附近是离场机会。",
     # 方向和排布打架时，优先用这两条
-    "反弹受压": "中长期线压着反弹（20 线组还在 60 线组下方），多半是假动作：不买，有仓位逢高减。用底扣价算 20 线组多久能站上 60 线组。",
+    "反弹受压": "中长期线压着反弹（20 线组还在 60 线组下方），多半是假动作：不买，有仓位逢高减。用抵扣价算 20 线组多久能站上 60 线组。",
     "回调有撑": "短期回调，但 20 线组仍在 60 线组上方，结构还是多头：持有观察，不在急跌里卖；20/60 双死叉才算结构坏。",
 }
 
@@ -344,11 +344,11 @@ def partial_bar_warning(last_bar: pd.Timestamp, now: datetime | None = None) -> 
         return None
     return (f"今日 K 线未完成（美东 {now:%H:%M}，收盘 16:00，数据可能延迟 15 分钟）。"
             "“收盘价”其实是盘中价格，结论相当于“假如今天收在这里”。"
-            "底扣价比较、均线方向、交叉都可能在收盘前变化，下结论请等美东 16:15 后重跑。")
+            "抵扣价比较、均线方向、交叉都可能在收盘前变化，下结论请等美东 16:15 后重跑。")
 
 
 def lean_after(values: dict[str, float], drops: list[dict], close: float) -> dict:
-    """价格停在现价 PROJECT_DAYS 天后的模糊判断。MA 由底扣价推出，EMA 用精确解。"""
+    """价格停在现价 PROJECT_DAYS 天后的模糊判断。MA 由抵扣价推出，EMA 用精确解。"""
     days = PROJECT_DAYS
     after, slopes = {}, {}
     for d in drops:
@@ -445,15 +445,15 @@ def render_markdown(a: dict) -> str:
                    + (", ".join(a["volume"]["spikes"]) or "无"))
     out += ["", f"**初判趋势类型：{a['trend']}**（启发式，需看图确认）", "",
             "## 2) 定策略", "", a["strategy"], "",
-            f"## 3) 看方向：底扣价推演（未来 {PROJECT_DAYS} 天）", "",
-            "| MA | 明天底扣价 | 明天 MA 方向（价格不变） | 未来扣价均值 | 未来扣价最高 | 低于现价的天数 | 价格不变时 MA 变化 | 第几天首次扣到低于现价 |",
+            f"## 3) 看方向：抵扣价推演（未来 {PROJECT_DAYS} 天）", "",
+            "| MA | 明天抵扣价 | 明天 MA 方向（价格不变） | 未来扣价均值 | 未来扣价最高 | 低于现价的天数 | 价格不变时 MA 变化 | 第几天首次扣到低于现价 |",
             "|---|---|---|---|---|---|---|---|"]
     for d in a["drops"]:
         first = f"第 {d['first_low']} 天" if d["first_low"] else f"{d['period']} 天内都不会"
         out.append(f"| {d['period']} | {d['tomorrow']:.2f} | {d['direction']} | {d['mean']:.2f} | {d['max']:.2f} | "
                    f"{d['below']}/{d['count']} | {d['ma_flat_change_pct']:+.2f}% | {first} |")
     out += ["",
-            "读法：底扣价低于现价 = 扣低值，股价不跌均线就上翘；高于现价 = 扣高值，股价要涨过它均线才不跌。",
+            "读法：抵扣价低于现价 = 扣低值，股价不跌均线就上翘；高于现价 = 扣高值，股价要涨过它均线才不跌。",
             "“价格不变时 MA 变化”= 假设收盘价一直停在现价，推演期末 MA 相对今天的涨跌。"]
     return "\n".join(out)
 

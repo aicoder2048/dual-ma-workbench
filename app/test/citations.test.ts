@@ -22,7 +22,7 @@ describe("buildFacts", () => {
     expect(facts["日期"].value).toBe("2026-11-18");
     expect(facts["MA20"].value).toBe("189.04");
   });
-  test("底扣价字段", () => {
+  test("抵扣价字段", () => {
     expect(facts["扣20.扣低天数"].value).toBe("0/10");
     expect(facts["扣20.首次扣低"].value).toBe("20 天内都不会");
     expect(facts["扣20.价平变化"].value).toBe("-15.61%");
@@ -45,7 +45,7 @@ describe("validateCitations", () => {
   test("存在的编号通过，并带上标题或数值", () => {
     const [s, d] = validateCitations("[[S:article#2.3]] [[D:MA60]]", lib, facts);
     expect(s.ok).toBe(true);
-    expect(s.title).toContain("底扣价");
+    expect(s.title).toContain("抵扣价");
     expect(d.ok && d.value).toBe("212.35");
   });
   test("不存在的编号标为失败", () => {
