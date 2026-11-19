@@ -156,6 +156,7 @@ export class Workbench {
       }
       return;
     }
+    this.view = { ticker, asof }; // 先记下：取数期间到的提问也按新票，不沿用上一个（可能是失败的）视图
     const r = await this.analyzer.analyze(ticker, asof);
     if (seq !== this.viewSeq) return;
     const a = r.analysis;

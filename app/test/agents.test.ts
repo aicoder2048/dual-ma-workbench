@@ -184,6 +184,14 @@ describe("Workbench", () => {
     expect(sent.filter((e) => e.type === "suggestions").every((e) => e.items.length === 0)).toBe(true);
     await wb.handle(client, JSON.stringify({ type: "prompt", agent: "analyst", text: "现在能买吗" }));
     expect(prompt).toContain("ANT");
+    expect(prompt).not.toContain("NVDA");
+
+    // 失败后切回一只好票：还在取数时就提问，上下文已经是新票，不再说"取数失败"
+    const loading = wb.handle(client, JSON.stringify({ type: "view", ticker: "TSLA", asof: null }));
+    await wb.handle(client, JSON.stringify({ type: "prompt", agent: "analyst", text: "现在能买吗" }));
+    await loading;
+    expect(prompt).toContain("TSLA");
+    expect(prompt).not.toContain("取数失败");
   });
   test("坏消息不崩溃", async () => {
     const wb = new Workbench(fakeAnalyzer(), library, { settings: tmpSettings(), suggester: { suggest: async () => null } });
