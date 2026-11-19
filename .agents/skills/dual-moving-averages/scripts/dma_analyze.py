@@ -283,7 +283,7 @@ def analyze(df: pd.DataFrame, label: str, src: str) -> dict:
     trend = classify(arr_ma, arr_ema, slopes, spread_pct, bias_pctl)
 
     lines = [{"period": n, "ma": float(row[f"MA{n}"]), "ema": float(row[f"EMA{n}"]),
-              "above": c > row[f"MA{n}"], "slope": slopes[n],
+              "above": bool(c > row[f"MA{n}"]), "slope": slopes[n],
               "clock": clock(slopes[n]), "ema_clock": clock(ema_slopes[n])} for n in PERIODS]
     crosses = [{"pair": f"{fast}/{slow}", "ma": last_cross(df, "MA", fast, slow),
                 "ema": last_cross(df, "EMA", fast, slow)} for fast, slow in ((20, 60), (60, 120))]
@@ -356,6 +356,8 @@ def main() -> None:
     p.add_argument("--env-file", help="含 POLYGON_API_KEY 的 .env 路径")
     p.add_argument("--html", help="另外生成网页报告到这个路径（.html）")
     p.add_argument("--commentary", help="点评 JSON（格式见 html_report.py），放进网页报告")
+    p.add_argument("--json", action="store_true",
+                   help="改为输出 JSON：{analysis, chart}，给网页工作台和 agent 工具用")
     a = p.parse_args()
     if not a.ticker and not a.csv:
         p.error("需要 ticker 或 --csv")
@@ -364,6 +366,12 @@ def main() -> None:
     df, src = load_prices(a.ticker, a.csv, a.asof, a.env_file, a.source)
     df = add_indicators(df)
     result = analyze(df, (a.ticker or a.csv).upper() if a.ticker else a.csv, src)
+    if a.json:
+        from html_report import chart_data
+
+        print(json.dumps({"analysis": result, "chart": chart_data(df, result)},
+                         ensure_ascii=False, allow_nan=False))
+        return
     print(render_markdown(result))
     if a.html:
         from html_report import load_commentary, render_html

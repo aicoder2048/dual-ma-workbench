@@ -53,7 +53,7 @@ def _bullets(items: list[str] | None, cls: str = "notes") -> str:
     return f'<ul class="{cls}">' + "".join(f"<li>{_t(i)}</li>" for i in items) + "</ul>"
 
 
-def _chart_data(df: pd.DataFrame, a: dict) -> dict:
+def chart_data(df: pd.DataFrame, a: dict) -> dict:
     view = df.tail(CHART_BARS)
     dates = [d.strftime("%Y-%m-%d") for d in view.index]
 
@@ -81,7 +81,7 @@ def render_html(a: dict, df: pd.DataFrame, commentary: dict | None = None) -> st
     headline = c.get("headline") or a["trend"]
     summary = c.get("summary") or a["strategy"]
     chg_cls = "up" if a["change_pct"] >= 0 else "down"
-    chart_json = json.dumps(_chart_data(df, a), ensure_ascii=False).replace("</", "<\\/")
+    chart_json = json.dumps(chart_data(df, a), ensure_ascii=False).replace("</", "<\\/")
 
     line_rows = "".join(
         f"<tr><th>{ln['period']}</th><td>{ln['ma']:.2f}</td><td>{ln['ema']:.2f}</td>"
