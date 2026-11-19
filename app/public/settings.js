@@ -11,7 +11,7 @@ export function paintModelBadges(settings) {
   const m = view?.models.find((x) => x.id === settings.model);
   document.querySelectorAll("[data-model-badge]").forEach((el) => {
     el.textContent = shortModel(settings.model);
-    el.className = `model-badge ${m?.billing === "按量计费" ? "metered" : "sub"}`;
+    el.classList.toggle("metered", m?.billing === "按量计费");
     el.title = m ? `${m.label} · ${m.billing}` : settings.model;
   });
 }
@@ -43,6 +43,10 @@ function render() {
 }
 
 /** onDataSourceChange：数据源变了以后重新取数。 */
+let openPanel = () => {};
+/** 顶栏状态胶囊点了也打开设置。 */
+export const openSettings = () => openPanel();
+
 export async function initSettings({ onDataSourceChange }) {
   const btn = $("settings-btn");
   const panel = $("settings-panel");
@@ -51,10 +55,11 @@ export async function initSettings({ onDataSourceChange }) {
 
   const open = () => { render(); panel.hidden = false; btn.setAttribute("aria-expanded", "true"); };
   const close = () => { panel.hidden = true; btn.setAttribute("aria-expanded", "false"); };
+  openPanel = open;
   btn.addEventListener("click", () => (panel.hidden ? open() : close()));
   document.addEventListener("keydown", (e) => e.key === "Escape" && close());
   document.addEventListener("mousedown", (e) => {
-    if (!panel.hidden && !e.target.closest("#settings-panel, #settings-btn")) close();
+    if (!panel.hidden && !e.target.closest("#settings-panel, #settings-btn, [data-open-settings]")) close();
   });
   panel.addEventListener("click", (e) => e.target.closest(".close") && close());
 

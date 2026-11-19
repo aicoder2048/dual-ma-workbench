@@ -11,7 +11,7 @@
 </head>
 <body>
 
-<!-- 顶栏 -->
+<!-- 顶栏：只放全局的东西 -->
 <header class="appbar">
   <div class="brand">
     <div class="logo" aria-hidden="true"><i></i><i></i><b></b></div>
@@ -21,24 +21,12 @@
     </div>
   </div>
 
-  <form id="load-form" class="search" autocomplete="off" role="search">
-    <label class="seg seg-ticker">
-      <svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5 14 14"/></svg>
-      <input id="load-ticker" placeholder="股票代码" maxlength="15" aria-label="股票代码" list="ticker-options" spellcheck="false">
-    </label>
-    <datalist id="ticker-options"></datalist>
-    <label class="seg seg-date" title="回放某一天的收盘；留空为最新行情">
-      <span class="seg-k">回放</span>
-      <input id="load-asof" type="text" placeholder="最新行情" aria-label="回放日期（留空为最新行情）" inputmode="numeric">
-      <button type="button" id="asof-clear" class="seg-x" aria-label="清除回放日期" hidden>×</button>
-    </label>
-    <button type="submit" class="seg-go">分析</button>
-  </form>
-
   <div class="appbar-right">
-    <div class="data-status" id="data-status" title="数据状态">—</div>
-    <button type="button" id="settings-btn" class="icon-btn" aria-label="设置：大模型、市场数据" aria-expanded="false" aria-controls="settings-panel" title="设置">
-      <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="2.6"/><path d="M10 1.8v2.4M10 15.8v2.4M1.8 10h2.4M15.8 10h2.4M4.2 4.2l1.7 1.7M14.1 14.1l1.7 1.7M4.2 15.8l1.7-1.7M14.1 5.9l1.7-1.7"/></svg>
+    <button type="button" class="status-pill" id="data-status" data-open-settings title="市场数据（点击修改）">
+      <span class="dot"></span><span class="pill-k">数据</span><span class="pill-v" id="data-status-v">—</span>
+    </button>
+    <button type="button" class="status-pill" id="model-status" data-open-settings title="大模型（点击修改）">
+      <span class="pill-k">模型</span><span class="pill-v" data-model-badge>—</span>
     </button>
     <div class="theme-seg" id="theme" role="radiogroup" aria-label="主题">
       <button type="button" role="radio" data-value="" title="跟随系统">自动</button>
@@ -46,20 +34,26 @@
       <button type="button" role="radio" data-value="dark" title="深色">深</button>
       <button type="button" role="radio" data-value="ink" title="水墨">墨</button>
     </div>
+    <button type="button" id="settings-btn" class="settings-btn" aria-label="设置：大模型、市场数据" aria-expanded="false" aria-controls="settings-panel">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
+      <span>设置</span>
+    </button>
   </div>
 </header>
 
 <div class="shell">
 
-  <!-- 左栏：自选股 -->
+  <!-- 左栏：找股票 + 自选股 -->
   <aside class="panel left" aria-label="自选股">
-    <div class="panel-head"><b>自选股</b><span>规则初判，不经过 AI</span></div>
-    <ul id="watchlist" class="watchlist"></ul>
-    <form id="wl-add" class="wl-add" autocomplete="off">
-      <input id="wl-input" placeholder="添加代码，如 AMD" maxlength="15" aria-label="添加自选股">
-      <button type="submit" aria-label="添加">＋</button>
+    <form id="load-form" class="search" autocomplete="off" role="search">
+      <svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5 14 14"/></svg>
+      <input id="load-ticker" placeholder="搜索代码，回车查看" maxlength="15" aria-label="搜索股票代码" list="ticker-options" spellcheck="false">
+      <datalist id="ticker-options"></datalist>
+      <kbd>↵</kbd>
     </form>
-    <p class="left-foot">学习与复盘用，不是投资建议。</p>
+    <div class="panel-head sub"><b>自选股</b><span>标签是规则初判</span></div>
+    <ul id="watchlist" class="watchlist"></ul>
+    <p class="left-foot">在中栏标题旁点 ☆ 加入自选。<br>学习与复盘用，不是投资建议。</p>
   </aside>
 
   <div class="splitter" id="split-left" role="separator" aria-orientation="vertical" aria-label="拖动调整自选股栏宽度" tabindex="0"><span class="grip"></span></div>
@@ -69,8 +63,16 @@
     <div class="center-scroll" id="center-scroll">
       <section class="hero">
         <div class="hero-title">
-          <div class="eyebrow" id="meta-line">选择一只股票开始</div>
-          <h1><span id="ticker">—</span></h1>
+          <div class="title-row">
+            <h1 id="ticker">—</h1>
+            <button type="button" id="star" class="star" aria-pressed="false" title="加入自选" hidden>☆ 自选</button>
+          </div>
+          <div class="asof" title="回放某一天的收盘；留空为最新行情">
+            <svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><rect x="2.5" y="3.5" width="11" height="10" rx="1.5"/><path d="M2.5 6.5h11M5.5 2v3M10.5 2v3"/></svg>
+            <input id="load-asof" type="text" placeholder="最新行情" aria-label="回放日期（留空为最新行情）">
+            <button type="button" id="asof-clear" class="seg-x" aria-label="回到最新行情" title="回到最新行情" hidden>×</button>
+            <span class="asof-hint" id="meta-line"></span>
+          </div>
         </div>
         <div class="kpis" id="kpis"></div>
       </section>
@@ -78,7 +80,9 @@
       <div id="verdict" class="verdict" hidden></div>
 
       <section class="card chart-card">
-        <div class="card-head"><h2>日线 · 6 条均线 · 底扣价</h2><div class="legend" id="legend"></div></div>
+        <div class="card-head"><h2>日线 · 6 条均线 · 底扣价</h2>
+          <button type="button" class="ask-card" data-ask-card="chart" aria-haspopup="menu">问参谋</button></div>
+        <div class="legend" id="legend"></div>
         <div id="chart" class="chart"><p class="caption">加载中……</p></div>
         <p class="caption">小黄点：明天各条 MA 要扣掉的 K 线（底扣价）。黄色量柱：成交量超过 50 日均量 2 倍。点图表上任一天，可以问参谋。</p>
       </section>
@@ -86,15 +90,21 @@
       <section class="steps" id="steps"></section>
 
       <section class="thread-wrap">
-        <div class="thread-head"><b>分析师</b><span class="model-badge" data-model-badge></span><span>问这只股票的状态、打法、拐头时间，或回放历史</span><button id="analyst-reset" type="button" class="ghost">新对话</button></div>
+        <div class="thread-head"><b>和分析师的对话</b></div>
         <section class="thread" id="analyst-thread" aria-live="polite"></section>
       </section>
     </div>
 
-    <div class="composer" id="analyst-composer">
+    <div class="composer role-analyst" id="analyst-composer">
+      <div class="role-bar">
+        <span class="avatar" aria-hidden="true">析</span>
+        <b>分析师</b><span class="role-desc">判断这只股票：状态、打法、何时拐头、回放练习</span>
+        <span class="model-chip" data-model-badge></span>
+        <button id="analyst-reset" type="button" class="ghost">新对话</button>
+      </div>
       <div class="chips" id="analyst-chips"></div>
       <form class="ask" id="analyst-form">
-        <textarea id="analyst-input" rows="1" placeholder="问分析师：用双均线看看 NVDA / 现在能加仓吗 / 60 日线什么时候拐头 / 回放 TSLA 2021-04-14" disabled></textarea>
+        <textarea id="analyst-input" rows="1" placeholder="例如：现在能加仓吗？60 日线什么时候拐头？回放 TSLA 2021-04-14" disabled></textarea>
         <button type="submit" id="analyst-send" disabled>发送</button>
       </form>
     </div>
@@ -104,10 +114,7 @@
 
   <!-- 右栏：均线参谋 -->
   <aside class="panel right" aria-label="均线参谋">
-    <div class="panel-head">
-      <b>均线参谋</b><span class="model-badge" data-model-badge></span><span>讲概念 · 解读划选 · 有出处</span>
-      <button id="advisor-reset" type="button" class="ghost">新对话</button>
-    </div>
+    <div class="panel-head"><b>和参谋的对话</b><span>讲概念、解读你划选的内容，句句有出处</span></div>
     <div class="right-scroll" id="advisor-scroll">
       <div class="empty" id="advisor-empty">
         <p>在中栏<b>划选一段文字</b>，或<b>点一下图表</b>。然后点「问参谋」。</p>
@@ -115,11 +122,17 @@
       </div>
       <section class="thread" id="advisor-thread" aria-live="polite"></section>
     </div>
-    <div class="composer">
+    <div class="composer role-advisor">
+      <div class="role-bar">
+        <span class="avatar" aria-hidden="true">参</span>
+        <b>均线参谋</b><span class="role-desc">讲概念、解读划选</span>
+        <span class="model-chip" data-model-badge></span>
+        <button id="advisor-reset" type="button" class="ghost">新对话</button>
+      </div>
       <div class="chips" id="advisor-chips"></div>
       <div class="context-pill" id="advisor-context" hidden></div>
       <form class="ask" id="advisor-form">
-        <textarea id="advisor-input" rows="1" placeholder="问均线参谋：什么叫双交叉？" disabled></textarea>
+        <textarea id="advisor-input" rows="1" placeholder="例如：什么叫双交叉？" disabled></textarea>
         <button type="submit" id="advisor-send" disabled>发送</button>
       </form>
     </div>
@@ -130,6 +143,7 @@
 <div id="popover" class="popover" role="dialog" hidden></div>
 <div id="viz-tip" class="viz-tip" role="tooltip" hidden></div>
 <button id="ask-advisor" class="ask-float" type="button" hidden>问参谋</button>
+<div id="ask-menu" class="ask-menu" role="menu" hidden></div>
 
 <script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>

@@ -91,6 +91,9 @@ describe("提示词", () => {
     expect(analystContext({ ticker: "NVDA", asof: null })).toContain("NVDA，最新行情");
     expect(analystContext({ ticker: "TSLA", asof: "2021-04-14" })).toContain("回放日期 2021-04-14");
   });
+  test("卡片入口：告诉参谋用户在看哪张卡", () => {
+    expect(describeSelection({ kind: "view", what: "3. 看方向", detail: "NVDA 2026-11-18" })).toContain("「3. 看方向」（NVDA 2026-11-18）");
+  });
   test("图表点选：标出小黄点", () => {
     const d = describeSelection({ kind: "chart", time: "2026-10-21", lines: { MA20: 210.5 }, drops: [20] });
     expect(d).toContain("MA20 要扣掉的底扣价");

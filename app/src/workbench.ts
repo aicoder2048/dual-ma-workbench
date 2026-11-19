@@ -163,9 +163,10 @@ export class Workbench {
     } else {
       this.advisorBook = null;
     }
-    const context = selection
-      ? selection.kind === "text" ? `划选：${selection.text.slice(0, 80)}${selection.text.length > 80 ? "…" : ""}` : `图表：${selection.time}`
-      : undefined;
+    const context = !selection ? undefined
+      : selection.kind === "text" ? `划选：${selection.text.slice(0, 80)}${selection.text.length > 80 ? "…" : ""}`
+      : selection.kind === "view" ? `来自卡片：${selection.what}`
+      : `图表：${selection.time}`;
     await this.advisor.prompt(`${advisorContext(snapshot, selection)}\n\n【问题】${text}`, { role: "user", text, context });
   }
 }

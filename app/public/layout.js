@@ -86,8 +86,8 @@ export function initSplitters() {
   addEventListener("resize", () => { set("left", widths.left); set("right", widths.right); });
 }
 
-/** 回放日期：空的时候显示"最新行情"，聚焦时换成原生日期选择器。 */
-export function initAsofInput() {
+/** 回放日期：空的时候显示"最新行情"，聚焦时换成原生日期选择器；选定日期立即回放，× 回到最新。 */
+export function initAsofInput({ onChange }) {
   const input = $("load-asof");
   const clear = $("asof-clear");
   const sync = () => { clear.hidden = !input.value; };
@@ -99,12 +99,15 @@ export function initAsofInput() {
     if (!input.value) input.type = "text";
     sync();
   });
-  input.addEventListener("input", sync);
+  input.addEventListener("change", () => {
+    sync();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(input.value)) onChange(input.value);
+  });
   clear.addEventListener("click", () => {
     input.value = "";
     input.type = "text";
     sync();
-    $("load-ticker").focus();
+    onChange(null);
   });
   return { sync };
 }

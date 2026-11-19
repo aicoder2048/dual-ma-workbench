@@ -111,9 +111,13 @@ export function analystContext(page: { ticker: string | null; asof: string | nul
 
 export type Selection =
   | { kind: "text"; text: string; where?: string }
+  | { kind: "view"; what: string; detail?: string }
   | { kind: "chart"; time: string; candle?: { open: number; high: number; low: number; close: number }; lines: Record<string, number | undefined>; drops: number[] };
 
 export function describeSelection(sel: Selection): string {
+  if (sel.kind === "view") {
+    return `用户正在看中栏的「${sel.what}」${sel.detail ? `（${sel.detail}）` : ""}，从这张卡片右上角发起提问。请结合这张卡显示的内容回答。`;
+  }
   if (sel.kind === "text") return `用户划选了${sel.where ? `「${sel.where}」里的` : ""}这段文字：\n"""${sel.text.slice(0, 1200)}"""`;
   const lines = Object.entries(sel.lines).filter(([, v]) => v != null).map(([k, v]) => `${k}=${(v as number).toFixed(2)}`).join("，");
   const c = sel.candle;

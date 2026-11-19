@@ -4,7 +4,8 @@ import { createChart } from "./chart.js";
 import { installCitationHandlers, loadSourceIndex, renderInline } from "./cite.js";
 import { initAsofInput, initSplitters } from "./layout.js";
 import { initSelection } from "./selection.js";
-import { applyRemoteSettings, initSettings } from "./settings.js";
+import { initAskMenu } from "./askmenu.js";
+import { applyRemoteSettings, initSettings, openSettings } from "./settings.js";
 import { installTips, stepVisuals } from "./viz.js";
 
 const $ = (id) => document.getElementById(id);
@@ -19,6 +20,7 @@ export const onAnalysis = (cb) => listeners.add(cb);
 
 let chartApi = null;
 let asofUi = null;
+let advisorSuggestions = [];
 export const getChart = () => chartApi;
 
 async function api(path, init) {
@@ -31,8 +33,12 @@ async function api(path, init) {
 // ---------- 自选股 ----------
 const summaries = new Map();
 
+let wlItems = [];
+
 async function refreshWatchlist() {
   const items = await api("/api/watchlist");
+  wlItems = items;
+  paintStar();
   $("ticker-options").innerHTML = items.map((t) => `<option value="${t}">`).join("");
   const ul = $("watchlist");
   ul.innerHTML = "";
@@ -92,19 +98,6 @@ $("watchlist").addEventListener("keydown", (e) => {
   if (li && e.key === "Enter") loadAnalysis(li.dataset.ticker, null);
 });
 
-$("wl-add").addEventListener("submit", async (e) => {
-  e.preventDefault();
-  const t = $("wl-input").value.trim();
-  if (!t) return;
-  try {
-    await api("/api/watchlist", { method: "POST", body: JSON.stringify({ ticker: t }) });
-    $("wl-input").value = "";
-    refreshWatchlist();
-  } catch (err) {
-    alertInline(err.message);
-  }
-});
-
 // ---------- 指标行：收盘 / 趋势 / 乖离 / 量比 ----------
 function renderKpis(a) {
   const sign = (x, d = 2) => `${x >= 0 ? "+" : ""}${x.toFixed(d)}`;
@@ -142,15 +135,16 @@ export function showAnalysis(data, asof = null) {
   location.hash = asof ? `${a.label}@${asof}` : a.label;
 
   $("ticker").textContent = a.label;
-  $("meta-line").textContent = asof ? `回放 · 以 ${a.date} 收盘为准` : `${a.date} 收盘`;
-  $("load-ticker").value = a.label;
+  $("meta-line").textContent = asof ? "回放：只用这一天及以前的数据" : `${a.date} 收盘`;
   $("load-asof").value = asof ?? "";
   $("load-asof").type = asof ? "date" : "text";
+  $("load-asof").closest(".asof").classList.toggle("replay", Boolean(asof));
   asofUi?.sync();
+  paintStar();
   renderKpis(a);
   const status = $("data-status");
   status.classList.toggle("partial", Boolean(a.warning));
-  status.innerHTML = `<span class="dot"></span>${a.warning ? "盘中，K 线未完成" : `${a.date} 收盘`} · ${esc(a.source)}`;
+  $("data-status-v").textContent = `${a.source.replace("（复权日线）", "")} · ${a.warning ? "盘中" : a.date}`;
   status.title = a.warning ?? `数据来源：${a.source}`;
 
   const warn = $("warning");
@@ -174,7 +168,8 @@ export function showAnalysis(data, asof = null) {
     const sec = document.createElement("section");
     sec.className = "card step";
     sec.dataset.step = s.key;
-    sec.innerHTML = `<div class="step-head"><span class="no">${i + 1}</span><h2>${s.title}</h2><span>${s.subtitle}</span></div>
+    sec.innerHTML = `<div class="step-head"><span class="no">${i + 1}</span><h2>${s.title}</h2><span>${s.subtitle}</span>
+        <button type="button" class="ask-card" data-ask-card="${s.key}" aria-haspopup="menu">问参谋</button></div>
       <div class="step-viz">${stepVisuals(s.key, r.visual)}</div>
       <p class="points-title">要点（规则生成，点标签看出处）</p><ul class="points"></ul>`;
     const ul = sec.querySelector(".points");
@@ -195,8 +190,32 @@ export function showAnalysis(data, asof = null) {
 $("load-form").addEventListener("submit", (e) => {
   e.preventDefault();
   const t = $("load-ticker").value.trim();
-  if (t) loadAnalysis(t, $("load-asof").value || null);
+  if (t) loadAnalysis(t, null); // 搜索看最新行情；回放在中栏标题旁设置
+  $("load-ticker").value = "";
+  $("load-ticker").blur();
 });
+
+// ---------- 中栏标题：自选开关 ----------
+function paintStar() {
+  const star = $("star");
+  if (!state.ticker) return;
+  const on = wlItems.includes(state.ticker);
+  star.hidden = false;
+  star.setAttribute("aria-pressed", String(on));
+  star.textContent = on ? "★ 已自选" : "☆ 加入自选";
+  star.title = on ? "移出自选股" : "加入自选股";
+}
+$("star").addEventListener("click", async () => {
+  if (!state.ticker) return;
+  const on = wlItems.includes(state.ticker);
+  try {
+    await api("/api/watchlist", { method: on ? "DELETE" : "POST", body: JSON.stringify({ ticker: state.ticker }) });
+    refreshWatchlist();
+  } catch (err) {
+    alertInline(err.message);
+  }
+});
+document.querySelectorAll("[data-open-settings]").forEach((b) => b.addEventListener("click", () => openSettings()));
 
 function alertInline(message) {
   const warn = $("warning");
@@ -255,7 +274,9 @@ function initAgents() {
       case "text_delta": return p.delta(e.delta);
       case "tool": return p.tool(e);
       case "turn_end": return p.endTurn(e.entry);
-      case "suggestions": return p.suggestions(e.items, e.source);
+      case "suggestions":
+        if (e.agent === "advisor") advisorSuggestions = e.items;
+        return p.suggestions(e.items, e.source);
       case "error": return p.error(e.message);
     }
   });
@@ -288,7 +309,11 @@ async function main() {
   initTheme();
   installTips();
   initSplitters();
-  asofUi = initAsofInput();
+  asofUi = initAsofInput({ onChange: (d) => state.ticker && loadAnalysis(state.ticker, d) });
+  initAskMenu({
+    getState: () => state.data && { analysis: state.data.analysis, visual: state.data.report.visual, aiSuggestions: advisorSuggestions },
+    ask: (question, selection) => { setSelection(selection); panels.advisor.submit(question); },
+  });
   await initSettings({ onDataSourceChange: reloadAll });
   await loadSourceIndex(); // 先有原文目录，再回放对话记录，否则原文引用会被误判为找不到
   initAgents();
