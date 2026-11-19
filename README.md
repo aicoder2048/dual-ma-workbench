@@ -32,14 +32,36 @@
 
 需要：[uv](https://docs.astral.sh/uv/)（Python 脚本）和 [Bun](https://bun.sh)（工作台）。
 
-装了 [just](https://github.com/casey/just) 的话，`just wildgoose` 启动工作台，`just wildgoose 5179` 换端口（wild goose 就是大雁）。改了服务端代码（`app/src/`）会自动重启，前端文件刷新页面就生效；自动重启会清空两个 agent 的对话。改了 SKILL.md 或学习文章要手动重启，页面顶部会提示。
+### 1. 安装
 
 ```bash
-cp .env.example .env          # 填入 POLYGON_API_KEY；没有也能用 yfinance
+cp .env.example .env                       # 填入 POLYGON_API_KEY；没有也能用 yfinance
 cd app && bun install
+npm i -g @earendil-works/pi-coding-agent   # pi 命令行：只用来登录和选模型
+```
+
+### 2. 安装后第一步：在 Pi 里登录、设置模型
+
+不做这一步，分析师和鸿雁用不了。在项目目录运行 `pi`，然后：
+
+1. 输入 `/login`，登录 Codex（OpenAI 订阅）。要用 DeepSeek 的话，再登录 deepseek，填入你的 DeepSeek API key（按量计费）。授权存在 `~/.pi/agent/auth.json`。
+2. 输入 `/model`，选 `gpt-6.1-sol [openai-codex]`，按 **Ctrl+S** 设为默认。前面打勾、后面标 `default` 就对了：
+
+![在 pi 里用 /model 选 gpt-6.1-sol，按 Ctrl+S 设为默认](docs/images/pi-model.png)
+
+列表里的 `[anthropic]` 模型不要选：在 pi 这种第三方 harness 里用，走的是 Anthropic API 按量计费，不是 Claude 订阅。
+
+工作台自己只认两个模型（Codex 和 DeepSeek，见[模型和计费](#模型和计费)），在右上角「设置」里切换，不跟随 pi 的默认模型。在 pi 里设默认，是为了在这个目录直接开 `pi` 时也不会落到 anthropic 上。
+
+### 3. 启动
+
+```bash
+cd app
 bun start                     # http://127.0.0.1:5178
 bun test                      # 单元测试，不调用模型
 ```
+
+装了 [just](https://github.com/casey/just) 的话，`just wildgoose` 启动工作台，`just wildgoose 5179` 换端口（wild goose 就是大雁）。改了服务端代码（`app/src/`）会自动重启，前端文件刷新页面就生效；自动重启会清空两个 agent 的对话。改了 SKILL.md 或学习文章要手动重启，页面顶部会提示。
 
 ### 依赖 Pi 吗？
 
@@ -51,14 +73,7 @@ bun test                      # 单元测试，不调用模型
 | 工作台：图表、三步报告、自选股、设置 | 不依赖 | 没有 Pi 也能打开页面，正常使用 |
 | 工作台：分析师、鸿雁、AI 生成的问法 | 依赖 Pi SDK | `bun install` 自动安装 `@earendil-works/pi-coding-agent`，不需要另外装 |
 
-用 Codex 订阅（默认模型）时，还要先登录一次：
-
-```bash
-npm i -g @earendil-works/pi-coding-agent   # 只为登录用
-pi                                         # 在 pi 里登录 Codex、DeepSeek；授权存在 ~/.pi/agent/auth.json
-```
-
-选 DeepSeek 前，要先在 `pi` 里登录 deepseek（填入你的 DeepSeek API key）。工作台只认 pi 存的凭据，不读 `.env` 或环境变量里的 key。没登录时，设置面板会提示。
+`pi` 命令行只用来登录和选模型（见上面第 2 步）。工作台只认 pi 存的凭据，不读 `.env` 或环境变量里的 key。没登录时，设置面板会提示。
 
 想换掉 Pi 的话，只需要重写 `app/src/agents/host.ts`（创建会话、转发流式事件、注册工具）。工具、提示词、引用校验和前端都和 harness 无关。
 
@@ -75,7 +90,7 @@ uv run .agents/skills/dual-moving-averages/scripts/dma_analyze.py TSLA --asof 20
 
 | 模型 | 计费 | 说明 |
 |---|---|---|
-| `openai-codex/gpt-6.1-sol`（默认） | 订阅 | 需要先在 `pi` 里登录 Codex |
+| `openai-codex/gpt-6.1-sol`（默认） | 订阅 | 需要先在 `pi` 里登录 Codex（[第 2 步](#2-安装后第一步在-pi-里登录设置模型)） |
 | `deepseek/deepseek-flash` | **按量计费** | 需要先在 `pi` 里登录 DeepSeek |
 
 只允许这两个。`anthropic/*` 在第三方 harness 里会走 API 按量计费，工作台一律拒绝。
