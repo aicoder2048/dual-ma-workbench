@@ -90,7 +90,13 @@
         </div>
         <div class="kpis" id="kpis"></div>
       </section>
+      <div id="error" class="warn error" role="alert" hidden><span id="error-text"></span><button type="button" id="error-close" class="warn-x" aria-label="关闭">×</button></div>
       <div id="warning" class="warn" hidden><span id="warning-text"></span><button type="button" id="warning-close" class="warn-x" aria-label="关闭提醒" title="关闭（盘中提醒今天不再弹出）">×</button></div>
+      <section id="load-error" class="card load-error" role="alert" hidden>
+        <h2 id="load-error-title"></h2>
+        <p id="load-error-msg"></p>
+        <button type="button" id="load-error-retry">重试</button>
+      </section>
       <div id="verdict" class="verdict" hidden></div>
 
       <section class="card chart-card">
