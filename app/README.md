@@ -7,7 +7,7 @@ cd app && bun install     # 第一次
 bun start                 # 打开 http://127.0.0.1:5178
 bun test                  # 单元测试（不调模型）
 bun run e2e               # 端到端测试：真 Chrome（本机安装的），假行情、假语音
-python3 e2e/ctrl_c.py     # 在真终端里按 Ctrl+C：退出码 0、没有报错、终端模式恢复（从项目根目录跑）
+python3 e2e/ctrl_c.py     # 在真终端里按 Ctrl+C：退出码 0、没有报错、终端模式恢复
 ```
 
 - **设置**（右上角齿轮，存在 `data/settings.json`）：
