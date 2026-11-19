@@ -69,7 +69,9 @@ type L = ReturnType<typeof levels>;
 /** "收盘站上 X"；现价已经在 X 上方时说"已经在 X 上方"。 */
 const above = (l: L, name: string, x: number) => (l.close >= x ? `已经在 ${name} ${l.p(x)} 上方` : `收盘站上 ${name} ${l.p(x)}`);
 
-const BUY_TURN = (l: L) => `${above(l, "EMA20", l.ema20)}，EMA20 拐头向上；再${above(l, "MA20 抵扣价", l.drop20).replace(/^收盘/, "")}，MA20 跟着拐头。`;
+const BUY_TURN = (l: L) =>
+  (l.close >= l.ema20 ? `已经在 EMA20 ${l.p(l.ema20)} 上方，等 EMA20 拐头向上` : `收盘先站上 EMA20 ${l.p(l.ema20)}，EMA20 拐头向上`) + "；" +
+  (l.close >= l.drop20 ? `也已经在 MA20 抵扣价 ${l.p(l.drop20)} 上方，MA20 会跟着拐头。` : `再站上 MA20 抵扣价 ${l.p(l.drop20)}，MA20 跟着拐头。`);
 const SIZE: PlanItem = { label: "仓位", text: "盈亏影响心情，就是仓位太大，减到睡得着为止。" };
 const DEATH = (l: L) => l.death ? `20/60 已经双死叉（MA20、EMA20 都在 MA60 ${f2(l.ma60)}、EMA60 ${f2(l.ema60)} 下方）`
   : `20/60 双死叉（MA20 落到 MA60 ${f2(l.ma60)} 下方、EMA20 落到 EMA60 ${f2(l.ema60)} 下方）`;
@@ -298,7 +300,7 @@ const PNL: Record<string, Record<"profit" | "loss", PnlTweak>> = {
  * 这份分析该用哪套打法：按趋势类型，认不出来按过渡态；过渡态里方向和排布打架时用打架的打法。
  * 横盘（以及分数正好 ±0.6 的上涨 / 下跌）也可能带冲突，那时听趋势类型：页面顶部显示的就是它。
  */
-function playKey(a: Analysis): string {
+export function playKey(a: Analysis): string {
   const t = PLAYS[short(a.trend)] ? short(a.trend) : "过渡态";
   if (t === "横盘震荡" && stateOf(a).nearDeath) return "横盘破位";
   return t === "过渡态" && a.lean.conflict ? a.lean.conflict : t;

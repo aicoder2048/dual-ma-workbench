@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { Analysis } from "../src/citations.ts";
-import { buildOutlook, buildPlans } from "../src/plan.ts";
+import { buildOutlook, buildPlans, playKey } from "../src/plan.ts";
 import nvda from "./fixtures/nvda-analysis.json";
 
 const bear = nvda as Analysis; // 明显偏空 · 极度超卖，三条 MA 未来都扣高值
@@ -430,4 +430,26 @@ test("顺风、明天起 MA20 就扣高值：时机行不说「第 1 天前…�
   const o = buildOutlook(a);
   expect(o.effect.flat.text).not.toMatch(/第 1 天|买点窗口/);
   expect(o.effect.holding.text).not.toContain("第 1 天");
+});
+
+test("下跌类空仓的进场条件：已经站上的那条照实说，读起来通顺", () => {
+  for (const close of [150.96, 195, 230]) {
+    const a = structuredClone(bear);
+    a.close = close;
+    a.drops = a.drops.map((d) => (d.period === 20 ? { ...d, tomorrow: 190 } : d));
+    const t = buildPlans(a).flat.items.find((i) => i.label === "等什么")!.text;
+    expect(t).not.toContain("再已经");
+    expect(t).toContain(close >= 183.08 ? "已经在 EMA20" : "站上 EMA20");
+    expect(t).toContain(close >= 190 ? "已经在 MA20 抵扣价" : "站上 MA20 抵扣价");
+  }
+});
+
+test("playKey：横盘已死叉是横盘破位，过渡态打架用打架的键", () => {
+  expect(playKey(bear)).toBe("极度超卖");
+  const a = structuredClone(bear);
+  a.trend = "横盘震荡";
+  expect(playKey(a)).toBe("横盘破位");
+  a.trend = "过渡态（排列或方向不一致）";
+  a.lean = { ...a.lean, conflict: "反弹受压" };
+  expect(playKey(a)).toBe("反弹受压");
 });
