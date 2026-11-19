@@ -68,13 +68,12 @@ input:focus, textarea:focus { outline: 2px solid var(--accent); outline-offset: 
 /* ===================== 顶栏 ===================== */
 .appbar { height: var(--bar-h); flex: none; display: flex; justify-content: space-between; align-items: center; gap: var(--gap); padding: 0 calc(var(--gap) + 4px); background: var(--panel); border-bottom: 1px solid var(--line); }
 .brand { display: flex; gap: 10px; align-items: center; }
-.brand strong { display: block; font-size: 16px; line-height: 1.2; }
+.brand strong { display: block; font-size: 17px; line-height: 1.2; letter-spacing: .08em; }
+.logo { width: 34px; height: 34px; flex: none; }
+.logo-bg { fill: var(--card); stroke: var(--line); stroke-width: 1.5; }
+.logo-bird { fill: none; stroke: var(--fg); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.logo-bird.lead { stroke: var(--accent); stroke-width: 2.4; }
 .brand span { display: block; font-size: 11px; color: var(--muted); }
-.logo { width: 32px; height: 32px; border-radius: 9px; background: var(--card); border: 1px solid var(--line); position: relative; overflow: hidden; flex: none; }
-.logo i { position: absolute; left: 4px; right: 4px; height: 3px; border-radius: 3px; transform: rotate(-24deg); }
-.logo i:first-child { top: 11px; background: var(--ma60); }
-.logo i:nth-child(2) { top: 18px; background: var(--ma120); }
-.logo b { position: absolute; width: 6px; height: 6px; border-radius: 50%; background: var(--drop); left: 18px; top: 9px; }
 .appbar-right { display: flex; justify-content: flex-end; align-items: center; gap: 12px; min-width: 0; }
 .theme-seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--card); flex: none; }
 .theme-seg button { border: 0; background: transparent; padding: 3px 10px; font-size: 12px; color: var(--muted); cursor: pointer; }

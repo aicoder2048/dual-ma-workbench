@@ -59,5 +59,5 @@ const server = Bun.serve<WsData, never>({
 });
 const s = settings.get();
 const opt = MODEL_OPTIONS.find((m) => m.id === s.model)!;
-console.log(`双均线工作台：http://${server.hostname}:${server.port}`);
+console.log(`归雁 · 双均线工作台：http://${server.hostname}:${server.port}`);
 console.log(`模型：${s.model}（${opt.billing}）· 数据：${s.dataSource}`);
