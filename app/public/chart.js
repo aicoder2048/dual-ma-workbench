@@ -85,7 +85,10 @@ export function createChart(box, legendEl) {
   tools.className = "chart-tools";
   tools.innerHTML = RANGES.map(([k, label]) => `<button type="button" class="range-btn" data-range="${k}">${label}</button>`).join("")
     + `<button type="button" class="range-btn" data-range="reset" title="回到当前范围的默认视图">复位</button>`
-    + `<button type="button" class="levels-toggle" aria-pressed="true" title="把「什么会改变判断」的价位画成虚线">门槛线</button>`;
+    + `<button type="button" class="draw-toggle" aria-pressed="false" title="点这里，再点图上任意一处，就在那个价位画一条横线">画线</button>`
+    + `<button type="button" class="draw-clear" title="删掉这只股票上自己画的线">清除</button>`
+    + `<button type="button" class="levels-toggle" aria-pressed="true" title="把「什么会改变判断」的价位画成虚线">门槛线</button>`
+    + `<button type="button" class="chart-help-toggle" aria-expanded="false">怎么用</button>`;
   legendEl.after(tools);
   const applyRange = () => {
     tools.querySelectorAll(".range-btn").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.range === rangeKey)));
@@ -123,6 +126,66 @@ export function createChart(box, legendEl) {
     paintLevels();
   });
 
+  // ---------- 怎么用：四种常见用法，在这套方法里看什么 ----------
+  const help = document.createElement("div");
+  help.className = "chart-help";
+  help.hidden = true;
+  help.innerHTML = `
+    <p><b>悬停读数</b>：鼠标停在某天，上方显示那天的收盘和 6 条线。用来看"那次回调碰到了哪条线、守没守住"。</p>
+    <p><b>固定范围</b>（半年 / 1 年 / 全部）：均线的斜率（几点钟方向）只有在同样长的时间里比才不失真，所以要固定时长、用对数坐标。
+      <b>1 年</b>（默认）判断现在是几点钟、属于哪种趋势；<b>全部</b>看大周期和横盘有多长（"横有多长，竖有多高"）；<b>半年</b>看最近的细节，比如这次回调比上次深还是浅。</p>
+    <p><b>画线</b>：点「画线」，再点图上一处，就在那个价位画一条横线，刷新后还在。常画的是前高、前低、自己的成本价、"跌破就重新看"的价位。
+      图上的<b>虚线门槛线</b>是自动画的：价格过了它，20 线组才会拐头（先 EMA20，后 MA20），判断才值得改。</p>
+    <p><b>看量</b>：底部的量柱，黄色是超过 50 日均量 2 倍的大量。看两种情况：横盘末期突然放量，是要变盘的信号；
+      急涨或急跌的末端连续放量，说明多空分歧在化解，行情往往快要转向，并不代表强势。看到放量先提高警惕，动手还是要等均线拐头。</p>`;
+  tools.after(help);
+  const helpBtn = tools.querySelector(".chart-help-toggle");
+  helpBtn.addEventListener("click", () => {
+    help.hidden = !help.hidden;
+    helpBtn.setAttribute("aria-expanded", String(!help.hidden));
+  });
+
+  // ---------- 自己画的水平线：按股票记在本机浏览器里 ----------
+  let drawKey = null; // 当前股票
+  let drawn = []; // 价格
+  let drawnLines = [];
+  let drawing = false;
+  const storeKey = () => `dma-lines:${drawKey}`;
+  const loadDrawn = () => {
+    try { drawn = JSON.parse(localStorage.getItem(storeKey()) ?? "[]").filter(Number.isFinite); } catch { drawn = []; }
+  };
+  const saveDrawn = () => {
+    try { localStorage.setItem(storeKey(), JSON.stringify(drawn)); } catch { /* 隐私模式：只在本页有效 */ }
+  };
+  const paintDrawn = () => {
+    drawnLines.forEach((l) => candles.removePriceLine(l));
+    drawnLines = drawn.map((price) => candles.createPriceLine({
+      price, color: css("--accent"), lineWidth: 1, lineStyle: 0, axisLabelVisible: true, title: "我的线",
+    }));
+  };
+  const drawBtn = tools.querySelector(".draw-toggle");
+  const setDrawing = (on) => {
+    drawing = on;
+    drawBtn.setAttribute("aria-pressed", String(on));
+    drawBtn.textContent = on ? "点图上的价位…" : "画线";
+    box.classList.toggle("drawing", on);
+  };
+  drawBtn.addEventListener("click", () => setDrawing(!drawing));
+  tools.querySelector(".draw-clear").addEventListener("click", () => {
+    drawn = [];
+    saveDrawn();
+    paintDrawn();
+  });
+  chart.subscribeClick((param) => {
+    if (!drawing || !param.point) return;
+    const price = candles.coordinateToPrice(param.point.y);
+    if (price == null) return;
+    drawn.push(Math.round(price * 100) / 100);
+    saveDrawn();
+    paintDrawn();
+    setTimeout(() => setDrawing(false)); // 同一次点击的其他处理（问鸿雁）还要看到"正在画线"
+  });
+
   let data = null;
 
   function paint() {
@@ -148,8 +211,11 @@ export function createChart(box, legendEl) {
 
   return {
     chart,
-    setData(d) {
+    /** key：股票代码（自己画的线按它分开存）。 */
+    setData(d, key = null) {
       data = d;
+      if (key !== drawKey) { drawKey = key; loadDrawn(); }
+      paintDrawn();
       candles.setData(d.candles);
       for (const s of SPECS) series[s.key].setData(d.lines[s.key] || []);
       paint();
@@ -168,10 +234,12 @@ export function createChart(box, legendEl) {
     },
     /** 当前画在图上的门槛线（测试和问鸿雁用）。 */
     levels: () => (levelsOn ? levels.map(({ title, price }) => ({ title, price })) : []),
-    /** 点图表时回调 { time, candle, lines, drops, point }，给"问鸿雁"用。 */
+    /** 自己画的线（价格列表）。 */
+    drawn: () => [...drawn],
+    /** 点图表时回调 { time, candle, lines, drops, point }，给"问鸿雁"用。画线模式下不回调。 */
     onPick(cb) {
       chart.subscribeClick((param) => {
-        if (!param.time || !data) return;
+        if (drawing || !param.time || !data) return;
         const candle = data.candles.find((c) => c.time === param.time);
         const lines = Object.fromEntries(SPECS.map((s) => [s.key, (data.lines[s.key] || []).find((p) => p.time === param.time)?.value]));
         const drops = data.drops.filter((d) => d.time === param.time).map((d) => d.period);

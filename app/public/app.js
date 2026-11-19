@@ -163,7 +163,7 @@ export function showAnalysis(data, asof = null) {
   v.innerHTML = leanCard(r.visual.lean, a.close, SHORT_TREND(a.trend));
   renderInline(v.querySelector(".lean-play"), `${r.visual.lean.play} [[D:模糊判断]] [[S:skill#模糊判断]]`, data.facts);
 
-  chartApi?.setData(data.chart);
+  chartApi?.setData(data.chart, a.label);
   chartApi?.setLevels(r.visual.lean);
 
   const steps = $("steps");

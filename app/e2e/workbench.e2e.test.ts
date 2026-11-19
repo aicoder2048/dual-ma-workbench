@@ -299,3 +299,46 @@ describe("K 线图工具", () => {
     await page.close();
   }, 30_000);
 });
+
+describe("自己画水平线", () => {
+  const drawn = (page: Page) => page.evaluate(async () => (await import("/app.js")).getChart().drawn());
+
+  test("点「画线」再点图：在那个价位画一条线；刷新后还在；「清除」删掉", async () => {
+    const { page, errors } = await open();
+    await page.waitForSelector("#chart canvas");
+    await page.locator("#chart").scrollIntoViewIfNeeded();
+    expect(await drawn(page)).toEqual([]);
+    // 「问鸿雁」浮钮每次弹出都会把文字改成"问鸿雁：<日期>"，用它判断点图有没有触发问鸿雁
+    const askLabel = () => page.evaluate(() => document.getElementById("ask-advisor")!.textContent);
+    const before = await askLabel();
+    await page.click(".draw-toggle");
+    const box = (await page.locator("#chart").boundingBox())!;
+    await page.mouse.click(box.x + box.width * 0.5, box.y + box.height * 0.3);
+    await page.waitForTimeout(300);
+    const lines = await drawn(page);
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toBeGreaterThan(100);
+    expect(await askLabel()).toBe(before); // 画线模式下点图，不触发问鸿雁
+    await page.waitForTimeout(600); // 隔开一点、换个位置，免得图表当成双击
+    await page.mouse.click(box.x + box.width * 0.35, box.y + box.height * 0.6);
+    await page.waitForTimeout(300);
+    expect(await askLabel()).toContain("问鸿雁："); // 对照：画完退出画线模式，点图照常问鸿雁
+    expect(await drawn(page)).toHaveLength(1);
+    await page.reload();
+    await page.waitForSelector("#chart canvas");
+    expect(await drawn(page)).toEqual(lines);
+    await page.click(".draw-clear");
+    expect(await drawn(page)).toEqual([]);
+    expect(errors).toEqual([]);
+    await page.close();
+  }, 30_000);
+
+  test("「怎么用」讲清四种用法", async () => {
+    const { page } = await open();
+    await page.click(".chart-help-toggle");
+    const text = (await page.textContent(".chart-help"))!;
+    for (const k of ["悬停读数", "范围", "画线", "量"]) expect(text).toContain(k);
+    await page.close();
+  }, 30_000);
+});
+
