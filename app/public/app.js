@@ -4,7 +4,7 @@ import { createChart } from "./chart.js";
 import { installCitationHandlers, loadSourceIndex, renderInline } from "./cite.js";
 import { initAsofInput, initSplitters } from "./layout.js";
 import { initSelection } from "./selection.js";
-import { initAskMenu } from "./askmenu.js";
+import { initAskMenu, selectionLabel } from "./askmenu.js";
 import { applyRemoteSettings, initSettings, openSettings } from "./settings.js";
 import { installTips, leanCard, leanName, stanceOf, stepVisuals } from "./viz.js";
 
@@ -302,9 +302,7 @@ export function setSelection(sel) {
   pendingSelection = sel;
   const pill = $("advisor-context");
   if (!sel) { pill.hidden = true; pill.innerHTML = ""; return; }
-  const label = sel.kind === "text"
-    ? `${sel.where ? `「${sel.where}」` : ""}${sel.text}`
-    : `图表 ${sel.time}${sel.drops.length ? ` · MA${sel.drops.join("/MA")} 的底扣价` : ""}${sel.candle ? ` · 收 ${sel.candle.close.toFixed(2)}` : ""}`;
+  const label = selectionLabel(sel);
   pill.innerHTML = `<span>${esc(label)}</span><button type="button" aria-label="去掉划选内容">×</button>`;
   pill.hidden = false;
   pill.querySelector("button").onclick = () => setSelection(null);

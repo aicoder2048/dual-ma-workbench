@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { cardContext, cardQuestions } from "../public/askmenu.js";
+import { cardContext, cardQuestions, selectionLabel } from "../public/askmenu.js";
 import type { Analysis } from "../src/citations.ts";
 import { buildReport } from "../src/report.ts";
 import nvda from "./fixtures/nvda-analysis.json";
@@ -28,5 +28,16 @@ describe("卡片问题", () => {
   });
   test("上下文说明用户在看哪张卡", () => {
     expect(cardContext("direction", a)).toEqual({ kind: "view", what: "3. 看方向", detail: "NVDA 2026-11-18" });
+  });
+});
+
+describe("selectionLabel", () => {
+  test("卡片菜单的上下文（没有 drops 字段）不报错", () => {
+    expect(selectionLabel(cardContext("big_picture", a))).toBe("「1. 看大局」 · NVDA 2026-11-18");
+  });
+  test("划选文字", () => expect(selectionLabel({ kind: "text", where: "看方向", text: "扣高值" })).toBe("「看方向」扣高值"));
+  test("点图表", () => {
+    expect(selectionLabel({ kind: "chart", time: "2026-10-22", drops: [20], candle: { close: 180 } }))
+      .toBe("图表 2026-10-22 · MA20 的底扣价 · 收 180.00");
   });
 });

@@ -58,6 +58,13 @@ export function cardContext(card, analysis) {
   return { kind: "view", what: CARD_NAMES[card] ?? card, detail: `${analysis.label} ${analysis.date}${analysis.warning ? "（盘中）" : ""}` };
 }
 
+/** 参谋输入框上方的上下文标签。三种来源：划选文字、点图表、卡片菜单（view）。 */
+export function selectionLabel(sel) {
+  if (sel.kind === "text") return `${sel.where ? `「${sel.where}」` : ""}${sel.text}`;
+  if (sel.kind === "view") return `「${sel.what}」${sel.detail ? ` · ${sel.detail}` : ""}`;
+  return `图表 ${sel.time}${sel.drops?.length ? ` · MA${sel.drops.join("/MA")} 的底扣价` : ""}${sel.candle ? ` · 收 ${sel.candle.close.toFixed(2)}` : ""}`;
+}
+
 // ---------- 浏览器 ----------
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
