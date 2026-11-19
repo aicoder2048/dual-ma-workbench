@@ -61,3 +61,12 @@ const s = settings.get();
 const opt = MODEL_OPTIONS.find((m) => m.id === s.model)!;
 console.log(`归雁 · 双均线工作台：http://${server.hostname}:${server.port}`);
 console.log(`模型：${s.model}（${opt.billing}）· 数据：${s.dataSource}`);
+
+// Ctrl+C / kill：关掉服务再正常退出（退出码 0），终端里不留报错
+for (const sig of ["SIGINT", "SIGTERM"] as const) {
+  process.on(sig, () => {
+    console.log("\n归雁已停止。");
+    server.stop(true);
+    process.exit(0);
+  });
+}
