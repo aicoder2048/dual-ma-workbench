@@ -2,7 +2,11 @@ import { describe, expect, test } from "bun:test";
 import { Analyzer } from "../src/analyze.ts";
 import { buildFacts, type Analysis } from "../src/citations.ts";
 import { assistantText, type ServerEvent } from "../src/agents/host.ts";
-import { assertSubscriptionProvider, parseModelSpec, resolveThinking } from "../src/agents/model.ts";
+import { assertAllowedModel, parseModelSpec, resolveThinking } from "../src/agents/model.ts";
+import { SettingsStore } from "../src/settings.ts";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { advisorContext, advisorPrompt, analystContext, analystPrompt, describeSelection } from "../src/agents/prompts.ts";
 import { parseSuggestions, ruleSuggestions } from "../src/agents/suggest.ts";
 import { analyzeTool, FactsRegistry, sourceTools } from "../src/agents/tools.ts";
@@ -16,10 +20,9 @@ const fakeAnalyzer = () =>
   new Analyzer(async (args) => JSON.stringify({ analysis: { ...analysis, label: args[0] }, chart: { candles: [], volume: [], lines: {}, drops: [] } }));
 
 describe("模型守卫", () => {
-  test("只允许 openai-codex", () => {
-    expect(() => assertSubscriptionProvider("openai-codex")).not.toThrow();
-    expect(() => assertSubscriptionProvider("anthropic")).toThrow(/按量计费/);
-    expect(() => assertSubscriptionProvider("deepseek")).toThrow();
+  test("清单内放行，anthropic 拒绝", () => {
+    expect(() => assertAllowedModel("openai-codex/gpt-6.1-sol")).not.toThrow();
+    expect(() => assertAllowedModel("anthropic/claude-opus-5-5")).toThrow(/按量计费/);
   });
   test("解析 provider/model", () => {
     expect(parseModelSpec("openai-codex/gpt-6.1-sol")).toEqual({ provider: "openai-codex", id: "gpt-6.1-sol" });
@@ -103,15 +106,17 @@ test("assistantText 只取文字部分", () => {
   expect(assistantText({ content: [{ type: "toolCall" }, { type: "text", text: "你好" }, { type: "thinking", thinking: "x" }] })).toBe("你好");
 });
 
+const tmpSettings = () => new SettingsStore(join(mkdtempSync(join(tmpdir(), "wb-")), "settings.json"));
+
 describe("Workbench", () => {
   test("切换视图：先推规则版问法，再推 AI 版", async () => {
     const sent: any[] = [];
-    const wb = new Workbench(fakeAnalyzer(), library, {
+    const wb = new Workbench(fakeAnalyzer(), library, { settings: tmpSettings(), suggester: {
       suggest: async () => ({
         analyst: [{ text: "AI 问题 1", intent: "看状态" }, { text: "AI 问题 2", intent: "何时拐头" }],
         advisor: [{ text: "AI 概念 1", intent: "复习概念" }, { text: "AI 概念 2", intent: "复习概念" }],
       }),
-    });
+    } });
     const client = { send: (d: string) => sent.push(JSON.parse(d)) };
     wb.connect(client);
     await wb.handle(client, JSON.stringify({ type: "view", ticker: "NVDA", asof: null }));
@@ -120,7 +125,7 @@ describe("Workbench", () => {
   });
   test("hello：回放两个会话的记录和最近的问法", async () => {
     const sent: any[] = [];
-    const wb = new Workbench(fakeAnalyzer(), library, { suggest: async () => null });
+    const wb = new Workbench(fakeAnalyzer(), library, { settings: tmpSettings(), suggester: { suggest: async () => null } });
     const client = { send: (d: string) => sent.push(JSON.parse(d)) };
     wb.connect(client);
     await wb.handle(client, JSON.stringify({ type: "view", ticker: "NVDA", asof: null }));
@@ -130,7 +135,16 @@ describe("Workbench", () => {
     expect(sent.filter((e) => e.type === "suggestions").length).toBe(2);
   });
   test("坏消息不崩溃", async () => {
-    const wb = new Workbench(fakeAnalyzer(), library, { suggest: async () => null });
+    const wb = new Workbench(fakeAnalyzer(), library, { settings: tmpSettings(), suggester: { suggest: async () => null } });
     await wb.handle({ send() {} }, "not json");
   });
+});
+
+test("Workbench：改设置会广播给所有页面", () => {
+  const sent: any[] = [];
+  const settings = tmpSettings();
+  const wb = new Workbench(fakeAnalyzer(), library, { settings, suggester: { suggest: async () => null } });
+  wb.connect({ send: (d: string) => sent.push(JSON.parse(d)) });
+  settings.update({ model: "deepseek/deepseek-flash" });
+  expect(sent.at(-1)).toEqual({ type: "settings", settings: { model: "deepseek/deepseek-flash", dataSource: "polygon" } });
 });

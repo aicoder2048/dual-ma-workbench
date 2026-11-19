@@ -8,7 +8,10 @@ bun start                 # 打开 http://127.0.0.1:5178
 bun test                  # 单元测试（不调模型）
 ```
 
-- **模型**：Pi SDK，只允许 `openai-codex/*`（Codex 订阅），需要先在 `pi` 里登录 Codex。`DMA_MODEL` 换模型，`DMA_THINKING` 调思考强度。
+- **设置**（右上角齿轮，存在 `data/settings.json`）：
+  - 大模型：默认 `openai-codex/gpt-6.1-sol`（Codex 订阅，需先在 `pi` 里登录）；可选 `deepseek/deepseek-flash`（**按量计费**，key 读项目根目录 `.env` 的 `DEEPSEEK_API_KEY`）。只允许这两个，`anthropic/*` 一律拒绝。切换后下一次提问生效，对话上下文保留，不改 Pi 的全局默认模型。
+  - 市场数据：默认 Polygon/Massive（失败或超出约 5 年时回退 yfinance）；可选 yfinance。
+  - `DMA_THINKING` 环境变量调思考强度。
 - **数据**：调 skill 脚本 `dma_analyze.py --json`（Polygon，失败回退 yfinance），key 在项目根目录 `.env`。
 - **引用**：`[[S:编号]]` 指原文片段（`bun run sources` 列出全部编号），`[[D:字段]]` 指当前分析数据。每轮回答结束后服务端逐条核对，找不到出处的显示红色。
 - **自选股**：存在 `data/watchlist.json`。

@@ -184,6 +184,8 @@ export class Panel {
 }
 
 function renderAssistant(el, body, entry) {
+  const who = el.querySelector(".who");
+  if (who && entry.model) who.textContent = `${who.textContent.split(" · ")[0]} · ${entry.model.split("/").pop()}`;
   if (!entry.text) {
     body.innerHTML = `<span class="caption">${entry.aborted ? "已中断。" : "（没有文字回答）"}</span>`;
     return;

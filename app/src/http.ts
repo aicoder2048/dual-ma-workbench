@@ -4,6 +4,7 @@ import { extname, resolve } from "node:path";
 import { explainError, type Analyzer } from "./analyze.ts";
 import { buildFacts } from "./citations.ts";
 import { buildReport } from "./report.ts";
+import { DATA_OPTIONS, MODEL_OPTIONS, modelReadiness, SettingsStore } from "./settings.ts";
 import type { SourceLibrary } from "./sources.ts";
 import type { Watchlist } from "./watchlist.ts";
 
@@ -12,6 +13,7 @@ export interface Deps {
   watchlist: Watchlist;
   library: SourceLibrary;
   publicDir: string;
+  settings: SettingsStore;
 }
 
 const json = (data: unknown, status = 200) =>
@@ -25,7 +27,15 @@ const MIME: Record<string, string> = {
 };
 
 export function createHandler(deps: Deps) {
-  const { analyzer, watchlist, library, publicDir } = deps;
+  const { analyzer, watchlist, library, publicDir, settings } = deps;
+  const settingsView = () => {
+    const ready = modelReadiness();
+    return {
+      settings: settings.get(),
+      models: MODEL_OPTIONS.map((m) => ({ ...m, ready: ready[m.id] })),
+      dataSources: DATA_OPTIONS,
+    };
+  };
 
   async function api(req: Request, url: URL): Promise<Response> {
     const p = url.pathname;
@@ -44,6 +54,22 @@ export function createHandler(deps: Deps) {
       const body = (await req.json().catch(() => ({}))) as { ticker?: string };
       if (req.method === "POST") return json(watchlist.add(body.ticker ?? ""));
       if (req.method === "DELETE") return json(watchlist.remove(body.ticker ?? ""));
+    }
+    if (p === "/api/settings") {
+      if (req.method === "GET") return json(settingsView());
+      if (req.method === "PUT") {
+        const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
+        const patch: Record<string, unknown> = {};
+        if ("model" in body) patch.model = body.model;
+        if ("dataSource" in body) patch.dataSource = body.dataSource;
+        const ready = modelReadiness();
+        if (typeof patch.model === "string" && ready[patch.model] === false) {
+          const opt = MODEL_OPTIONS.find((m) => m.id === patch.model)!;
+          return fail(`缺少 ${opt.keyEnv}：请在项目根目录 .env 里加上，再重启服务。`);
+        }
+        settings.update(patch);
+        return json(settingsView());
+      }
     }
     if (p === "/api/sources" && req.method === "GET") {
       return json(library.chunks.map((c) => ({ id: c.id, doc: c.docTitle, heading: c.heading })));
@@ -72,7 +98,7 @@ export function createHandler(deps: Deps) {
     try {
       return await api(req, url);
     } catch (err) {
-      return fail(explainError(err), err instanceof Error && /不合法|格式|最多/.test(err.message) ? 400 : 500);
+      return fail(explainError(err), err instanceof Error && /不合法|格式|最多|清单/.test(err.message) ? 400 : 500);
     }
   };
 }

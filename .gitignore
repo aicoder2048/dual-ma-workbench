@@ -11,3 +11,4 @@ __pycache__/
 # os
 .DS_Store
 node_modules/
+data/settings.json

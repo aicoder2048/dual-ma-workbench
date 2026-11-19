@@ -11,6 +11,7 @@ import { resolveThinking } from "./agents/model.ts";
 import { advisorContext, advisorPrompt, analystContext, analystPrompt, type Selection } from "./agents/prompts.ts";
 import { ruleSuggestions, Suggester } from "./agents/suggest.ts";
 import { analyzeTool, FactsRegistry, sourceTools, suggestTool } from "./agents/tools.ts";
+import { SettingsStore, type Settings } from "./settings.ts";
 import type { SourceLibrary } from "./sources.ts";
 
 /** 浏览器 → 服务端 */
@@ -21,6 +22,11 @@ export type ClientMessage =
   | { type: "prompt"; agent: "advisor"; text: string; selection?: Selection | null }
   | { type: "abort"; agent: AgentName }
   | { type: "reset"; agent: AgentName };
+
+export interface WorkbenchOptions {
+  settings?: SettingsStore;
+  suggester?: Pick<Suggester, "suggest">;
+}
 
 export interface Client {
   send(data: string): void;
@@ -37,11 +43,19 @@ export class Workbench {
   private advisorBook: ReturnType<typeof bookOf> | null = null;
   private suggestions: Record<AgentName, { items: Suggestion[]; source: "ai" | "rules" } | null> = { analyst: null, advisor: null };
 
+  readonly settings: SettingsStore;
+  private suggester: Pick<Suggester, "suggest">;
+
   constructor(
     private analyzer: Analyzer,
     private library: SourceLibrary,
-    private suggester: Pick<Suggester, "suggest"> = new Suggester(),
+    opts: WorkbenchOptions = {},
   ) {
+    this.settings = opts.settings ?? new SettingsStore();
+    const modelSpec = () => this.settings.get().model;
+    this.suggester = opts.suggester ?? new Suggester(modelSpec);
+    // 设置变了：告诉所有页面（显示当前模型、重新取数）
+    this.settings.onChange((s) => this.broadcast({ type: "settings", settings: s }));
     const emit = (e: ServerEvent) => this.broadcast(e);
     const label = (name: string, args: any) =>
       name === "dma_analyze" ? `取数 ${args?.ticker ?? ""}${args?.asof ? ` @${args.asof}` : ""}` :
@@ -53,14 +67,14 @@ export class Workbench {
       name: "analyst", library,
       systemPrompt: () => analystPrompt(library),
       tools: [analyzeTool({ analyzer, registry: this.registry, emit }), ...sourceTools(library), suggestTool("analyst", emit)],
-      thinking: resolveThinking(process.env.DMA_THINKING, "medium"),
+      thinking: resolveThinking(process.env.DMA_THINKING, "medium"), modelSpec,
       emit, factsBook: () => this.registry.book(), toolLabel: label,
     });
     this.advisor = new AgentHost({
       name: "advisor", library,
       systemPrompt: () => advisorPrompt(library),
       tools: [...sourceTools(library), suggestTool("advisor", emit)],
-      thinking: resolveThinking(process.env.DMA_THINKING, "low"),
+      thinking: resolveThinking(process.env.DMA_THINKING, "low"), modelSpec,
       emit, factsBook: () => this.advisorBook, toolLabel: label,
     });
   }
@@ -73,7 +87,7 @@ export class Workbench {
     this.clients.delete(client);
   }
 
-  broadcast(e: ServerEvent) {
+  broadcast(e: ServerEvent | { type: "settings"; settings: Settings }) {
     if (e.type === "suggestions") this.suggestions[e.agent] = { items: e.items, source: e.source };
     const data = JSON.stringify(e);
     for (const c of this.clients) c.send(data);

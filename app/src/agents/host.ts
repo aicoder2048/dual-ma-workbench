@@ -50,6 +50,8 @@ export interface TranscriptAssistant {
   tools: { name: string; label: string; ok: boolean }[];
   checks: CitationCheck[];
   book: FactsBook | null;
+  /** 回答这轮的模型（provider/id）。 */
+  model?: string;
   aborted?: boolean;
 }
 
@@ -61,6 +63,8 @@ export interface AgentHostOptions {
   systemPrompt: () => string;
   tools: ToolDefinition[];
   thinking: Thinking;
+  /** 当前设置的模型（provider/id）。每次提问前对照，变了就就地切换。 */
+  modelSpec: () => string;
   emit: (event: ServerEvent) => void;
   /** 一轮结束时，本轮引用应该对照哪些数据字段。 */
   factsBook: () => FactsBook | null;
@@ -71,6 +75,7 @@ export interface AgentHostOptions {
 export class AgentHost {
   readonly name: AgentName;
   private session: AgentSession | null = null;
+  private services: Awaited<ReturnType<typeof createAgentSessionServices>> | null = null;
   private transcript: TranscriptEntry[] = [];
   private busy = false;
   private turnSeq = 0;
@@ -98,10 +103,11 @@ export class AgentHost {
         systemPrompt: this.opts.systemPrompt(), appendSystemPrompt: [],
       },
     });
+    this.services = services;
     const { session } = await createAgentSessionFromServices({
       services,
       sessionManager: SessionManager.inMemory(PROJECT_ROOT),
-      model: resolveModel(services.modelRuntime),
+      model: resolveModel(services.modelRuntime, this.opts.modelSpec()),
       thinkingLevel: this.opts.thinking,
       customTools: this.opts.tools,
       noTools: "builtin",
@@ -125,8 +131,15 @@ export class AgentHost {
     const tools: TranscriptAssistant["tools"] = [];
     let unsubscribe = () => {};
     let aborted = false;
+    let modelUsed = this.opts.modelSpec();
     try {
       const session = await this.ensureSession();
+      // 设置里换了模型：就地切换，保留对话上下文；只改本会话，不写 Pi 的全局默认
+      const spec = this.opts.modelSpec();
+      if (session.model && `${session.model.provider}/${session.model.id}` !== spec) {
+        await session.setModel(resolveModel(this.services!.modelRuntime, spec), { persist: false });
+      }
+      modelUsed = spec;
       let current = "";
       const argsById = new Map<string, any>(); // 结束事件不带参数，按调用 id 记下来
       unsubscribe = session.subscribe((e: any) => {
@@ -160,7 +173,7 @@ export class AgentHost {
       const book = this.opts.factsBook();
       const entry: TranscriptAssistant = {
         role: "assistant", turnId, text: full, tools,
-        checks: validateCitations(full, this.opts.library, book), book, aborted: aborted || undefined,
+        checks: validateCitations(full, this.opts.library, book), book, model: modelUsed, aborted: aborted || undefined,
       };
       this.transcript.push(entry);
       emit({ type: "turn_end", agent: name, turnId, entry });
@@ -177,6 +190,7 @@ export class AgentHost {
   reset(): void {
     this.session?.dispose();
     this.session = null;
+    this.services = null;
     this.transcript = [];
   }
 }

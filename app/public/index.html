@@ -37,6 +37,9 @@
 
   <div class="appbar-right">
     <div class="data-status" id="data-status" title="数据状态">—</div>
+    <button type="button" id="settings-btn" class="icon-btn" aria-label="设置：大模型、市场数据" aria-expanded="false" aria-controls="settings-panel" title="设置">
+      <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="2.6"/><path d="M10 1.8v2.4M10 15.8v2.4M1.8 10h2.4M15.8 10h2.4M4.2 4.2l1.7 1.7M14.1 14.1l1.7 1.7M4.2 15.8l1.7-1.7M14.1 5.9l1.7-1.7"/></svg>
+    </button>
     <div class="theme-seg" id="theme" role="radiogroup" aria-label="主题">
       <button type="button" role="radio" data-value="" title="跟随系统">自动</button>
       <button type="button" role="radio" data-value="light" title="浅色">浅</button>
@@ -83,7 +86,7 @@
       <section class="steps" id="steps"></section>
 
       <section class="thread-wrap">
-        <div class="thread-head"><b>分析师</b><span>问这只股票的状态、打法、拐头时间，或回放历史</span><button id="analyst-reset" type="button" class="ghost">新对话</button></div>
+        <div class="thread-head"><b>分析师</b><span class="model-badge" data-model-badge></span><span>问这只股票的状态、打法、拐头时间，或回放历史</span><button id="analyst-reset" type="button" class="ghost">新对话</button></div>
         <section class="thread" id="analyst-thread" aria-live="polite"></section>
       </section>
     </div>
@@ -102,7 +105,7 @@
   <!-- 右栏：均线参谋 -->
   <aside class="panel right" aria-label="均线参谋">
     <div class="panel-head">
-      <b>均线参谋</b><span>讲概念 · 解读划选 · 有出处</span>
+      <b>均线参谋</b><span class="model-badge" data-model-badge></span><span>讲概念 · 解读划选 · 有出处</span>
       <button id="advisor-reset" type="button" class="ghost">新对话</button>
     </div>
     <div class="right-scroll" id="advisor-scroll">
@@ -123,6 +126,7 @@
   </aside>
 </div>
 
+<div id="settings-panel" class="settings-panel" role="dialog" aria-label="设置" hidden></div>
 <div id="popover" class="popover" role="dialog" hidden></div>
 <div id="viz-tip" class="viz-tip" role="tooltip" hidden></div>
 <button id="ask-advisor" class="ask-float" type="button" hidden>问参谋</button>

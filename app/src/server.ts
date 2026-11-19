@@ -7,20 +7,27 @@ import { resolve } from "node:path";
 import { Analyzer } from "./analyze.ts";
 import { createHandler } from "./http.ts";
 import { SourceLibrary } from "./sources.ts";
+import { loadEnvKeys, MODEL_OPTIONS, SettingsStore } from "./settings.ts";
 import { Watchlist } from "./watchlist.ts";
 import { Workbench, type Client } from "./workbench.ts";
 
 const PORT = Number(process.env.PORT ?? 5178);
 const HOST = "127.0.0.1";
 
-const analyzer = new Analyzer();
+// 模型 key 默认放在项目根目录 .env（只读模型要用的那几个，只打印变量名）
+const loadedKeys = loadEnvKeys();
+if (loadedKeys.length) console.log(`从 .env 读取：${loadedKeys.join(", ")}`);
+
+const settings = new SettingsStore();
+const analyzer = new Analyzer(undefined, undefined, () => settings.get().dataSource);
 const library = SourceLibrary.load();
-const workbench = new Workbench(analyzer, library);
+const workbench = new Workbench(analyzer, library, { settings });
 const handler = createHandler({
   analyzer,
   watchlist: new Watchlist(),
   library,
   publicDir: resolve(import.meta.dir, "../public"),
+  settings,
 });
 
 type WsData = { client?: Client };
@@ -50,4 +57,7 @@ const server = Bun.serve<WsData, never>({
     },
   },
 });
+const s = settings.get();
+const opt = MODEL_OPTIONS.find((m) => m.id === s.model)!;
 console.log(`双均线工作台：http://${server.hostname}:${server.port}`);
+console.log(`模型：${s.model}（${opt.billing}）· 数据：${s.dataSource}`);

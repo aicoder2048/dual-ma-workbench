@@ -14,6 +14,7 @@ import {
 import { factsForPrompt, type Analysis, type Facts } from "../citations.ts";
 import { PROJECT_ROOT } from "../sources.ts";
 import { assistantText, type Suggestion } from "./host.ts";
+import { DEFAULT_SETTINGS } from "../settings.ts";
 import { resolveModel } from "./model.ts";
 import { INTENTS } from "./tools.ts";
 
@@ -85,8 +86,10 @@ const PROMPT = `你为"双均线工作台"生成可点击的问题按钮。只�
 export class Suggester {
   private cache = new Map<string, Promise<SuggestionSet | null>>();
 
+  constructor(private modelSpec: () => string = () => DEFAULT_SETTINGS.model) {}
+
   suggest(a: Analysis, facts: Facts, asof: string | null): Promise<SuggestionSet | null> {
-    const key = `${a.label}|${a.date}|${asof ?? ""}`;
+    const key = `${a.label}|${a.date}|${asof ?? ""}|${this.modelSpec()}`;
     let hit = this.cache.get(key);
     if (!hit) {
       hit = this.generate(a, facts, asof).catch(() => null);
@@ -106,7 +109,7 @@ export class Suggester {
     });
     const { session } = await createAgentSessionFromServices({
       services, sessionManager: SessionManager.inMemory(PROJECT_ROOT),
-      model: resolveModel(services.modelRuntime), thinkingLevel: "low", noTools: "all",
+      model: resolveModel(services.modelRuntime, this.modelSpec()), thinkingLevel: "low", noTools: "all",
     });
     try {
       await session.prompt(

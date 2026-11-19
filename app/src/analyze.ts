@@ -7,6 +7,7 @@ import { execFile } from "node:child_process";
 import { resolve } from "node:path";
 import { promisify } from "node:util";
 import type { Analysis } from "./citations.ts";
+import { sourceArg, type DataSource } from "./settings.ts";
 import { PROJECT_ROOT } from "./sources.ts";
 
 const pexec = promisify(execFile);
@@ -59,16 +60,22 @@ const LATEST_TTL_MS = 10 * 60 * 1000;
 export class Analyzer {
   private cache = new Map<string, { at: number; value: Promise<AnalyzeResult> }>();
 
-  constructor(private run: Runner = defaultRunner, private now: () => number = Date.now) {}
+  constructor(
+    private run: Runner = defaultRunner,
+    private now: () => number = Date.now,
+    /** 当前设置的数据源；切换后缓存按新数据源重新取。 */
+    private source: () => DataSource = () => "polygon",
+  ) {}
 
   analyze(tickerRaw: string, asofRaw?: string | null): Promise<AnalyzeResult> {
     const ticker = normalizeTicker(tickerRaw);
     const asof = normalizeAsof(asofRaw);
-    const key = `${ticker}|${asof ?? "latest"}`;
+    const src = sourceArg(this.source());
+    const key = `${ticker}|${asof ?? "latest"}|${src}`;
     const hit = this.cache.get(key);
     if (hit && (asof || this.now() - hit.at < LATEST_TTL_MS)) return hit.value;
 
-    const args = [ticker, "--json", ...(asof ? ["--asof", asof] : [])];
+    const args = [ticker, "--json", ...(asof ? ["--asof", asof] : []), "--source", src];
     const value = this.run(args).then((out) => JSON.parse(out) as AnalyzeResult);
     this.cache.set(key, { at: this.now(), value });
     value.catch(() => this.cache.delete(key)); // 失败不缓存，下次重试

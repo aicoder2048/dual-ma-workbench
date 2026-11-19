@@ -4,6 +4,7 @@ import { createChart } from "./chart.js";
 import { installCitationHandlers, loadSourceIndex, renderInline } from "./cite.js";
 import { initAsofInput, initSplitters } from "./layout.js";
 import { initSelection } from "./selection.js";
+import { applyRemoteSettings, initSettings } from "./settings.js";
 import { installTips, stepVisuals } from "./viz.js";
 
 const $ = (id) => document.getElementById(id);
@@ -244,6 +245,7 @@ function initAgents() {
   });
   connect((e) => {
     if (e.type === "analysis") return showAnalysis(e.data, e.asof);
+    if (e.type === "settings") return applyRemoteSettings(e.settings, { onDataSourceChange: reloadAll });
     const p = panels[e.agent];
     if (!p) return;
     switch (e.type) {
@@ -274,12 +276,20 @@ export function setSelection(sel) {
 }
 function takeSelection() { const s = pendingSelection; setSelection(null); return s; }
 
+/** 数据源变了：清掉自选股标签缓存，重新取当前股票和自选股。 */
+function reloadAll() {
+  summaries.clear();
+  refreshWatchlist();
+  if (state.ticker) loadAnalysis(state.ticker, state.asof);
+}
+
 // ---------- 启动 ----------
 async function main() {
   initTheme();
   installTips();
   initSplitters();
   asofUi = initAsofInput();
+  await initSettings({ onDataSourceChange: reloadAll });
   await loadSourceIndex(); // 先有原文目录，再回放对话记录，否则原文引用会被误判为找不到
   initAgents();
   installCitationHandlers(() => (state.data ? `${state.data.analysis.label} ${state.data.analysis.date}` : ""));
