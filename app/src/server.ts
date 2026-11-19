@@ -62,11 +62,22 @@ const opt = MODEL_OPTIONS.find((m) => m.id === s.model)!;
 console.log(`归雁 · 双均线工作台：http://${server.hostname}:${server.port}`);
 console.log(`模型：${s.model}（${opt.billing}）· 数据：${s.dataSource}`);
 
-// Ctrl+C / kill：关掉服务再正常退出（退出码 0），终端里不留报错
-for (const sig of ["SIGINT", "SIGTERM"] as const) {
-  process.on(sig, () => {
-    console.log("\n归雁已停止。");
-    server.stop(true);
-    process.exit(0);
+// 退出：关掉服务，退出码 0，终端里不留报错。
+function shutdown() {
+  if (process.stdin.isTTY) process.stdin.setRawMode(false); // 还原终端
+  console.log("\n归雁已停止。");
+  server.stop(true);
+  process.exit(0);
+}
+process.on("SIGINT", shutdown); // 非终端里收到的 Ctrl+C
+process.on("SIGTERM", shutdown); // kill
+
+// 在终端里：把 Ctrl+C 当作普通按键读进来，不让它变成 SIGINT 发给整个进程组。
+// 否则外层的 just 也会收到信号，打印 "interrupted by SIGINT"，退出码 130。
+if (process.stdin.isTTY) {
+  process.stdin.setRawMode(true);
+  process.stdin.on("data", (b: Buffer) => {
+    if (b.includes(0x03) || b.includes(0x04)) shutdown(); // Ctrl+C、Ctrl+D
   });
+  console.log("按 Ctrl+C 停止。");
 }
