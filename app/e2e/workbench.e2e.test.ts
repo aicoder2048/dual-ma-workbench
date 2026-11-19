@@ -148,7 +148,18 @@ describe("设置", () => {
     expect((await (await page.request.get(`${base}/api/settings`)).json()).settings.model).toBe("openai-codex/gpt-6.1-sol");
 
     await page.selectOption("select[name=model]", "deepseek/deepseek-flash");
+    // 确认框开着时，服务端广播设置（比如自己上一次保存的回声）：确认框不能被冲掉
+    const current = (await (await page.request.get(`${base}/api/settings`)).json()).settings;
+    const marker = { type: "status", agent: "analyst", busy: true };
+    for (const ws of sockets) { ws.send(JSON.stringify({ type: "settings", settings: current })); ws.send(JSON.stringify(marker)); }
+    await page.waitForSelector("#analyst-chips.dim", { state: "attached" });
+    await page.waitForTimeout(300); // 重新取设置是异步的
+    expect(await page.isVisible("#sp-confirm")).toBe(true);
     await page.click("#sp-confirm-yes");
+    await page.waitForFunction(() => document.getElementById("sp-status")?.textContent?.includes("已切换到"));
+    for (const ws of sockets) ws.send(JSON.stringify({ type: "settings", settings: { ...current, model: "deepseek/deepseek-flash" } }));
+    await page.waitForTimeout(300);
+    expect(await page.textContent("#sp-status")).toContain("已切换到");
     await page.waitForFunction(() => document.querySelector("[data-model-badge]")?.textContent === "deepseek-flash");
     expect(await page.textContent("#settings-panel")).toContain("没有 medium，实际用 low");
     // 订阅模型不用确认

@@ -31,7 +31,7 @@ const THINK_LABEL = { off: "关", minimal: "最少", low: "低", medium: "中", 
 function modelNote(m) {
   if (!m) return `<b class="bad">当前模型 ${esc(view.settings.model)} 不可用：它的 provider 没在 pi 里登录。在终端运行 pi，输入 /login 登录后刷新，或在上面换一个。</b>`;
   return [
-    m.billing === "订阅" ? "订阅登录，不额外花钱。" : m.billing === "按量计费" ? "API key 登录：按 token 计费。" : "计费方式未知（登录方式既不是订阅也不是 API key）。",
+    m.billing === "订阅" ? "订阅登录，不额外花钱。" : m.billing === "按量计费" ? "按量计费：在 Pi 里走 API，按 token 收费。" : "计费方式未知：Pi 没标明它是订阅。",
     m.verified ? "已验证：引用格式、工具调用实测过。" : "未验证：引用格式、工具调用没实测过，回答里可能有标红的引用。",
     m.image ? "" : "不能看图：附件里的截图它看不到。",
   ].filter(Boolean).join("");
@@ -57,7 +57,7 @@ function modelSection() {
       <p class="opt-note">${modelNote(current)}</p>
       <div class="sp-confirm" id="sp-confirm" hidden></div>
     </fieldset>
-    ${view.thinkingLevels ? `<fieldset><legend>思考程度 <span>越高越慢；按量计费时也越贵</span></legend>
+    <fieldset><legend>思考程度 <span>越高越慢；按量计费时也越贵</span></legend>
       ${[["thinkingAnalyst", "分析师", "analyst"], ["thinkingAdvisor", "鸿雁", "advisor"]].map(([key, who, role]) => {
         const eff = view.effective?.[role];
         const want = settings[key];
@@ -68,7 +68,7 @@ function modelSection() {
           ${eff && eff !== want ? `<span class="opt-note">${esc(shortModel(settings.model))} 没有 ${want}，实际用 ${eff}</span>` : ""}
         </div>`;
       }).join("")}
-    </fieldset>` : ""}`;
+    </fieldset>`;
 }
 
 function render() {
@@ -164,7 +164,7 @@ export async function initSettings({ onDataSourceChange }) {
     const m = input.name === "model" && view.models.find((x) => x.id === value);
     if (m && m.billing !== "订阅") {
       const box = $("sp-confirm");
-      box.innerHTML = `<p><b>${esc(m.id)}</b> ${m.billing === "按量计费" ? "按量计费（API key）" : "计费方式未知"}：每次提问都可能花钱。</p>
+      box.innerHTML = `<p><b>${esc(m.id)}</b> ${m.billing === "按量计费" ? "按量计费（在 Pi 里走 API）" : "计费方式未知"}：每次提问都可能花钱。</p>
         <button type="button" id="sp-confirm-yes">确认切换</button> <button type="button" class="ghost" id="sp-confirm-no">取消</button>`;
       box.hidden = false;
       $("sp-confirm-yes").onclick = () => save("model", value);
@@ -181,11 +181,15 @@ export function applyRemoteSettings(settings, { onDataSourceChange }) {
   if (view) view.settings = settings;
   paintModelBadges(settings);
   if (changedSource) onDataSourceChange();
-  // 实际用的思考程度、清单也可能变了：重新取一遍，面板开着就重画
+  // 实际用的思考程度、清单也可能变了：重新取一遍。面板开着就重画，但确认框开着时不动它；
+  // 自己保存后的回声也会走到这里，重画时保留状态行（"已切换到 …"）
   fetch("/api/settings").then((r) => r.json()).then((v) => {
     if (!v.settings) return;
     view = v;
     paintModelBadges(view.settings);
-    if (!$("settings-panel").hidden) render();
+    if ($("settings-panel").hidden || $("sp-confirm")?.hidden === false) return;
+    const { textContent, className } = $("sp-status");
+    render();
+    Object.assign($("sp-status"), { textContent, className });
   }).catch(() => {});
 }
