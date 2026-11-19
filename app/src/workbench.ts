@@ -6,11 +6,12 @@
  */
 import type { Analyzer } from "./analyze.ts";
 import { bookOf, buildFacts } from "./citations.ts";
-import { AgentHost, type AgentName, type ServerEvent, type Suggestion } from "./agents/host.ts";
+import { AgentHost, type AgentName, type ImageContent, type ServerEvent, type Suggestion, type TranscriptUser } from "./agents/host.ts";
 import { resolveThinking } from "./agents/model.ts";
 import { advisorContext, advisorPrompt, analystContext, analystPrompt, type Selection } from "./agents/prompts.ts";
 import { ruleSuggestions, Suggester } from "./agents/suggest.ts";
 import { analyzeTool, FactsRegistry, sourceTools, suggestTool } from "./agents/tools.ts";
+import { parseAttachments, withAttachments } from "./attachments.ts";
 import { SettingsStore, type Settings } from "./settings.ts";
 import type { SourceLibrary } from "./sources.ts";
 
@@ -18,8 +19,8 @@ import type { SourceLibrary } from "./sources.ts";
 export type ClientMessage =
   | { type: "hello" }
   | { type: "view"; ticker: string; asof: string | null }
-  | { type: "prompt"; agent: "analyst"; text: string }
-  | { type: "prompt"; agent: "advisor"; text: string; selection?: Selection | null }
+  | { type: "prompt"; agent: "analyst"; text: string; attachments?: unknown }
+  | { type: "prompt"; agent: "advisor"; text: string; selection?: Selection | null; attachments?: unknown }
   | { type: "abort"; agent: AgentName }
   | { type: "reset"; agent: AgentName };
 
@@ -119,11 +120,13 @@ export class Workbench {
           return await this.setView(msg.ticker, msg.asof);
         case "prompt": {
           const text = String(msg.text ?? "").trim().slice(0, MAX_TEXT);
-          if (!text) return;
+          const att = withAttachments(text, parseAttachments(msg.attachments));
+          if (!att.prompt) return;
+          const display = { role: "user" as const, text, ...(att.names.length ? { attachments: att.names } : {}) };
           if (msg.agent === "analyst") {
-            return await this.analyst.prompt(`${analystContext(this.view)}\n\n${text}`, { role: "user", text });
+            return await this.analyst.prompt(`${analystContext(this.view)}\n\n${att.prompt}`, display, att.images);
           }
-          return await this.askAdvisor(text, msg.selection ?? null);
+          return await this.askAdvisor(att.prompt, display, att.images, msg.selection ?? null);
         }
         case "abort":
           return await host(msg.agent).abort();
@@ -154,7 +157,7 @@ export class Workbench {
     this.broadcast({ type: "suggestions", agent: "advisor", items: ai.advisor, source: "ai" });
   }
 
-  private async askAdvisor(text: string, selection: Selection | null) {
+  private async askAdvisor(text: string, display: TranscriptUser, images: ImageContent[], selection: Selection | null) {
     let snapshot = null;
     if (this.view.ticker) {
       const r = await this.analyzer.analyze(this.view.ticker, this.view.asof);
@@ -167,6 +170,6 @@ export class Workbench {
       : selection.kind === "text" ? `划选：${selection.text.slice(0, 80)}${selection.text.length > 80 ? "…" : ""}`
       : selection.kind === "view" ? `来自卡片：${selection.what}`
       : `图表：${selection.time}`;
-    await this.advisor.prompt(`${advisorContext(snapshot, selection)}\n\n【问题】${text}`, { role: "user", text, context });
+    await this.advisor.prompt(`${advisorContext(snapshot, selection)}\n\n【问题】${text}`, { ...display, context }, images);
   }
 }

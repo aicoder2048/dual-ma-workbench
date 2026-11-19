@@ -18,6 +18,8 @@ import nvda from "../test/fixtures/nvda-analysis.json";
 
 const MP3 = readFileSync(resolve(import.meta.dir, "../test/fixtures/tts-sample.mp3"));
 const ttsCalls: { text: string; voice: string }[] = [];
+const wsSent: any[] = [];
+const lastPrompt = () => wsSent.filter((m) => m.type === "prompt").at(-1);
 let server: ReturnType<typeof Bun.serve>;
 let browser: Browser;
 let base = "";
@@ -33,7 +35,16 @@ beforeAll(async () => {
     settings: new SettingsStore(join(dir, "s.json")),
     tts: new Speaker(async (text, voice) => { ttsCalls.push({ text, voice }); return new Uint8Array(MP3); }),
   });
-  server = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: handler });
+  // WebSocket 替身：记下浏览器发来的消息；连上就告诉两个面板"空闲"，输入框才可用
+  server = Bun.serve({
+    hostname: "127.0.0.1", port: 0,
+    fetch: (req, srv) => (new URL(req.url).pathname === "/ws" ? (srv.upgrade(req) ? undefined : new Response("", { status: 400 })) : handler(req)),
+    websocket: {
+      maxPayloadLength: 24 * 1024 * 1024,
+      open(ws) { for (const agent of ["analyst", "advisor"]) ws.send(JSON.stringify({ type: "status", agent, busy: false })); },
+      message(_ws, m) { wsSent.push(JSON.parse(String(m))); },
+    },
+  });
   base = `http://127.0.0.1:${server.port}`;
   browser = await chromium.launch({ channel: "chrome", args: ["--autoplay-policy=no-user-gesture-required"] });
 });
@@ -140,6 +151,56 @@ describe("搜索框", () => {
     expect(await page.textContent("#search-msg")).toContain("某某科技");
     expect(await page.textContent("#ticker")).toBe("NVDA");
     expect(errors).toEqual([]);
+    await page.close();
+  }, 30_000);
+});
+
+describe("附件", () => {
+  test("粘贴截图：托盘出现缩略图，发出去的问题带上图片，托盘清空", async () => {
+    const { page, errors } = await open();
+    await page.waitForFunction(() => !(document.getElementById("analyst-input") as HTMLTextAreaElement).disabled);
+    await page.evaluate(async () => {
+      const c = document.createElement("canvas");
+      c.width = 40; c.height = 30;
+      c.getContext("2d")!.fillRect(0, 0, 20, 20);
+      const blob: Blob = await new Promise((ok) => c.toBlob((b) => ok(b!), "image/png"));
+      const dt = new DataTransfer();
+      dt.items.add(new File([blob], "image.png", { type: "image/png" }));
+      document.getElementById("analyst-input")!.dispatchEvent(new ClipboardEvent("paste", { clipboardData: dt, bubbles: true, cancelable: true }));
+    });
+    await page.waitForSelector(".att img");
+    await page.fill("#analyst-input", "这张图怎么看？");
+    await page.press("#analyst-input", "Enter");
+    await page.waitForFunction(() => !document.querySelector(".att"));
+    await Bun.sleep(100);
+    const m = lastPrompt();
+    expect(m.text).toBe("这张图怎么看？");
+    expect(m.attachments).toHaveLength(1);
+    expect(m.attachments[0]).toMatchObject({ kind: "image", mimeType: "image/png", name: "image.png" });
+    expect(m.attachments[0].data.length).toBeGreaterThan(20);
+    expect(m.attachments[0].preview).toBeUndefined();
+    expect(errors).toEqual([]);
+    await page.close();
+  }, 30_000);
+
+  test("导入 csv：作为文本附件发出；没写问题也能发", async () => {
+    const { page } = await open();
+    await page.waitForFunction(() => !(document.getElementById("advisor-input") as HTMLTextAreaElement).disabled);
+    await page.setInputFiles(".role-advisor input[type=file]", { name: "持仓.csv", mimeType: "text/csv", buffer: Buffer.from("代码,股数\nNVDA,10") });
+    await page.waitForSelector(".role-advisor .att");
+    await page.click("#advisor-send");
+    await Bun.sleep(200);
+    const m = lastPrompt();
+    expect(m.agent).toBe("advisor");
+    expect(m.attachments).toEqual([{ kind: "text", name: "持仓.csv", text: "代码,股数\nNVDA,10" }]);
+    await page.close();
+  }, 30_000);
+
+  test("导入 PDF：托盘里直接说明，提示用截图", async () => {
+    const { page } = await open();
+    await page.setInputFiles("#analyst-composer input[type=file]", { name: "研报.pdf", mimeType: "application/pdf", buffer: Buffer.from("%PDF-1.4") });
+    await page.waitForSelector(".att-note");
+    expect(await page.textContent(".att-note")).toContain("截图");
     await page.close();
   }, 30_000);
 });

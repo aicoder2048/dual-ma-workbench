@@ -41,7 +41,11 @@ export interface TranscriptUser {
   text: string;
   /** 附带的上下文（划选内容等），给界面显示。 */
   context?: string;
+  /** 附件名（导入的文件、粘贴的截图），只给界面显示，不存内容。 */
+  attachments?: string[];
 }
+
+export type ImageContent = { type: "image"; mimeType: string; data: string };
 
 export interface TranscriptAssistant {
   role: "assistant";
@@ -118,7 +122,7 @@ export class AgentHost {
   }
 
   /** text 是发给模型的完整内容；display 是界面上显示的用户消息。 */
-  async prompt(text: string, display: TranscriptUser): Promise<void> {
+  async prompt(text: string, display: TranscriptUser, images: ImageContent[] = []): Promise<void> {
     if (this.busy) throw new Error("上一个问题还在回答中，请稍等或先中断");
     const { emit, name } = this.opts;
     this.busy = true;
@@ -163,7 +167,10 @@ export class AgentHost {
           aborted = e.aborted;
         }
       });
-      await session.prompt(text);
+      if (images.length && !session.model?.input?.includes("image")) {
+        throw new Error(`当前模型 ${modelUsed} 不支持看图，请在设置里换模型，或改发文字`);
+      }
+      await session.prompt(text, images.length ? { images } : undefined);
       await session.waitForIdle();
     } catch (err) {
       emit({ type: "error", agent: name, message: err instanceof Error ? err.message : String(err) });

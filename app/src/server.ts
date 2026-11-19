@@ -45,6 +45,7 @@ const server = Bun.serve<WsData, never>({
     return handler(req);
   },
   websocket: {
+    maxPayloadLength: 24 * 1024 * 1024, // 附件：最多 4 张 4MB 图片，base64 后约 22MB
     open(ws) {
       ws.data.client = { send: (d) => ws.send(d) };
       workbench.connect(ws.data.client);

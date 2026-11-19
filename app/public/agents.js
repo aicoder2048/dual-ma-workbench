@@ -1,4 +1,5 @@
 // 两个 agent 面板（中栏分析师、右栏鸿雁）+ WebSocket 连接。
+import { installAttachments } from "./attach.js";
 import { enhance } from "./blocks.js";
 import { renderRich } from "./cite.js";
 import { currentSettings } from "./settings.js";
@@ -42,6 +43,7 @@ export class Panel {
     this.busy = false;
     this.live = null; // 正在生成的回答 { el, body, tools, text }
     this.connected = false;
+    this.attachments = installAttachments({ form: opts.form, input: opts.input });
     opts.form.addEventListener("submit", (e) => {
       e.preventDefault();
       this.busy ? send({ type: "abort", agent: opts.agent }) : this.submit(opts.input.value);
@@ -75,9 +77,10 @@ export class Panel {
 
   submit(text) {
     text = String(text ?? "").trim();
-    if (!text || this.busy) return;
+    if ((!text && !this.attachments.has()) || this.busy) return;
     const extra = this.o.beforeSend?.() ?? {};
-    send({ type: "prompt", agent: this.o.agent, text, ...extra });
+    const attachments = this.attachments.take();
+    send({ type: "prompt", agent: this.o.agent, text, ...extra, ...(attachments.length ? { attachments } : {}) });
     this.o.input.value = "";
     this.autosize();
   }
@@ -98,7 +101,8 @@ export class Panel {
     if (this.o.empty) this.o.empty.hidden = true;
     const el = document.createElement("div");
     el.className = "msg user";
-    el.innerHTML = `${u.context ? `<div class="ctx">${esc(u.context)}</div>` : ""}<div>${esc(u.text)}</div>`;
+    const atts = (u.attachments ?? []).map((n) => `<span class="att-name">📎 ${esc(n)}</span>`).join("");
+    el.innerHTML = `${u.context ? `<div class="ctx">${esc(u.context)}</div>` : ""}${atts ? `<div class="atts">${atts}</div>` : ""}${u.text ? `<div>${esc(u.text)}</div>` : ""}`;
     this.o.thread.appendChild(el);
     this.scrollEnd();
   }
