@@ -237,32 +237,39 @@ export function trendAnswer(t) {
   return `<div class="answer"><span class="ak">结论</span><b class="big">${esc(t.type)}</b><span>${esc(t.look)}。下面都是证据。</span></div>`;
 }
 
-/** 成本价输入 → 数字；认逗号、全角数字和空格。没填、看不懂、≤ 0 都返回 null。 */
+/**
+ * 成本价输入 → 数字；认千分位逗号、全角数字和空格。没填、看不懂、≤ 0 都返回 null。
+ * 逗号只当千分位（1,234.5）：133,5 这种可能是欧式小数，宁可说看不懂，也不悄悄变成 1335。
+ */
 export function parseCost(raw) {
-  const t = String(raw ?? "").replace(/[０-９．]/g, (ch) => String.fromCharCode(ch.charCodeAt(0) - 0xfee0)).replace(/[,，\s]/g, "");
-  if (!t) return null;
-  const c = Number(t);
-  return Number.isFinite(c) && c > 0 ? c : null;
+  const t = String(raw ?? "").replace(/[０-９．]/g, (ch) => String.fromCharCode(ch.charCodeAt(0) - 0xfee0))
+    .replace(/，/g, ",").replace(/\s/g, "");
+  if (!/^(\d{1,3}(,\d{3})+|\d+)(\.\d+)?$/.test(t)) return null;
+  const c = Number(t.replace(/,/g, ""));
+  return c > 0 ? c : null;
 }
+
+/** 现价和成本差不到 0.005%（两位小数显示出来一样）：算持平。 */
+const isEven = (cost, close) => Math.abs((close / cost - 1) * 100) < 0.005;
 
 export function pnlText(cost, close) {
   if (!String(cost ?? "").trim()) return "填了成本价，就显示浮盈亏，计划也按浮盈 / 浮亏给。";
   const c = parseCost(cost);
   if (c === null) return '<b class="bad">成本价看不懂：请填数字，例如 133.5</b>';
   const d = (close / c - 1) * 100;
-  if (Math.abs(d) < 0.005) return `现价 ${f2(close)} / 成本 ${f2(c)}：持平`;
+  if (isEven(c, close)) return `现价 ${f2(close)} / 成本 ${f2(c)}：持平`;
   return `现价 ${f2(close)} / 成本 ${f2(c)}：浮${d >= 0 ? "盈" : "亏"} <b class="${d >= 0 ? "bullish" : "bearish"}">${pct(d)}</b>`;
 }
 
 /**
- * 处境：空仓；持仓没填成本；持仓且价格不低于成本（浮盈）；低于成本（浮亏）。
+ * 处境：空仓；持仓没填成本或持平；持仓且价格高于成本（浮盈）；低于成本（浮亏）。
  * 和服务端 plan.ts 的 Situation 一一对应。
  */
 export function situationOf(p, close) {
   if (p.pos !== "holding") return "flat";
   const c = parseCost(p.cost);
-  if (c === null) return "holding";
-  return close >= c ? "profit" : "loss";
+  if (c === null || isEven(c, close)) return "holding";
+  return close > c ? "profit" : "loss";
 }
 const SITUATION_LABEL = { flat: "空仓", holding: "持仓", profit: "持仓 · 浮盈", loss: "持仓 · 浮亏" };
 

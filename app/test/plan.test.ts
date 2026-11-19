@@ -110,14 +110,24 @@ describe("每种趋势类型的浮盈 / 浮亏都不自相矛盾", () => {
     return a;
   };
   const txt = (p: { action: string; items: { text: string }[] }) => [p.action, ...p.items.map((i) => i.text)].join("｜");
-  for (const t of TRENDS) for (const score of [-0.4, 0.4]) {
+  // 只遍历真实数据里会出现的组合：classify 只在分数 ≥ 0.6 时给上涨一侧、≤ -0.6 时给下跌一侧，
+  // 横盘和过渡态可以配任何分数（看方向分三档：≤ -0.25、中间、≥ 0.25）。
+  const SCORES: Record<string, number[]> = { 健康上涨: [0.8], 极度超买: [0.8], 健康下跌: [-0.8], 极度超卖: [-0.8] };
+  for (const t of TRENDS) for (const score of SCORES[t] ?? [-0.4, 0, 0.4]) {
     test(`${t}，lean ${score}`, () => {
       const p = buildPlans(withTrend(t, score));
       expect(txt(p.profit)).toContain("{cost}");
       expect(txt(p.profit)).not.toMatch(/浮亏|不等回本/);
       expect(txt(p.loss)).not.toMatch(/止盈|浮盈|保本/); // 亏着钱谈不上止盈、保本
       expect(txt(p.loss)).toMatch(/摊低|不等回本/); // 浮亏时最常见的错：加仓摊低、死等回本
-      if (/不加仓/.test(txt(p.loss))) expect(txt(p.loss)).not.toMatch(/再加|加仓。|可以加仓/);
+      for (const k of ["holding", "profit", "loss"] as const) {
+        const all = txt(p[k]);
+        // 同一张计划里不能既说不加仓、又说可以加
+        expect(/不加仓/.test(all) && /再加|(?<!不)加仓。|可以加仓|小级别确认后加/.test(all)).toBe(false);
+        const timing = p[k].items[0].text;
+        expect(timing).not.toMatch(/「([^」]+)」不变：\1/); // 时机行不把做法原话再说一遍
+        if (/^(拿着|持有)/.test(p[k].action)) expect(timing).not.toMatch(/^支持.*就执行/); // 拿着的计划没有"执行"可支持
+      }
       if (t !== "健康上涨") expect(txt(p.loss)).not.toContain("趋势还向上"); // 只有健康上涨才能这么说
       for (const k of ["profit", "loss"] as const) {
         // 盈亏行提到的「减仓位」「离场条件」，同一张计划里要真的有这一条

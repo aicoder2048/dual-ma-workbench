@@ -4,7 +4,8 @@
  * - buildPlans：按"趋势类型 × 你的处境"给一句做法 + 两三条带价位的条件。规则取自
  *   skill 的 references/playbooks.md，价位取自模糊判断的门槛（EMA20、MA20 抵扣价）和均线值。
  *   处境分四种：空仓、持仓（没填成本）、持仓浮盈、持仓浮亏。成本只在浏览器里，文字里写 {cost}，由页面填上。
- * - buildOutlook：看方向的结论。抵扣价推演出 20 线组还会朝原方向走多久、最早什么时候会变，
+ * - buildOutlook：看方向的结论（只按模糊判断分三档：≤ -0.25、中间、≥ 0.25）。classify 只在分数 ≥ 0.6 时
+ *   给上涨一侧、≤ -0.6 时给下跌一侧，所以只有横盘和过渡态会配上任意一档。抵扣价推演出 20 线组还会朝原方向走多久、最早什么时候会变，
  *   再翻译成"对空仓 / 持仓意味着什么"。
  */
 import type { Analysis } from "./citations.ts";
@@ -155,9 +156,14 @@ const PNL: Record<string, Record<"profit" | "loss", PnlTweak>> = {
   },
 };
 
+/** 这份分析该用哪套打法：按趋势类型，认不出来按过渡态。 */
+function playKey(a: Analysis): string {
+  return PLAYS[short(a.trend)] ? short(a.trend) : "过渡态";
+}
+
 /** 只按趋势类型定的打法（还没加看方向给的时机）。浮盈 / 浮亏在持仓打法的做法之后加一行。 */
 function basePlans(a: Analysis): Record<Situation, Plan> {
-  const key = PLAYS[short(a.trend)] ? short(a.trend) : "过渡态";
+  const key = playKey(a);
   const play = PLAYS[key];
   const l = levels(a);
   const holding = play.holding(l);
@@ -206,8 +212,12 @@ export function buildOutlook(a: Analysis): Outlook {
         flat: { tag: "支持", text: turn === null
           ? `支持${act("flat")}：20 天内进场条件都不会出现，不用盯盘；收盘站上 ${f2(l.ema20)} 再来看。`
           : `支持${act("flat")}：第 ${turn} 天前不会转向，不用急；之后看 MA20 能不能拐头向上。` },
-        ...held((k) => `支持${act(k)}：逆风还会持续，反弹到 EMA20 ${f2(l.ema20)} 附近就执行${
-          k === "loss" ? "，不要等涨回成本" : k === "profit" ? "，先锁住一部分利润" : ""}。`, "支持"),
+        // 横盘的持仓打法是"拿着"，没有反弹要执行的动作：逆风对它是调整时机，其余类型的持仓打法本来就是反弹减
+        ...(playKey(a) === "横盘震荡"
+          ? held((k) => `调整时机：逆风还会持续，守住离场底线；反弹到 EMA20 ${f2(l.ema20)} 附近可以先减一些${
+            k === "profit" ? "，锁住一部分利润" : ""}。`, "调整时机")
+          : held((k) => `支持${act(k)}：逆风还会持续，反弹到 EMA20 ${f2(l.ema20)} 附近就执行${
+            k === "loss" ? "，不要等涨回成本" : k === "profit" ? "，先锁住一部分利润" : ""}。`, "支持")),
       },
     };
   }
@@ -233,7 +243,7 @@ export function buildOutlook(a: Analysis): Outlook {
     change: a.lean.flips[0] ? `${a.lean.flips[0].text}，方向才会清楚。` : "等均线理顺，方向才会清楚。",
     effect: {
       flat: { tag: "不变", text: `方向不明，${act("flat")}不变，等方向出来。` },
-      ...held((k) => `方向不明，${act(k)}不变：不加仓，减到心态稳得住。`, "不变"),
+      ...held((k) => `方向不明，${act(k)}不变，等方向出来再动。`, "不变"),
     },
   };
 }
