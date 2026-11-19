@@ -484,3 +484,36 @@ body.offline .status-pill .dot { background: var(--bad); }
 .chart.drawing { cursor: crosshair; outline: 2px dashed var(--accent); outline-offset: 2px; }
 .chart-tools .draw-toggle { margin-left: auto; }
 .chart-tools .levels-toggle { margin-left: 0; }
+
+/* ===================== 三步的结论 ===================== */
+.step-answer .answer { border-left: 4px solid var(--accent); background: var(--panel); border-radius: 10px; padding: 10px 14px; margin: 4px 0 14px; display: grid; gap: 6px; }
+.answer .ak { font-size: 11px; color: var(--muted); letter-spacing: .06em; }
+.answer .big { font: 700 17px/1.5 var(--heading); }
+.answer p { margin: 0; font-size: 14px; }
+.answer .pl { display: inline-block; font-size: 11.5px; color: var(--muted); border: 1px solid var(--line); border-radius: 6px; padding: 0 6px; margin-right: 8px; white-space: nowrap; }
+.plan-items { list-style: none; margin: 2px 0 0; padding: 0; display: grid; gap: 4px; font-size: 14px; }
+.pos-row { display: flex; align-items: center; gap: 10px; }
+.pos-seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.pos-seg button { border: 0; background: transparent; padding: 2px 14px; font-size: 13px; cursor: pointer; color: var(--muted); }
+.pos-seg button + button { border-left: 1px solid var(--line); }
+.pos-seg button[aria-pressed="true"] { background: var(--accent); color: var(--on-accent); }
+.pos-cost { display: flex; align-items: center; gap: 8px; font-size: 13px; flex-wrap: wrap; }
+.pos-cost input { width: 96px; padding: 2px 8px; font: 13px var(--mono); }
+.pnl { color: var(--muted); }
+.evidence-title { font-size: 12.5px; color: var(--muted); margin: 0 0 6px; }
+details.ref, details.points-box { margin-top: 10px; }
+details.ref > summary, details.points-box > summary { cursor: pointer; font-size: 12.5px; color: var(--muted); }
+details.points-box .points { margin-top: 6px; }
+
+/* ===================== 提示条 + 抽屉 ===================== */
+.panel.center { position: relative; }
+.peek { position: absolute; top: 0; left: 0; right: 0; z-index: 6; display: flex; align-items: center; gap: 10px; justify-content: space-between;
+  padding: 6px 16px; background: color-mix(in srgb, var(--panel) 94%, transparent); backdrop-filter: blur(6px); border-bottom: 1px solid var(--line); font-size: 13px; border-radius: var(--radius) var(--radius) 0 0; }
+.peek b { font-weight: 600; }
+.peek-btns { display: inline-flex; gap: 6px; flex: none; }
+.peek-btns button { font-size: 12px; border: 1px solid var(--line); background: var(--card); border-radius: 999px; padding: 1px 12px; cursor: pointer; color: var(--fg); }
+.peek-btns button[aria-pressed="true"] { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
+.drawer { position: absolute; top: 36px; left: 12px; right: 12px; z-index: 5; overflow-y: auto;
+  background: var(--bg); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 16px 40px rgba(0,0,0,.18); padding: 10px; display: flex; flex-direction: column; gap: 8px; }
+.center-scroll { scroll-padding-top: 44px; }
+.drawer-close { align-self: center; font-size: 12px; border: 1px solid var(--line); background: var(--card); border-radius: 999px; padding: 2px 16px; cursor: pointer; color: var(--muted); }

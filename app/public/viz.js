@@ -239,10 +239,56 @@ export function installTips() {
   });
 }
 
-/** 每一步要放哪些图。 */
+// ---------- 三步的结论 ----------
+const POS = { flat: "空仓", holding: "持仓" };
+
+/** 第 1 步：趋势类型 + 长什么样；六种类型的对照表折叠在下面。 */
+export function trendAnswer(t) {
+  return `<div class="answer"><span class="ak">结论</span><b class="big">${esc(t.type)}</b><span>${esc(t.look)}。下面都是证据。</span></div>`;
+}
+
+export function pnlText(cost, close) {
+  const c = Number(cost);
+  if (!cost || !Number.isFinite(c) || c <= 0) return "填了成本价，就显示浮盈亏。";
+  const d = (close / c - 1) * 100;
+  return `现价 ${f2(close)} / 成本 ${f2(c)}：浮${d >= 0 ? "盈" : "亏"} <b class="${d >= 0 ? "bullish" : "bearish"}">${pct(d)}</b>`;
+}
+
+/** 第 2 步：空仓 / 持仓切换，一句做法 + 带价位的条件。 */
+export function planAnswer(plans, p, close) {
+  const plan = plans[p.pos];
+  const seg = Object.entries(POS).map(([k, label]) =>
+    `<button type="button" data-pos="${k}" aria-pressed="${k === p.pos}">${label}</button>`).join("");
+  const cost = p.pos === "holding"
+    ? `<div class="pos-cost"><label for="pos-cost">成本价</label><input id="pos-cost" inputmode="decimal" placeholder="可不填" value="${esc(p.cost ?? "")}"><span class="pnl">${pnlText(p.cost, close)}</span></div>`
+    : "";
+  return `<div class="answer plan">
+      <div class="pos-row"><span class="ak">你现在</span><div class="pos-seg" role="group" aria-label="有没有仓位">${seg}</div></div>
+      ${cost}
+      <b class="big">${esc(plan.action)}</b>
+      <ul class="plan-items">${plan.items.map((i) => `<li><span class="pl">${esc(i.label)}</span>${esc(i.text)}</li>`).join("")}</ul>
+    </div>`;
+}
+
+/** 第 3 步：方向结论 + 最早何时会变 + 对你意味着什么。 */
+export function outlookAnswer(o, pos) {
+  return `<div class="answer">
+      <span class="ak">结论</span><b class="big">${esc(o.verdict)}</b>
+      <p><span class="pl">会变吗</span>${esc(o.change)}</p>
+      <p class="for-you"><span class="pl">对你（${POS[pos]}）</span>${esc(o.forYou[pos])}</p>
+    </div>`;
+}
+
+/** 每一步的证据（结论在 step-answer 里）。 */
 export function stepVisuals(key, v) {
-  if (key === "big_picture") return maTable(v) + ladder(v) + `<div class="two">${biasMeter(v)}${crossTable(v)}</div>`;
-  if (key === "strategy") return trendTable(v);
-  if (key === "direction") return dropMultiples(v) + projectionFlow(v);
+  if (key === "big_picture") {
+    return `<p class="evidence-title">证据：6 条线的方向和位置、离 20 线多远、最近的交叉</p>`
+      + maTable(v) + ladder(v) + `<div class="two">${biasMeter(v)}${crossTable(v)}</div>`
+      + `<details class="ref"><summary>六种趋势类型对照（现在是哪一种）</summary>${trendTable(v)}</details>`;
+  }
+  if (key === "direction") {
+    return `<p class="evidence-title">证据：未来 10 天每条 MA 要扣掉的价格。红点在现价上方 = 扣高值，均线往下拉；绿点在下方 = 扣低值，往上抬。</p>`
+      + dropMultiples(v) + projectionFlow(v);
+  }
   return "";
 }

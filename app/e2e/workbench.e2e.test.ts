@@ -312,6 +312,8 @@ describe("自己画水平线", () => {
     const askLabel = () => page.evaluate(() => document.getElementById("ask-advisor")!.textContent);
     const before = await askLabel();
     await page.click(".draw-toggle");
+    // 点按钮会滚动页面；把图表放回滚动区顶部再取坐标，点的位置才一定落在图上（不落到下面的输入区）
+    await page.evaluate(() => document.getElementById("chart")!.scrollIntoView({ block: "start" }));
     const box = (await page.locator("#chart").boundingBox())!;
     await page.mouse.click(box.x + box.width * 0.5, box.y + box.height * 0.3);
     await page.waitForTimeout(300);
@@ -320,7 +322,7 @@ describe("自己画水平线", () => {
     expect(lines[0]).toBeGreaterThan(100);
     expect(await askLabel()).toBe(before); // 画线模式下点图，不触发问鸿雁
     await page.waitForTimeout(600); // 隔开一点、换个位置，免得图表当成双击
-    await page.mouse.click(box.x + box.width * 0.35, box.y + box.height * 0.6);
+    await page.mouse.click(box.x + box.width * 0.35, box.y + box.height * 0.45);
     await page.waitForTimeout(300);
     expect(await askLabel()).toContain("问鸿雁："); // 对照：画完退出画线模式，点图照常问鸿雁
     expect(await drawn(page)).toHaveLength(1);
@@ -341,4 +343,89 @@ describe("自己画水平线", () => {
     await page.close();
   }, 30_000);
 });
+
+
+describe("三步报告：每一步先给结论", () => {
+  test("看大局：第一眼就是趋势类型；六种类型的对照表在这里，不在定策略", async () => {
+    const { page, errors } = await open();
+    const step = page.locator('[data-step="big_picture"]');
+    expect(await step.locator(".answer").textContent()).toContain("极度超卖");
+    expect(await step.locator("table.trend").count()).toBe(1);
+    expect(await page.locator('[data-step="strategy"] table.trend').count()).toBe(0);
+    expect(errors).toEqual([]);
+    await page.close();
+  }, 30_000);
+
+  test("定策略：空仓 / 持仓切换，做法跟着变；看方向的「对你」也跟着变；刷新后记住", async () => {
+    const { page } = await open();
+    const plan = page.locator('[data-step="strategy"] .answer');
+    const forYou = page.locator('[data-step="direction"] .for-you');
+    expect(await plan.textContent()).toContain("不抢反弹");
+    const flatForYou = await forYou.textContent();
+    await page.click('[data-pos="holding"]');
+    expect(await plan.textContent()).toContain("反弹再减仓");
+    expect(await forYou.textContent()).not.toBe(flatForYou);
+    await page.fill("#pos-cost", "200");
+    expect(await page.textContent(".pnl")).toContain("-24.5%");
+    await page.reload();
+    await page.waitForSelector(".lean-label");
+    expect(await page.getAttribute('[data-pos="holding"]', "aria-pressed")).toBe("true");
+    expect(await page.inputValue("#pos-cost")).toBe("200");
+    await page.close();
+  }, 30_000);
+
+  test("看方向：有一句结论和「最早什么时候会变」", async () => {
+    const { page } = await open();
+    const ans = (await page.locator('[data-step="direction"] .answer').textContent())!;
+    expect(ans).toContain("逆风");
+    expect(ans).toContain("183.08");
+    await page.close();
+  }, 30_000);
+
+  test("要点和出处默认折叠", async () => {
+    const { page } = await open();
+    expect(await page.locator('[data-step="big_picture"] details.points-box').getAttribute("open")).toBeNull();
+    await page.close();
+  }, 30_000);
+});
+
+describe("抽屉：总结和 K 线图滚上去以后还能拉回来", () => {
+  const scrollDown = (page: Page) => page.evaluate(() => {
+    const s = document.getElementById("center-scroll")!;
+    s.scrollTop = s.scrollHeight;
+    return s.scrollTop;
+  });
+
+  test("滚到下面：顶部出现提示条；点「K 线图」拉出抽屉，「收起」放回原处，滚动位置不变", async () => {
+    const { page, errors } = await open();
+    await page.waitForSelector("#chart canvas");
+    expect(await page.isVisible("#peek")).toBe(false);
+    const top = await scrollDown(page);
+    await page.waitForSelector("#peek", { state: "visible" });
+    expect(await page.textContent("#peek")).toContain("明显偏空");
+    await page.click('[data-peek="chart"]');
+    await page.waitForSelector("#drawer", { state: "visible" });
+    expect(await page.locator("#drawer #chart canvas").count()).toBeGreaterThan(0);
+    expect(await page.evaluate(() => document.getElementById("center-scroll")!.scrollTop)).toBe(top);
+    await page.click("#drawer .drawer-close");
+    expect(await page.isVisible("#drawer")).toBe(false);
+    expect(await page.locator(".chart-card #chart").count()).toBe(1);
+    expect(await page.evaluate(() => document.getElementById("center-scroll")!.scrollTop)).toBe(top);
+    expect(errors).toEqual([]);
+    await page.close();
+  }, 30_000);
+
+  test("点「总结」拉出模糊判断卡片", async () => {
+    const { page } = await open();
+    await scrollDown(page);
+    await page.waitForSelector("#peek", { state: "visible" });
+    await page.click('[data-peek="verdict"]');
+    expect(await page.locator("#drawer .lean-label").textContent()).toBe("明显偏空");
+    await page.keyboard.press("Escape");
+    expect(await page.isVisible("#drawer")).toBe(false);
+    expect(await page.locator("#center-scroll #verdict").count()).toBe(1);
+    await page.close();
+  }, 30_000);
+});
+
 

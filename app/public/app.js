@@ -5,9 +5,10 @@ import { installCitationHandlers, loadSourceIndex, renderInline } from "./cite.j
 import { initAsofInput, initSplitters } from "./layout.js";
 import { initSelection } from "./selection.js";
 import { initAskMenu, selectionLabel } from "./askmenu.js";
+import { initDrawer, updatePeek } from "./drawer.js";
 import { resolveTicker } from "./names.js";
 import { applyRemoteSettings, initSettings, openSettings } from "./settings.js";
-import { installTips, leanCard, leanName, stanceOf, stepVisuals } from "./viz.js";
+import { installTips, leanCard, leanName, outlookAnswer, planAnswer, pnlText, stanceOf, stepVisuals, trendAnswer } from "./viz.js";
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -147,6 +148,7 @@ export function showAnalysis(data, asof = null) {
   asofUi?.sync();
   paintStar();
   renderKpis(a);
+  updatePeek(a, leanName(data.report.visual.lean), SHORT_TREND(a.trend));
   const status = $("data-status");
   status.classList.toggle("partial", Boolean(a.warning));
   $("data-status-v").textContent = `${a.source.replace("（复权日线）", "")} · ${a.warning ? "盘中" : a.date}`;
@@ -169,14 +171,16 @@ export function showAnalysis(data, asof = null) {
   const steps = $("steps");
   steps.innerHTML = "";
   steps.dataset.meta = `${a.label} ${a.date} · ${a.source}`;
+  const pos = loadPosition(a.label);
   r.steps.forEach((s, i) => {
     const sec = document.createElement("section");
     sec.className = "card step";
     sec.dataset.step = s.key;
     sec.innerHTML = `<div class="step-head"><span class="no">${i + 1}</span><h2>${s.title}</h2><span>${s.subtitle}</span>
         <button type="button" class="ask-card" data-ask-card="${s.key}" aria-haspopup="menu">问鸿雁</button></div>
+      <div class="step-answer"></div>
       <div class="step-viz">${stepVisuals(s.key, r.visual)}</div>
-      <p class="points-title">要点（规则生成，点标签看出处）</p><ul class="points"></ul>`;
+      <details class="points-box"><summary>要点和出处（${s.items.length} 条，规则生成）</summary><ul class="points"></ul></details>`;
     const ul = sec.querySelector(".points");
     for (const item of s.items) {
       const li = document.createElement("li");
@@ -185,11 +189,39 @@ export function showAnalysis(data, asof = null) {
     }
     steps.appendChild(sec);
   });
+  paintAnswers(r, a, pos);
 
   document.querySelectorAll(".wl-item").forEach((li) =>
     li.classList.toggle("active", li.dataset.ticker === a.label && !asof));
   listeners.forEach((cb) => cb(data));
   send({ type: "view", ticker: a.label, asof }); // 服务端据此更新问法、给鸿雁准备数据
+}
+
+// ---------- 三步的结论：看大局（趋势类型）、定策略（按持仓）、看方向（对你意味着什么） ----------
+const POS_KEY = (t) => `dma-pos:${t}`;
+function loadPosition(ticker) {
+  try { return { pos: "flat", cost: "", ...JSON.parse(localStorage.getItem(POS_KEY(ticker)) ?? "{}") }; } catch { return { pos: "flat", cost: "" }; }
+}
+function savePosition(ticker, p) {
+  try { localStorage.setItem(POS_KEY(ticker), JSON.stringify(p)); } catch { /* 隐私模式：只在本页有效 */ }
+}
+
+function paintAnswers(r, a, p) {
+  const box = (key) => document.querySelector(`[data-step="${key}"] .step-answer`);
+  box("big_picture").innerHTML = trendAnswer(r.trend);
+  box("strategy").innerHTML = planAnswer(r.plans, p, a.close);
+  box("direction").innerHTML = outlookAnswer(r.outlook, p.pos);
+  const plan = box("strategy");
+  plan.querySelectorAll("[data-pos]").forEach((b) => b.addEventListener("click", () => {
+    const next = { ...p, pos: b.dataset.pos };
+    savePosition(a.label, next);
+    paintAnswers(r, a, next);
+  }));
+  plan.querySelector("#pos-cost")?.addEventListener("input", (e) => {
+    const next = { ...p, cost: e.target.value };
+    savePosition(a.label, next);
+    plan.querySelector(".pnl").innerHTML = pnlText(next.cost, a.close);
+  });
 }
 
 /** 搜索框下面的一行说明：查的是什么、为什么查不了。bad = 出错。 */
@@ -368,6 +400,7 @@ async function main() {
   initAgents();
   installCitationHandlers(() => (state.data ? `${state.data.analysis.label} ${state.data.analysis.date}` : ""));
   chartApi = createChart($("chart"), $("legend"));
+  initDrawer();
   initSelection({
     chart: chartApi,
     onAttach(sel, question) {
