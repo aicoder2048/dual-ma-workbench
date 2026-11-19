@@ -147,7 +147,7 @@ def test_bounce_under_the_60_group_is_flagged_not_bought():
     a = dma.analyze(make_df(closes), "TEST", "synthetic")
     lean = a["lean"]
     assert lean["up"] > lean["down"]
-    assert lean["conflict"] == "反弹被压"
+    assert lean["conflict"] == "反弹受压"
     assert "不买" in lean["play"]
 
 

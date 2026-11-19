@@ -6,11 +6,10 @@ import { initAsofInput, initSplitters } from "./layout.js";
 import { initSelection } from "./selection.js";
 import { initAskMenu } from "./askmenu.js";
 import { applyRemoteSettings, initSettings, openSettings } from "./settings.js";
-import { installTips, stepVisuals } from "./viz.js";
+import { installTips, leanCard, leanName, stanceOf, stepVisuals } from "./viz.js";
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-const STANCE = { 健康上涨: "bullish", 极度超买: "bullish", 健康下跌: "bearish", 极度超卖: "bearish" };
 const SHORT_TREND = (t) => t.replace("（排列或方向不一致）", "");
 
 export const state = { ticker: null, asof: null, data: null };
@@ -80,7 +79,9 @@ function paintSummary(li, s) {
   const chg = li.querySelector(".chg");
   chg.textContent = `${s.change_pct >= 0 ? "+" : ""}${s.change_pct.toFixed(2)}%`;
   chg.className = `chg ${s.change_pct >= 0 ? "bullish" : "bearish"}`;
-  li.querySelector(".trend").innerHTML = `<span class="badge ${STANCE[s.trend] ?? "neutral"}">${SHORT_TREND(s.trend)}</span>`;
+  const trendEl = li.querySelector(".trend");
+  trendEl.innerHTML = `<span class="badge ${stanceOf(s.lean)}">${leanName(s.lean)}</span>`;
+  trendEl.title = `模糊判断 ${leanName(s.lean)}；趋势类型 ${SHORT_TREND(s.trend)}`;
 }
 
 $("watchlist").addEventListener("click", async (e) => {
@@ -103,7 +104,7 @@ function renderKpis(a) {
   const sign = (x, d = 2) => `${x >= 0 ? "+" : ""}${x.toFixed(d)}`;
   const tiles = [
     { k: "收盘", v: a.close.toFixed(2), s: `<span class="${a.change_pct >= 0 ? "bullish" : "bearish"}">${sign(a.change_pct)}%</span>` },
-    { k: "规则初判", v: `<span class="${STANCE[a.trend] ?? "neutral"}">${SHORT_TREND(a.trend)}</span>`, s: `MA ${a.arr_ma} · EMA ${a.arr_ema}` },
+    { k: "趋势类型", v: `<span class="${stanceOf(a.lean)}">${SHORT_TREND(a.trend)}</span>`, s: `MA ${a.arr_ma} · EMA ${a.arr_ema}` },
     { k: "离 20 线", v: `${sign(a.bias20, 1)}%`, s: `历史 ${Math.round(a.bias_pctl * 100)}% 分位` },
   ];
   if (a.volume) tiles.push({ k: "量比", v: `${a.volume.ratio.toFixed(1)}×`, s: `近 20 日大量 ${a.volume.spikes.length} 天` });
@@ -155,9 +156,8 @@ export function showAnalysis(data, asof = null) {
   const v = $("verdict");
   v.hidden = false;
   v.style.setProperty("--stance", `var(--${r.stance === "bullish" ? "up" : r.stance === "bearish" ? "down" : "neutral"})`);
-  v.innerHTML = `<b></b><p>规则初判：脚本按阈值算出，要结合图形复核。点标签看出处或数据。</p>`;
-  const play = r.visual.trendTable.find((row) => row.current)?.play ?? a.strategy;
-  renderInline(v.querySelector("b"), `${SHORT_TREND(a.trend)} [[D:趋势初判]] → ${play} [[S:article#4]]`, data.facts);
+  v.innerHTML = leanCard(r.visual.lean, a.close, SHORT_TREND(a.trend));
+  renderInline(v.querySelector(".lean-play"), `${r.visual.lean.play} [[D:模糊判断]] [[S:skill#模糊判断]]`, data.facts);
 
   chartApi?.setData(data.chart);
 

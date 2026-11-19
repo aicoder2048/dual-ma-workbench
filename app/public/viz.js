@@ -14,6 +14,81 @@ export function clockGlyph(clock) {
     <g transform="rotate(${-deg} 10 10)"><path d="M4 10h11"/><path d="M12 7l3 3-3 3"/></g></svg>`;
 }
 
+// ---------- 模糊判断：接下来几周对谁有利 ----------
+const LEAN_SCALE = ["明显偏空", "偏空", "不明", "偏多", "明显偏多"];
+/** 和服务端 report.ts 的 stanceOf 同一规则：打架时 neutral。 */
+export const stanceOf = (l) => (l.conflict ? "neutral" : l.score >= 0.25 ? "bullish" : l.score <= -0.25 ? "bearish" : "neutral");
+export const leanName = (l) => l.label + (l.conflict ? `·${l.conflict}` : "");
+const ARROW = { 1: ["↗", "bullish", "向上"], 0: ["→", "neutral", "走平"], [-1]: ["↘", "bearish", "向下"] };
+const REL = { 1: "在上", 0: "贴近", [-1]: "在下" };
+
+/** 刻度条：−1…+1 分 5 档；实心针 = 现在，空心针 = 价格不变 N 天后。 */
+function leanScale(l) {
+  const at = (x) => 3 + ((Math.max(-1, Math.min(1, x)) + 1) / 2) * 94; // 两端留 3%，针不被裁掉
+  const pos = (x) => `${at(x).toFixed(1)}%`;
+  const zones = LEAN_SCALE.map((z) => `<span class="${z === l.label ? "on" : ""}">${z}</span>`).join("");
+  const a = l.after;
+  const same = Math.abs(at(a.score) - at(l.score)) < 12; // 两根针挨着时只写一个标签
+  return `<div class="lean-scale" role="img" aria-label="模糊判断 ${l.label}，分数 ${l.score.toFixed(2)}；价格不变 ${a.days} 天后 ${a.label}">
+      <div class="lean-track">
+        <span class="pin after" style="left:${pos(a.score)}" ${tip(`价格不变 ${a.days} 天后：${leanName(a)}（${a.score >= 0 ? "+" : ""}${a.score.toFixed(2)}）`)}><i></i>${same ? "" : `<em>${a.days} 天后</em>`}</span>
+        <span class="pin now" style="left:${pos(l.score)}" ${tip(`现在：${leanName(l)}（${l.score >= 0 ? "+" : ""}${l.score.toFixed(2)}）`)}><i></i><em>${same ? `现在 ≈ ${a.days} 天后` : "现在"}</em></span>
+      </div>
+      <div class="lean-zones">${zones}</div></div>`;
+}
+
+/** 方向证据：6 条线各自的箭头。 */
+function leanArrows(l) {
+  const keys = ["MA20", "EMA20", "MA60", "EMA60", "MA120", "EMA120"];
+  return `<div class="lean-arrows">${keys.map((k) => {
+    const [g, cls, word] = ARROW[l.dirs[k]];
+    const n = k.replace(/\D/g, "");
+    return `<span class="la" ${tip(`${k} ${word}`)}><i class="sw ${k.startsWith("E") ? "dash" : ""}" style="--c: var(--${k.toLowerCase()})"></i>${k.startsWith("E") ? "E" : ""}${n}<b class="${cls}">${g}</b></span>`;
+  }).join("")}</div>`;
+}
+
+/** 排布证据：20 组 vs 60 组、60 组 vs 120 组，MA 和 EMA 各一行。 */
+function leanPairs(l) {
+  const rel = Object.fromEntries(l.pairs.map((p) => [p.pair, p.rel]));
+  const cell = (k) => `<b class="${rel[k] > 0 ? "bullish" : rel[k] < 0 ? "bearish" : "neutral"}">${REL[rel[k]]}</b>`;
+  return `<table class="lean-pairs"><thead><tr><th></th><th>MA</th><th>EMA</th></tr></thead><tbody>
+      <tr><th>20 组对 60 组</th><td>${cell("MA20/MA60")}</td><td>${cell("EMA20/EMA60")}</td></tr>
+      <tr><th>60 组对 120 组</th><td>${cell("MA60/MA120")}</td><td>${cell("EMA60/EMA120")}</td></tr></tbody></table>`;
+}
+
+/** 什么会改变判断：还没越过的门槛，按 EMA 先拐、MA 后拐排。距离用现价的百分比。 */
+function leanFlips(l, close) {
+  if (!l.flips.length) return `<p class="lean-none">方向不明，没有要盯的门槛。等均线理顺，或等标志性动作。</p>`;
+  const verb = l.score < 0 ? "站上" : "跌破";
+  const rows = l.flips.filter((f) => !f.line.endsWith("120")).map((f) => {
+    const what = f.line.startsWith("EMA") ? f.line : `${f.line} 扣价`;
+    const role = f.line.startsWith("EMA") ? `${f.line} 先拐（第 1 个动作）` : `过了底扣价，${f.line} 跟着拐（第 2 个动作）`;
+    const dist = (f.price / close - 1) * 100;
+    return `<li class="${f.crossed ? "crossed" : ""}" ${tip(f.text)}>
+        <span class="fv">${f.crossed ? "已" : ""}${verb} ${what}</span>
+        <span class="num">${f2(f.price)}</span>
+        <span class="num fd">${f.crossed ? "已越过" : pct(dist)}</span>
+        <span class="fr">${role}</span></li>`;
+  }).join("");
+  return `<ul class="lean-flips">${rows}</ul>`;
+}
+
+export function leanCard(l, close, trend) {
+  return `<div class="lean-top">
+      <div class="lean-verdict"><span class="eyebrow">接下来几周 · 对谁有利</span>
+        <div class="lean-label ${stanceOf(l)}">${esc(l.label)}${l.conflict ? `<em>· ${esc(l.conflict)}</em>` : ""}</div>
+        <div class="lean-trend">趋势类型 <b>${esc(trend)}</b></div></div>
+      ${leanScale(l)}
+    </div>
+    <p class="lean-play"></p>
+    <div class="lean-evidence">
+      <div class="ev"><div class="ev-k">方向：6 条成本线往哪走 <span>${l.up} 上 · ${l.flat} 平 · ${l.down} 下</span></div>${leanArrows(l)}</div>
+      <div class="ev"><div class="ev-k">排布：短期线组在上还是在下 <span>相差 &lt; 0.5% 算贴近</span></div>${leanPairs(l)}</div>
+      <div class="ev"><div class="ev-k">什么会改变判断 <span>距现价</span></div>${leanFlips(l, close)}</div>
+    </div>
+    <p class="lean-foot">模糊判断：只数方向和排布，不预测明天涨跌。一两处小错位不改变大方向。价位过了门槛，才值得反应。</p>`;
+}
+
 // ---------- 1. 看大局 ----------
 export function maTable(v) {
   const rows = v.lines.map((l) => `<tr>

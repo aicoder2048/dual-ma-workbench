@@ -29,6 +29,8 @@ export function ruleSuggestions(a: Analysis, asof: string | null = null): Sugges
   const T = a.label;
   const line = (n: number) => a.lines.find((l) => l.period === n)!;
   const act =
+    a.lean.conflict === "反弹受压" ? `${T} 这波反弹是真的吗，能追吗？` :
+    a.lean.conflict === "回调有撑" ? `${T} 这次回调要不要卖？` :
     a.trend === "健康上涨" ? `${T} 现在能加仓吗？` :
     a.trend === "极度超买" ? `${T} 涨这么多还能追吗？` :
     a.trend === "健康下跌" || a.trend === "极度超卖" ? `${T} 跌这么多能抄底吗？` :

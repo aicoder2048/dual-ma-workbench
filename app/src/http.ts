@@ -47,7 +47,8 @@ export function createHandler(deps: Deps) {
     }
     if (p === "/api/summary" && req.method === "GET") {
       const { analysis: a } = await analyzer.analyze(q.get("ticker") ?? "");
-      return json({ ticker: a.label, date: a.date, close: a.close, change_pct: a.change_pct, trend: a.trend });
+      return json({ ticker: a.label, date: a.date, close: a.close, change_pct: a.change_pct, trend: a.trend,
+        lean: { label: a.lean.label, conflict: a.lean.conflict, score: a.lean.score } });
     }
     if (p === "/api/watchlist") {
       if (req.method === "GET") return json(watchlist.list());

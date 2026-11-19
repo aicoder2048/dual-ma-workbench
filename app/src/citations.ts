@@ -30,6 +30,24 @@ export interface Fact {
 
 export type Facts = Record<string, Fact>;
 
+export type LeanLabel = "明显偏多" | "偏多" | "不明" | "偏空" | "明显偏空";
+export type LeanConflict = "反弹受压" | "回调有撑" | null;
+
+/** 模糊判断：6 条线的方向 + 线组排布合成的分数（−1 最空，+1 最多）。 */
+export interface Lean {
+  score: number;
+  label: LeanLabel;
+  conflict: LeanConflict;
+  up: number;
+  down: number;
+  flat: number;
+  dirs: Record<string, -1 | 0 | 1>;
+  pairs: { pair: string; rel: -1 | 0 | 1 }[];
+  play: string;
+  flips: { line: string; price: number; crossed: boolean; text: string }[];
+  after: { days: number; score: number; label: LeanLabel; conflict: LeanConflict; up: number; down: number; flat: number };
+}
+
 /** dma_analyze.py --json 里 analysis 的形状（只列用到的字段）。 */
 export interface Analysis {
   label: string;
@@ -48,6 +66,7 @@ export interface Analysis {
   volume: { ratio: number; spikes: string[] } | null;
   trend: string;
   strategy: string;
+  lean: Lean;
   drops: {
     period: number; tomorrow: number; mean: number; max: number; below: number; count: number;
     first_low: number | null; ma_flat_change_pct: number; direction: string;
@@ -68,6 +87,14 @@ export function buildFacts(a: Analysis): Facts {
   put("涨跌", "当日涨跌", pct(a.change_pct));
   put("数据源", "数据来源", a.source);
   put("趋势初判", "规则初判的趋势类型", a.trend);
+  const ln = a.lean;
+  const leanName = (l: { label: string; conflict: string | null }) => l.label + (l.conflict ? `·${l.conflict}` : "");
+  put("模糊判断", "接下来几周对谁有利（方向 + 排布）", `${leanName(ln)}（${ln.score >= 0 ? "+" : ""}${ln.score.toFixed(2)}）`);
+  put("模糊判断.方向", "6 条均线的方向票数", `${ln.up} 上 · ${ln.flat} 平 · ${ln.down} 下`);
+  put("模糊判断.排布", "20/60、60/120 线组谁在上（≈ 是相差不到价格 0.5%）",
+    ln.pairs.map((p) => `${p.pair} ${p.rel > 0 ? ">" : p.rel < 0 ? "<" : "≈"}`).join("，"));
+  put("模糊判断.10天后", `价格不变 ${ln.after.days} 天后的模糊判断`, `${leanName(ln.after)}（${ln.after.up} 上 · ${ln.after.down} 下）`);
+  for (const f of ln.flips) put(`改变判断.${f.line}`, `什么会改变判断：${f.line}`, f.text);
   put("排列.MA", "MA 排列", a.arr_ma);
   put("排列.EMA", "EMA 排列", a.arr_ema);
   put("间距", "三条 MA 最大最小差占价格", `${a.spread_pct.toFixed(1)}%`);

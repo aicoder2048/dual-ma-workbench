@@ -65,3 +65,15 @@ describe("多只股票的数据引用", () => {
   test("代码不存在则找不到", () => expect(lookupFact(book, "AMD:MA20")).toBeUndefined());
   test("字段名里本身含冒号以外的点号不受影响", () => expect(lookupFact(book, "扣20.均值")?.value).toBe("209.97"));
 });
+
+describe("模糊判断字段", () => {
+  const facts = buildFacts(nvda as Analysis);
+  test("判断与票数", () => {
+    expect(facts["模糊判断"].value).toStartWith("明显偏空");
+    expect(facts["模糊判断.方向"].value).toBe("0 上 · 0 平 · 6 下");
+  });
+  test("10 天后与改变判断的价位", () => {
+    expect(facts["模糊判断.10天后"].value).toStartWith("明显偏空");
+    expect(facts["改变判断.EMA20"].value).toContain("183.08");
+  });
+});

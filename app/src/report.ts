@@ -5,7 +5,7 @@
  * - visual：给前端画图用的结构化数据（均线状态、价位梯子、乖离分位、交叉表、趋势判定表、底扣价路径、推演）。
  * - steps[].items：按 ASD-STE100 简明中文写的短句，一句一事，每句带引用。
  */
-import type { Analysis } from "./citations.ts";
+import type { Analysis, Lean } from "./citations.ts";
 
 export type Stance = "bullish" | "bearish" | "neutral";
 
@@ -25,6 +25,7 @@ export interface Projection {
 
 export interface ReportVisual {
   close: number;
+  lean: Lean;
   lines: Analysis["lines"];
   bias: { value: number; pctl: number };
   crosses: { pair: string; ma: CrossInfo; ema: CrossInfo; verdict: string }[];
@@ -47,9 +48,9 @@ export interface Report {
   visual: ReportVisual;
 }
 
-const STANCE: Record<string, Stance> = {
-  健康上涨: "bullish", 极度超买: "bullish", 健康下跌: "bearish", 极度超卖: "bearish",
-};
+/** 立场跟模糊判断走：偏多以上 bullish，偏空以下 bearish；方向和排布打架时 neutral。 */
+export const stanceOf = (lean: Pick<Lean, "score" | "conflict">): Stance =>
+  lean.conflict ? "neutral" : lean.score >= 0.25 ? "bullish" : lean.score <= -0.25 ? "bearish" : "neutral";
 
 /** 趋势类型判定表（SKILL.md 第 1 步 / 学习文章第 4 节的简写）。 */
 export const TREND_TABLE: { type: string; look: string; play: string[] }[] = [
@@ -137,8 +138,13 @@ export function buildReport(a: Analysis): Report {
   const trend = shortTrend(a.trend);
   const row = TREND_TABLE.find((r) => r.type === trend) ?? TREND_TABLE[TREND_TABLE.length - 1];
 
+  const ln = a.lean;
+  const nameOf = (l: { label: string; conflict: string | null }) => l.label + (l.conflict ? `·${l.conflict}` : "");
+  const leanName = nameOf(ln);
   // ---------- 1. 看大局 ----------
   const big: string[] = [
+    `模糊判断：${leanName} [[D:模糊判断]]。只看大方向，不看小数点 [[S:skill#模糊判断]]。`,
+    `6 条线 ${ln.up} 上、${ln.down} 下 [[D:模糊判断.方向]]。`,
     `${directionSentence(a)}均线方向是最小阻力方向 [[S:article#1]]。`,
     `MA 排列：${a.arr_ma} [[D:排列.MA]]。EMA 排列：${a.arr_ema} [[D:排列.EMA]]。`,
     positionSentence(a),
@@ -175,12 +181,13 @@ export function buildReport(a: Analysis): Report {
   const p = projection;
   direction.push(
     `价格不变 ${p.days} 天后：MA 排列 ${p.arrAfter.ma} [[D:推演.排列.MA]]，EMA 排列 ${p.arrAfter.ema} [[D:推演.排列.EMA]]。`,
+    `价格不变 ${p.days} 天后，模糊判断是${nameOf(ln.after)} [[D:模糊判断.10天后]]。`,
     "收盘价高于底扣价，MA 就上升 [[S:article#2.3]]。推演链：底扣价 → 方向 → 排列 [[S:skill#第3步]]。",
   );
 
   return {
-    headline: `${a.label} · ${trend}`,
-    stance: STANCE[trend] ?? "neutral",
+    headline: `${a.label} · ${leanName} · ${trend}`,
+    stance: stanceOf(ln),
     steps: [
       { key: "big_picture", title: "看大局", subtitle: "现在是什么趋势", items: big },
       { key: "strategy", title: "定策略", subtitle: "该怎么做", items: strategy },
@@ -188,6 +195,7 @@ export function buildReport(a: Analysis): Report {
     ],
     visual: {
       close: a.close,
+      lean: ln,
       lines: a.lines,
       bias: { value: a.bias20, pctl: a.bias_pctl },
       crosses,

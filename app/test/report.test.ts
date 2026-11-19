@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { buildFacts, type Analysis } from "../src/citations.ts";
-import { buildReport, crossVerdict, parseCross, project } from "../src/report.ts";
+import { buildReport, crossVerdict, parseCross, project, stanceOf } from "../src/report.ts";
 import nvda from "./fixtures/nvda-analysis.json";
 
 const analysis = nvda as Analysis;
@@ -70,9 +70,28 @@ describe("推演", () => {
 describe("可视化数据", () => {
   test("趋势判定表只高亮当前类型", () => {
     const cur = report.visual.trendTable.filter((r) => r.current).map((r) => r.type);
-    expect(cur).toEqual(["过渡态"]);
+    expect(cur).toEqual(["极度超卖"]);
   });
   test("底扣价路径每条 10 天", () => {
     expect(report.visual.drops.map((d) => d.path.length)).toEqual([10, 10, 10]);
+  });
+});
+
+describe("模糊判断在前", () => {
+  test("标题先说对谁有利，再说趋势类型", () => expect(report.headline).toBe("NVDA · 明显偏空 · 极度超卖"));
+  test("立场跟模糊判断走", () => expect(report.stance).toBe("bearish"));
+  test("看大局第一句就是模糊判断，并带数据引用", () => {
+    expect(report.steps[0].items[0]).toContain("[[D:模糊判断]]");
+  });
+  test("可视化数据带上模糊判断和改变判断的价位", () => {
+    expect(report.visual.lean.label).toBe("明显偏空");
+    expect(report.visual.lean.flips[0].line).toBe("EMA20");
+  });
+});
+
+describe("立场", () => {
+  test("方向和排布打架时是中性", () => {
+    expect(stanceOf({ score: 0.4, conflict: "反弹受压" })).toBe("neutral");
+    expect(stanceOf({ score: 0.4, conflict: null })).toBe("bullish");
   });
 });

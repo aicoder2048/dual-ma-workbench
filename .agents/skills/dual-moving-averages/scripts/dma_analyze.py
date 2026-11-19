@@ -272,7 +272,7 @@ def lean_of(values: dict[str, float], slopes: dict[str, float], close: float) ->
     score = LEAN_DIR_WEIGHT * (up - down) / len(dirs) + (1 - LEAN_DIR_WEIGHT) * order / len(pairs)
     # 方向和短期排布打架：多数线向上、20 线组却还在 60 线组下方（或反过来）
     short = pairs[0]["rel"] + pairs[2]["rel"]  # MA20/MA60 + EMA20/EMA60
-    conflict = ("反弹被压" if up > down and short == -2 else
+    conflict = ("反弹受压" if up > down and short == -2 else
                 "回调有撑" if down > up and short == 2 else None)
     return {"score": score, "label": lean_label(score), "up": up, "down": down,
             "flat": len(dirs) - up - down, "dirs": dirs, "order": order, "pairs": pairs,
@@ -326,7 +326,7 @@ LEAN_PLAY = {
     "偏空": "空头略占上风：不买；有仓位就在反弹时减仓。",
     "明显偏空": "顺着空头看：不抄底，反弹到均线附近是离场机会。",
     # 方向和排布打架时，优先用这两条
-    "反弹被压": "反弹被中长期线压着（20 线组还在 60 线组下方），多半是假动作：不买，有仓位逢高减。用底扣价算 20 线组多久能站上 60 线组。",
+    "反弹受压": "中长期线压着反弹（20 线组还在 60 线组下方），多半是假动作：不买，有仓位逢高减。用底扣价算 20 线组多久能站上 60 线组。",
     "回调有撑": "短期回调，但 20 线组仍在 60 线组上方，结构还是多头：持有观察，不在急跌里卖；20/60 双死叉才算结构坏。",
 }
 

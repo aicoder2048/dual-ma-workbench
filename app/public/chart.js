@@ -40,6 +40,26 @@ export function createChart(box, legendEl) {
     legendEl.appendChild(b);
   }
 
+  // 对数坐标：等比涨幅等高，钟表方向才可比（文章 2.4）。默认开，记在本机。
+  let logScale = true;
+  try { logScale = localStorage.getItem("dma-log") !== "0"; } catch { /* 隐私模式 */ }
+  const logBtn = document.createElement("button");
+  logBtn.type = "button";
+  logBtn.className = "scale-toggle";
+  logBtn.title = "对数坐标下，同样的涨跌幅画出来一样高，均线的角度才能比较";
+  const applyScale = () => {
+    chart.priceScale("right").applyOptions({ mode: logScale ? 1 : 0 });
+    logBtn.setAttribute("aria-pressed", String(logScale));
+    logBtn.textContent = logScale ? "对数坐标" : "普通坐标";
+  };
+  logBtn.addEventListener("click", () => {
+    logScale = !logScale;
+    try { localStorage.setItem("dma-log", logScale ? "1" : "0"); } catch { /* 忽略 */ }
+    applyScale();
+  });
+  legendEl.appendChild(logBtn);
+  applyScale();
+
   let data = null;
 
   function paint() {

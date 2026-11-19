@@ -65,8 +65,8 @@
    "2026-11-18"
   ]
  },
- "trend": "过渡态（排列或方向不一致）",
- "strategy": "条件不满足就不做。看底扣价推演：均线能否在合理时间内理顺？反弹若被中长期线压着多半是假动作。",
+ "trend": "极度超卖",
+ "strategy": "不抢反弹。均线理顺成多头排列前不买。",
  "drops": [
   {
    "tomorrow": 212.21,
@@ -227,5 +227,88 @@
    "period": 120,
    "direction": "下"
   }
- ]
+ ],
+ "lean": {
+  "score": -0.8,
+  "label": "明显偏空",
+  "up": 0,
+  "down": 6,
+  "flat": 0,
+  "dirs": {
+   "MA20": -1,
+   "MA60": -1,
+   "MA120": -1,
+   "EMA20": -1,
+   "EMA60": -1,
+   "EMA120": -1
+  },
+  "order": -2,
+  "pairs": [
+   {
+    "pair": "MA20/MA60",
+    "rel": -1
+   },
+   {
+    "pair": "MA60/MA120",
+    "rel": 1
+   },
+   {
+    "pair": "EMA20/EMA60",
+    "rel": -1
+   },
+   {
+    "pair": "EMA60/EMA120",
+    "rel": -1
+   }
+  ],
+  "conflict": null,
+  "play": "顺着空头看：不抄底，反弹到均线附近是离场机会。",
+  "flips": [
+   {
+    "line": "EMA20",
+    "price": 183.0849393320308,
+    "crossed": false,
+    "text": "收盘站上 EMA20（183.08），EMA20 拐头向上"
+   },
+   {
+    "line": "MA20",
+    "price": 212.21,
+    "crossed": false,
+    "text": "收盘站上 MA20 的底扣价（212.21），MA20 拐头向上"
+   },
+   {
+    "line": "EMA60",
+    "price": 203.13302478211733,
+    "crossed": false,
+    "text": "收盘站上 EMA60（203.13），EMA60 拐头向上"
+   },
+   {
+    "line": "MA60",
+    "price": 209.66,
+    "crossed": false,
+    "text": "收盘站上 MA60 的底扣价（209.66），MA60 拐头向上"
+   },
+   {
+    "line": "EMA120",
+    "price": 206.09753043907662,
+    "crossed": false,
+    "text": "收盘站上 EMA120（206.10），EMA120 拐头向上"
+   },
+   {
+    "line": "MA120",
+    "price": 224.36,
+    "crossed": false,
+    "text": "收盘站上 MA120 的底扣价（224.36），MA120 拐头向上"
+   }
+  ],
+  "after": {
+   "days": 10,
+   "score": -1.0,
+   "label": "明显偏空",
+   "conflict": null,
+   "up": 0,
+   "down": 6,
+   "flat": 0
+  }
+ }
 }
