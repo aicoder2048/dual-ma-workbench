@@ -35,17 +35,35 @@ export const RECORD: BacktestRecord = JSON.parse(readFileSync(RECORD_PATH, "utf8
 
 const pc = (x: number) => `${x >= 0 ? "+" : ""}${(x * 100).toFixed(1)}%`;
 
+/** 2026-11-20 的评估（skill 的 evaluate.py，报告不进仓库）：六条主张都没通过。结论卡片的回测那句末尾照它说。 */
+export const EVALUATION_DATE = "2026-11-20";
+export const EVALUATION_NOTE = `${EVALUATION_DATE} 的评估（86 只票、2013–2026、事先定的标准、验证集）没找到可验证的交易优势，这套方法当学习和复盘工具用。`;
+
+const RULE_EVIDENCE_RE = /^\| ([AJP]\d+) \|.*\*\*(回测[^*]+)\*\*（([^）]+)）/;
+
+/** rules.md 里标了评估结论的规则（`**回测不支持**（评估 2026-11-20，H5）`）：编号 → "回测不支持（评估 2026-11-20，H5）"。 */
+export function parseRuleEvidence(md: string): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const line of md.split(/\r?\n/)) {
+    const m = line.match(RULE_EVIDENCE_RE);
+    if (m) out.set(m[1], `${m[2]}（${m[3]}）`);
+  }
+  return out;
+}
+
+export const RULE_EVIDENCE = parseRuleEvidence(readFileSync(resolve(PROJECT_ROOT, ".agents/skills/dual-moving-averages/references/rules.md"), "utf8"));
+
 /** 这套打法（plan.ts 的 playKey）的回测记录说成一句话。 */
 export function recordNote(key: string, r: BacktestRecord = RECORD): RecordNote {
   const s = r.setups[key] ?? null;
   const scope = `回测（${r.variant}，${r.tickers.length} 只票，${r.from} ~ ${r.to}）`;
-  if (!s) return { text: `${scope}：这套打法空仓不买，回测没有进场。`, setup: null, record: r };
-  if (!s.trades) return { text: `${scope}：这段时间这套打法一笔也没进场，没有可看的记录。`, setup: s, record: r };
+  if (!s) return { text: `${scope}：这套打法空仓不买，回测没有进场。${EVALUATION_NOTE}`, setup: null, record: r };
+  if (!s.trades) return { text: `${scope}：这段时间这套打法一笔也没进场，没有可看的记录。${EVALUATION_NOTE}`, setup: s, record: r };
   const ci = s.ci ? `，90% 区间 ${pc(s.ci[0])} ~ ${pc(s.ci[1])}` : "";
   const verdict = s.ci_crosses_zero ? "区间跨过 0，说明不了比随机进场好" : s.excess! > 0 ? "区间在 0 以上" : "区间在 0 以下，比随机进场差";
   return {
     text: `${scope}：按 ${s.entries.join(" / ")} 进场 ${s.trades} 笔（${s.dates} 个日期${s.few_dates ? "，日期少" : ""}），`
-      + `胜率 ${Math.round(s.win_rate! * 100)}%，中位数 ${pc(s.median!)}，比随机进场多 ${s.excess == null ? "—" : pc(s.excess)}${ci}：${verdict}。`,
+      + `胜率 ${Math.round(s.win_rate! * 100)}%，中位数 ${pc(s.median!)}，比随机进场多 ${s.excess == null ? "—" : pc(s.excess)}${ci}：${verdict}。${EVALUATION_NOTE}`,
     setup: s, record: r,
   };
 }

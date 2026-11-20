@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { buildFacts, type Analysis } from "../src/citations.ts";
 import { buildReport, crossVerdict, parseCross, parseTypeTable, stanceOf, TYPE_TABLE } from "../src/report.ts";
+import { EVALUATION_NOTE, parseRuleEvidence } from "../src/record.ts";
 import nvda from "./fixtures/nvda-analysis.json";
 
 const analysis = nvda as Analysis;
@@ -133,5 +134,22 @@ describe("立场", () => {
     expect(stanceOf({ label: "明显偏多" })).toBe("bullish");
     expect(stanceOf({ label: "不明" })).toBe("neutral");
     expect(stanceOf({ label: "明显偏空" })).toBe("bearish");
+  });
+});
+
+describe("评估结论照实标注", () => {
+  test("rules.md 里标了回测不支持的规则：规则列表和清单都带上那句标注，没标的是 null", () => {
+    const bounce = buildReport({ ...analysis, play: { ...analysis.play, key: "空头结构反弹中", rules: ["P17", "J18", "J17"] } });
+    expect(bounce.checklist.find((c) => c.id === "J18")!.evidence).toBe("回测不支持（评估 2026-11-20，H6）");
+    expect(report.visual.rules.find((r) => r.id === "P17")!.evidence).toBe("回测不支持（评估 2026-11-20，H6）");
+    expect(report.visual.rules.find((r) => r.id === "P7")!.evidence).toBeNull();
+    expect(bounce.steps[1].items.find((x) => x.startsWith("J18 "))).toContain("回测不支持");
+  });
+  test("parseRuleEvidence 只认规则行里加粗的回测标注", () => {
+    const md = ["| J1 | 判定 | a | b。**回测不支持**（评估 2026-11-20，H5） | c | d |", "| J2 | 判定 | a | 回测不支持 | c | d |", "说明：**回测不支持**（x）"].join("\n");
+    expect([...parseRuleEvidence(md)]).toEqual([["J1", "回测不支持（评估 2026-11-20，H5）"]]);
+  });
+  test("结论卡片的回测那句末尾说评估没找到交易优势", () => {
+    expect(report.record.text.endsWith(EVALUATION_NOTE)).toBe(true);
   });
 });

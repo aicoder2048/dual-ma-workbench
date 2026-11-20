@@ -12,7 +12,7 @@ import { DATE_RE, parseCsv } from "../src/practice/blind.ts";
 import { HORIZON } from "../src/practice/pool.ts";
 import { Practice } from "../src/practice/service.ts";
 import { SessionStore } from "../src/practice/session.ts";
-import { RECORD } from "../src/record.ts";
+import { EVALUATION_DATE, RECORD } from "../src/record.ts";
 import { SettingsStore } from "../src/settings.ts";
 import { SourceLibrary } from "../src/sources.ts";
 import { Watchlist } from "../src/watchlist.ts";
@@ -91,8 +91,8 @@ describe("练习的接口", () => {
     const page = { ticker: "练习 #1", asof: "T0" };
     for (const text of [analysisForModel(r, facts), advisorContext({ analysis: r.analysis, facts }, null, page), analystContext(page)]) {
       expect(leaks(text)).toEqual([]);
-      // 唯一的日期是回测记录的区间（每只票都一样的固定文字）
-      expect(new Set(text.match(DATE_RE))).toEqual(new Set([RECORD.from, RECORD.to].filter((d) => text.includes(d))));
+      // 唯一的日期是回测记录的区间和评估日期（每只票都一样的固定文字）
+      expect(new Set(text.match(DATE_RE))).toEqual(new Set([RECORD.from, RECORD.to, EVALUATION_DATE].filter((d) => text.includes(d))));
     }
 
     // 记计划：下一根开盘买；止损放在之后 40 根的最低收盘上方一点（测试看得到整段数据，保证会碰到）

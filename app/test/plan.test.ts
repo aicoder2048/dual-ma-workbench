@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { Analysis } from "../src/citations.ts";
-import { buildChecklist, buildForecast, buildPlans, ma20Claim, playKey } from "../src/plan.ts";
+import { buildChecklist, buildForecast, buildPlans, ma20Claim, playKey, SOLVER_EVIDENCE } from "../src/plan.ts";
 import nvda from "./fixtures/nvda-analysis.json";
 import spyJson from "./fixtures/spy-2024-04-19-analysis.json";
 
@@ -544,5 +544,28 @@ describe("加速上涨有仓位：没见顶部构造不下车，见了也只是�
     expect(p.holding.action).toContain("只是提醒");
     expect(label(p.holding, "止损")).toContain("关键性波动");
     expect(p.holding.items.find((i) => i.label === "构造")!.rules).toContain("P9");
+  });
+});
+
+describe("推演求解是辅助信息，附评估结论（H4）", () => {
+  const aux = (p: { items: { label: string; text: string; evidence?: string }[] }) => p.items.filter((i) => i.evidence);
+  test("空头结构反弹中：「要很多天就别等」那条标辅助，附评估结论", () => {
+    const [x, ...rest] = aux(buildPlans(conflict("空头结构反弹中")).flat);
+    expect(rest).toEqual([]);
+    expect(x.text).toContain("就别等");
+    expect(x.evidence).toBe(SOLVER_EVIDENCE);
+  });
+  test("横盘：止损的主条件只说死叉；「避不开死叉就提前走」另起一条辅助", () => {
+    const p = buildPlans(shaped("横盘", 0, { r2060: 1, ema20Dir: 1 }));
+    for (const plan of [p.flat, p.holding]) {
+      expect(plan.items.filter((i) => !i.evidence).map((i) => i.text).join("")).not.toContain("不可避免");
+      expect(aux(plan).map((i) => i.text).join("")).toContain("避不开死叉");
+    }
+  });
+  test("做推演：推翻判断的价位来自求解时标出来，评估结论一起给", () => {
+    const f = buildForecast(bear); // 加速下跌：推翻判断看 20/60 双金叉的求解
+    expect(f.aux).toContain("invalid");
+    expect(f.evidence).toBe(SOLVER_EVIDENCE);
+    expect(buildForecast(spy).aux).toEqual([]); // 稳定上涨：看 MA120 的安全边际，不是求解
   });
 });

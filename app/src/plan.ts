@@ -16,8 +16,11 @@ export type Situation = "flat" | "holding" | "profit" | "loss";
 export const SITUATIONS: Situation[] = ["flat", "holding", "profit", "loss"];
 /** 计划文字里成本价的占位，页面填上用户输入的成本。 */
 export const COST = "{cost}";
-/** rules：这条条件依据的规则编号（rules.md），页面上可以点开。 */
-export interface PlanItem { label: string; text: string; rules?: string[] }
+/**
+ * rules：这条条件依据的规则编号（rules.md），页面上可以点开。
+ * evidence：推演求解给的辅助信息，写评估结论（页面上缩小、标「辅助」）；主要的条件没有这一项。
+ */
+export interface PlanItem { label: string; text: string; rules?: string[]; evidence?: string }
 /** 一个价位和它是什么。离现价多远由页面按收盘价算。 */
 export interface Level { label: string; price: number }
 /** risk：从进场价（空仓：触发价，没有就是现价；持仓：现价）到止损的距离，%；没有止损或止损不在下方时为 null。 */
@@ -27,14 +30,22 @@ type Draft = Omit<Plan, "risk">;
 /** 找打法的清单：一条规则今天的状态；need 是没满足时还差什么（带价位就写价位）。 */
 /** yieldsTo：自己满足、但让位给这条规则（rules.md 的让位），这时不按它做。 */
 export interface Check { id: string; name: string; status: RuleResult["status"]; basis: string; need: string | null; yieldsTo: string | null }
-/** 做推演的三问。invalid.level 是推翻判断的价位（画在 K 线图上）；没有单一价位时为 null。 */
+/**
+ * 做推演的三问。invalid.level 是推翻判断的价位（画在 K 线图上）；没有单一价位时为 null。
+ * aux：三问里哪几问的答案来自推演求解（辅助信息）；solves 是相关的求解，页面折叠起来。
+ */
 export interface Forecast {
   days: number;
   hold: string;
   earliest: string;
   invalid: { text: string; level: Level | null };
+  aux: ("earliest" | "invalid")[];
   solves: Solve[];
+  evidence: string;
 }
+
+/** 推演求解（"要涨 / 跌多少才能避免"）的评估结论，凡是显示求解结论的地方都附上（evaluation.toml 的 H4）。 */
+export const SOLVER_EVIDENCE = "评估：说“要涨（跌）10% 以上才能避免”的事，97% 真的发生了，但未达到事先定的有用标准（H4）";
 
 const f2 = (x: number) => x.toFixed(2);
 
@@ -113,6 +124,9 @@ const BUY_TURN = (l: L) =>
   (l.close >= l.ema20 ? `已经在 EMA20 ${l.p(l.ema20)} 上方，等 EMA20 拐头向上` : `收盘先站上 EMA20 ${l.p(l.ema20)}，EMA20 拐头向上`) + "；" +
   (l.close >= l.drop20 ? `也已经在 MA20 抵扣价 ${l.p(l.drop20)} 上方，MA20 会跟着拐头。` : `再站上 MA20 抵扣价 ${l.p(l.drop20)}，MA20 跟着拐头。`);
 const SIZE: PlanItem = { label: "仓位", text: "盈亏影响心情，就是仓位太大，减到睡得着为止。" };
+/** 横盘的止损底线是死叉；推演说避不开死叉（P3 的求解）时提前走，是辅助信息。 */
+const SOLVER_STOP = (l: L): PlanItem =>
+  ({ label: "推演", text: `${l.basis("P3")}；推演说避不开死叉时，可以提前走。`, rules: ["P3"], evidence: SOLVER_EVIDENCE });
 const DEATH = (l: L) => l.death ? `20/60 已经双死叉（MA20、EMA20 都在 MA60 ${f2(l.ma60)}、EMA60 ${f2(l.ema60)} 下方）`
   : `20/60 双死叉（MA20 落到 MA60 ${f2(l.ma60)} 下方、EMA20 落到 EMA60 ${f2(l.ema60)} 下方）`;
 /** 稳定上涨（下跌）的失效看 60/120（rules.md J7）：20/60 交叉只是深回撤（反弹）。 */
@@ -160,12 +174,14 @@ const PLAYS: Record<string, Record<Position, (l: L) => Draft>> = {
       { label: "等什么", text: `末期三个条件：横满 6 个月 ${l.st("J12")}，最高最低均线相差 < ${l.dense}% ${l.st("J13")}，均线向上张嘴 ${l.st("J14")}。`, rules: ["P1", "J12", "J13", "J14"] },
       { label: "方向", text: `横盘结束后往哪走跟周线：${l.basis("J11")}。`, rules: ["J11"] },
       { label: "怎么进", text: "三个条件齐了、还没突破时小仓位埋伏，不在箱体中间追。加分项：此前有大量、缺口，或假跌破后收回。", rules: ["P2", "P6"] },
-      { label: "进场后止损", text: `埋伏后 20/60 死叉或不可避免要死叉（MA20 落到 MA60 ${f2(l.ma60)} 下方）就走；先突破前高后很快跌回、随后跌破 20 线组（假突破的两个动作），也走。`, rules: ["P3", "P5"] },
+      { label: "进场后止损", text: `埋伏后 20/60 死叉（MA20 落到 MA60 ${f2(l.ma60)} 下方）就走；先突破前高后很快跌回、随后跌破 20 线组（假突破的两个动作），也走。`, rules: ["P3", "P5"] },
+      SOLVER_STOP(l),
       { label: "失效", text: TANGLE_END(l, "多半转上涨", "多半转下跌") },
     ] }),
     holding: (l) => ({ action: "拿着，但守住底线。", trigger: null, stop: lv("20/60 死叉（守住）", l.lvl("P3", "避免双死叉")), items: [
       { label: "软规则", text: "进场后磨蹭不涨，没到止损也先出来。", rules: ["P4"] },
-      { label: "止损", text: `20 线组和 60 线组死叉（MA60 ${f2(l.ma60)} 附近），或不可避免要死叉，就走。${l.basis("P3")}。`, rules: ["P3"] },
+      { label: "止损", text: `20 线组和 60 线组死叉（MA60 ${f2(l.ma60)} 附近）就走。`, rules: ["P3"] },
+      SOLVER_STOP(l),
       { label: "失效", text: TANGLE_END(l, "多半转上涨，可以拿着", "多半转下跌，减仓") },
       SIZE,
     ] }),
@@ -271,7 +287,7 @@ const PLAYS: Record<string, Record<Position, (l: L) => Draft>> = {
   空头结构反弹中: {
     flat: (l) => ({ action: "不买：中长期线压着的反弹，多半是假动作。", trigger: alignUp(l), stop: null, items: [
       { label: "等什么", text: `20 线组升到 60 线组上方（MA20 过 MA60 ${f2(l.ma60)}、EMA20 过 EMA60 ${f2(l.ema60)}），排列理顺再看。`, rules: ["P17", "J18"] },
-      { label: "推演", text: `${l.basis("J17")}。要很多天、价格得一直很强，就别等。`, rules: ["J17"] },
+      { label: "推演", text: `${l.basis("J17")}。要很多天、价格得一直很强，就别等。`, rules: ["J17"], evidence: SOLVER_EVIDENCE },
       ENTRY_STOP(l),
       { label: "失效", text: `${GOLD(l)}、60 线组拐头向上：不再受压，这次反弹是真的，按上涨的打法看。` },
     ] }),
@@ -447,7 +463,16 @@ function holdText(a: Analysis): string {
 const dayN = (a: Analysis, n: number) => `${a.projection.dates[n - 1]}（第 ${n} 个交易日）`;
 
 /** 问二：打法的条件最早哪天能齐。构造按最少还差几根，价位条件最早明天；小时线、横满几个月这种照实说。 */
-function earliestText(a: Analysis, l: L, key: string, plans: Record<Situation, Plan>): string {
+function earliestOf(a: Analysis, l: L, key: string, plans: Record<Situation, Plan>): { text: string; solved?: boolean } {
+  const text = earliestText(a, l, key, plans);
+  if (text !== null) return { text };
+  // 其余是空仓不买的打法：答"30 天内理顺向上要持平在哪"，是求解
+  const s = l.solve30("理顺向上");
+  return s ? { text: `这套打法空仓不买。${FORECAST_DAYS} 天内要理顺向上，收盘得持平在 ${at(s.level!, a.close)}${s.side}。`, solved: true }
+    : { text: "这套打法空仓不买。排列理顺之前不看进场。" };
+}
+
+function earliestText(a: Analysis, l: L, key: string, plans: Record<Situation, Plan>): string | null {
   const bars = (id: string) => l.lvl(id, "还差几根");
   switch (key) {
     case "稳定上涨": {
@@ -476,10 +501,7 @@ function earliestText(a: Analysis, l: L, key: string, plans: Record<Situation, P
         : need <= FORECAST_DAYS ? `横满 6 个月最早 ${dayN(a, need)}` : `横满 6 个月还要 ${need} 个交易日，${FORECAST_DAYS} 天内齐不了`;
       return `${months}；均线相差 < ${l.dense}%、向上张嘴要看走势，推不出日子。`;
     }
-    default: {
-      const s = l.solve30("理顺向上");
-      return `这套打法空仓不买。${s ? `${FORECAST_DAYS} 天内要理顺向上，收盘得持平在 ${at(s.level!, a.close)}${s.side}。` : "排列理顺之前不看进场。"}`;
-    }
+    default: return null;
   }
 }
 
@@ -487,13 +509,13 @@ function earliestText(a: Analysis, l: L, key: string, plans: Record<Situation, P
 const happensAt = (s: Solve) => (s.happen ? s.side : s.side === "以上" ? "以下" : "以上");
 
 /** 问三：什么价位推翻这个判断。稳定类看 MA120 的安全边际；加速、打架看 20/60 的 30 天求解；横盘、过渡没有单一价位，用计划里的失效。 */
-function invalidOf(a: Analysis, l: L, key: string, plans: Record<Situation, Plan>): Forecast["invalid"] {
+function invalidOf(a: Analysis, l: L, key: string, plans: Record<Situation, Plan>): Forecast["invalid"] & { solved?: boolean } {
   const fallback = { text: plans.flat.items.find((i) => i.label === "失效")!.text, level: null };
   const b120 = a.lean.basis.find((b) => b.line === "MA120");
   const viaSolve = (prefix: string, happen: boolean, what: string) => {
     const s = l.solve30(prefix, happen);
     if (!s) return fallback;
-    return { text: `收盘停在 ${at(s.level!, a.close)}${happensAt(s)}，${FORECAST_DAYS} 天内 ${what}。`, level: lv("判断失效", s.level) };
+    return { text: `收盘停在 ${at(s.level!, a.close)}${happensAt(s)}，${FORECAST_DAYS} 天内 ${what}。`, level: lv("判断失效", s.level), solved: true };
   };
   switch (key) {
     case "稳定上涨":
@@ -523,7 +545,10 @@ export function buildForecast(a: Analysis, plans = buildPlans(a)): Forecast {
   const l = levels(a);
   const key = playKey(a);
   const solves = a.projection.solves.filter((s) => s.days === FORECAST_DAYS && SOLVES_FOR[key].some((p) => s.event.startsWith(p)));
-  return { days: FORECAST_DAYS, hold: holdText(a), earliest: earliestText(a, l, key, plans), invalid: invalidOf(a, l, key, plans), solves: solves.slice(0, 3) };
+  const { solved, ...invalid } = invalidOf(a, l, key, plans);
+  const earliest = earliestOf(a, l, key, plans);
+  const aux = [...(earliest.solved ? ["earliest" as const] : []), ...(solved ? ["invalid" as const] : [])];
+  return { days: FORECAST_DAYS, hold: holdText(a), earliest: earliest.text, invalid, aux, solves: solves.slice(0, 3), evidence: SOLVER_EVIDENCE };
 }
 
 // ---------- 回放验证用 ----------
