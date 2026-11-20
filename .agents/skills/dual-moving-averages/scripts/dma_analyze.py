@@ -38,7 +38,8 @@ from zoneinfo import ZoneInfo
 
 import pandas as pd
 
-PERIODS = (20, 60, 120)
+from indicators import PERIODS, add_indicators, arrangement
+
 SLOPE_LOOKBACK = 5          # 用最近 5 根 K 线算均线斜率
 FLAT_SLOPE_PCT = 0.05       # 日均变化 < 0.05% 视为走平（3 点钟）
 STEEP_SLOPE_PCT = 0.5       # 20 线日均变化 > 0.5% 视为陡峭（1 点钟方向）
@@ -164,14 +165,6 @@ def load_prices(ticker: str | None, csv: str | None, asof: str | None,
     return df, src
 
 
-def add_indicators(df: pd.DataFrame) -> pd.DataFrame:
-    for n in PERIODS:
-        df[f"MA{n}"] = df["Close"].rolling(n).mean()
-        df[f"EMA{n}"] = df["Close"].ewm(span=n, adjust=False).mean()
-    df["BIAS20"] = (df["Close"] / df["MA20"] - 1) * 100
-    return df
-
-
 def slope_pct(series: pd.Series) -> float:
     """最近 SLOPE_LOOKBACK 根的日均变化率（%）。"""
     return (series.iloc[-1] / series.iloc[-1 - SLOPE_LOOKBACK] - 1) * 100 / SLOPE_LOOKBACK
@@ -187,15 +180,6 @@ def clock(s: float) -> str:
     if s <= -STEEP_SLOPE_PCT:
         return "5 点钟（陡降）"
     return "4 点钟（下行）"
-
-
-def arrangement(row: pd.Series, kind: str) -> str:
-    a, b, c = (row[f"{kind}{n}"] for n in PERIODS)
-    if a > b > c:
-        return "多头"
-    if a < b < c:
-        return "空头"
-    return "混乱"
 
 
 def last_cross(df: pd.DataFrame, kind: str, fast: int, slow: int) -> str:
