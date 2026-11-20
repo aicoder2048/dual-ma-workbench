@@ -89,6 +89,14 @@ def test_json_analysis_matches_markdown_numbers(json_out, tmp_path):
     assert [d["period"] for d in a["drops"]] == list(dma.PERIODS)
 
 
+def test_json_adds_projection_structure_weekly(json_out):
+    a = json_out["analysis"]
+    assert {"hurdles", "scenarios", "solves"} <= set(a["projection"])
+    # 这份 CSV 只有收盘价、约一年：构造无数据，周线不够 MA120
+    assert a["structure"] == {"available": False, "reason": "无数据"}
+    assert a["weekly"]["available"] is False
+
+
 def test_drop_off_path_lists_future_deductions(rising):
     # 未来第 k 天扣的是倒数第 n-k+1 根；路径长度 = 推演天数，均值与 drop_off 一致
     d = dma.drop_off(rising, 20)

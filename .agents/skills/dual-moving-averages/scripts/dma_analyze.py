@@ -39,6 +39,9 @@ from zoneinfo import ZoneInfo
 import pandas as pd
 
 from indicators import PERIODS, add_indicators, arrangement
+from projection import projection
+from structure import structure_json
+from weekly import weekly_json
 
 SLOPE_LOOKBACK = 5          # 用最近 5 根 K 线算均线斜率
 FLAT_SLOPE_PCT = 0.05       # 日均变化 < 0.05% 视为走平（3 点钟）
@@ -54,7 +57,8 @@ LEAN_SOME = 0.25            # |分数| ≥ 0.25 偏多/偏空，否则不明
 LEAN_LABELS = ("明显偏多", "偏多", "不明", "偏空", "明显偏空")
 
 
-HISTORY_YEARS = 3           # 取多少年日线（乖离率分位用全部历史）
+HISTORY_YEARS = 5           # 取多少年日线（周线 MA120 要 120 周）
+DAILY_YEARS = 3             # 日线分析只看最近 3 年（乖离率分位用这段全部历史），和取 5 年之前一致
 MIN_BARS = max(PERIODS) + SLOPE_LOOKBACK + 1
 POLYGON_BASE = "https://api.polygon.io"
 DEFAULT_ENV = Path.home() / "Python/Playground/DualMovingAveragesTrading/.env"
@@ -128,8 +132,11 @@ def fetch_yfinance(ticker: str, start: str, end: str) -> pd.DataFrame:
 
 
 def load_prices(ticker: str | None, csv: str | None, asof: str | None,
-                env_file: str | None, source: str) -> tuple[pd.DataFrame, str]:
-    """返回 (日线数据, 数据来源说明)。ticker 模式下先 Polygon，失败或不够长再 yfinance。"""
+                env_file: str | None, source: str) -> tuple[pd.DataFrame, pd.DataFrame, str]:
+    """返回 (日线分析用的数据, 全部历史, 数据来源说明)。ticker 模式下先 Polygon，失败或不够长再 yfinance。
+
+    ticker 模式取 HISTORY_YEARS 年，日线分析只用最近 DAILY_YEARS 年，全部历史给周线；CSV 两者都是整份文件。
+    """
     end_ts = pd.Timestamp(asof) if asof else pd.Timestamp.today().normalize()
     if csv:
         df, src = pd.read_csv(csv, parse_dates=["Date"]).set_index("Date"), f"CSV {csv}"
@@ -159,10 +166,11 @@ def load_prices(ticker: str | None, csv: str | None, asof: str | None,
     if "Close" not in df.columns:
         sys.exit("数据里没有 Close 列")
     df = df.sort_index()
-    df = df[df.index <= end_ts].dropna(subset=["Close"])
-    if len(df) < MIN_BARS:
-        sys.exit(f"数据只有 {len(df)} 根 K 线，至少需要 {MIN_BARS} 根（来源：{src}）")
-    return df, src
+    history = df[df.index <= end_ts].dropna(subset=["Close"])
+    daily = history if csv else history[history.index >= end_ts - pd.DateOffset(years=DAILY_YEARS)]
+    if len(daily) < MIN_BARS:
+        sys.exit(f"数据只有 {len(daily)} 根 K 线，至少需要 {MIN_BARS} 根（来源：{src}）")
+    return daily.copy(), history, src
 
 
 def slope_pct(series: pd.Series) -> float:
@@ -346,8 +354,8 @@ def lean_after(values: dict[str, float], drops: list[dict], close: float) -> dic
             "up": res["up"], "down": res["down"], "flat": res["flat"]}
 
 
-def analyze(df: pd.DataFrame, label: str, src: str) -> dict:
-    """把三步分析算成结构化数据，Markdown 和 HTML 都从这里渲染。"""
+def analyze(df: pd.DataFrame, label: str, src: str, history: pd.DataFrame | None = None) -> dict:
+    """把三步分析算成结构化数据，Markdown 和 HTML 都从这里渲染。history 是周线用的更长历史，默认就用 df。"""
     row = df.iloc[-1]
     c = float(row["Close"])
     slopes = {n: slope_pct(df[f"MA{n}"]) for n in PERIODS}
@@ -390,6 +398,8 @@ def analyze(df: pd.DataFrame, label: str, src: str) -> dict:
         "spread_pct": spread_pct, "bias20": float(row["BIAS20"]), "bias_pctl": bias_pctl,
         "crosses": crosses, "volume": volume,
         "trend": trend, "strategy": STRATEGY[trend], "drops": drops, "lean": lean,
+        "projection": projection(df), "structure": structure_json(df),
+        "weekly": weekly_json(df if history is None else history),
     }
 
 
@@ -459,9 +469,9 @@ def main() -> None:
         p.error("需要 ticker 或 --csv")
     if a.commentary and not a.html:
         p.error("--commentary 需要和 --html 一起用")
-    df, src = load_prices(a.ticker, a.csv, a.asof, a.env_file, a.source)
+    df, history, src = load_prices(a.ticker, a.csv, a.asof, a.env_file, a.source)
     df = add_indicators(df)
-    result = analyze(df, (a.ticker or a.csv).upper() if a.ticker else a.csv, src)
+    result = analyze(df, (a.ticker or a.csv).upper() if a.ticker else a.csv, src, history)
     if a.json:
         from html_report import chart_data
 

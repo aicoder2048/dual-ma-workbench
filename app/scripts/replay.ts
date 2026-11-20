@@ -23,7 +23,7 @@ const BUY_TURN_PLAYS = ["健康下跌", "极度超卖"];
 const OUT = resolve(PROJECT_ROOT, "reports/replay");
 const DATA = resolve(OUT, "data");
 const CUT = resolve(OUT, "cut");
-const HISTORY_YEARS = 3; // 和 dma_analyze.py 的 HISTORY_YEARS 一致
+const HISTORY_YEARS = 3; // 和 dma_analyze.py 的 DAILY_YEARS（日线分析窗口）一致
 
 const DEFAULT = ["NVDA", "TSLA", "AAPL", "GOOG", "META", "MSFT", "AMZN", "SPY", "QQQ"];
 const argv = process.argv.slice(2);
