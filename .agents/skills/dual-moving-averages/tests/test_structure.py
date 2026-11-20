@@ -118,3 +118,20 @@ def test_structure_on_real_data_is_json_safe():
     assert out["available"] and out["pivots"]
     kinds = [p["kind"] for p in out["pivots"]]
     assert all(a != b for a, b in zip(kinds, kinds[1:]))  # 高低交替
+
+
+def test_forming_construct_says_the_next_step_price_and_bars_left():
+    # 只有新高那根：下一根最低价跌破 12 才出现更低的高点，之后还要一根才完成，最少两根
+    top = find_structure(bars(RISE + [(14, 12)])).top
+    assert (top.state, top.next_at, top.bars_left, top.complete_at) == (State.FORMING, 12, 2, None)
+    # 有了更低的高点：下一步就是完成价，只差一根
+    top = find_structure(bars(RISE + [(14, 12), (13, 11)])).top
+    assert (top.next_at, top.bars_left, top.complete_at) == (11, 1, 11)
+
+
+def test_bottom_next_step_on_spy_2024_04_19():
+    # SPY 2024-04-19 新低那天：下一根最高价要过当天的最高价，底部构造才往前走
+    df = load_fixture("SPY", "2024-04-19")
+    b = find_structure(df).bottom
+    assert (b.state, b.pivot_date, b.bars_left) == (State.FORMING, "2024-04-19", 2)
+    assert b.next_at == float(df["High"].iloc[-1])

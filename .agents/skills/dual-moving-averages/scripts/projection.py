@@ -14,7 +14,7 @@ from indicators import PERIODS, add_indicators, arrangement
 
 HURDLE_DAYS = {20: 20, 60: 30, 120: 30}   # 每条 MA 看多少天的抵扣价
 SCENARIO_DAYS = 30
-SOLVE_DAYS = (10, 20)
+SOLVE_DAYS = (10, 20, 30)                 # 30 天和 MA60、MA120 的门槛路径、持平情景同一个跨度
 PAIRS = ((20, 60), (60, 120))
 SEARCH_RANGE = (0.2, 5.0)                 # 求解时持平价位的搜索范围（现价的倍数）
 SEARCH_TOL = 1e-7                         # 二分到现价的这个比例为止
@@ -142,8 +142,13 @@ def hurdle_path(df: pd.DataFrame, n: int, days: int) -> HurdlePath:
                       max_price=hi, max_day=prices.index(hi) + 1, min_price=lo, min_day=prices.index(lo) + 1)
 
 
+def future_dates(df: pd.DataFrame, days: int) -> pd.DatetimeIndex:
+    """推演第 1…days 天对应的日期：之后的工作日（不扣节假日，所以只是约数）。"""
+    return pd.bdate_range(df.index[-1] + pd.Timedelta(days=1), periods=days)
+
+
 def extend(df: pd.DataFrame, closes: list[float]) -> pd.DataFrame:
-    idx = pd.bdate_range(df.index[-1] + pd.Timedelta(days=1), periods=len(closes))
+    idx = future_dates(df, len(closes))
     return add_indicators(pd.concat([df[["Close"]], pd.DataFrame({"Close": closes}, index=idx)]))
 
 
@@ -234,6 +239,7 @@ def projection(df: pd.DataFrame) -> dict:
     """JSON 里的 projection 一块。"""
     close = float(df["Close"].iloc[-1])
     return {
+        "dates": [str(d.date()) for d in future_dates(df, SCENARIO_DAYS)],
         "hurdles": [asdict(hurdle_path(df, n, HURDLE_DAYS[n])) for n in PERIODS],
         "scenarios": [asdict(run_scenario(df, close, SCENARIO_DAYS))],
         "solves": [asdict(solve(df, event, k, happen))

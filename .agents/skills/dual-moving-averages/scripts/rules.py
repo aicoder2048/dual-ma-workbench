@@ -305,6 +305,9 @@ def _construct(c: Ctx, top: bool) -> Result:
     levels = {"作废价": k.invalidation}
     if k.complete_at is not None:
         levels["完成价"] = k.complete_at
+    if k.next_at is not None:
+        levels["下一步价"] = k.next_at
+        levels["还差几根"] = k.bars_left
     basis = f"{k.state.value}，{'新高' if top else '新低'} {k.pivot_date} {_f(k.pivot_price)}"
     return _met(k.state == State.DONE, basis, levels)
 
