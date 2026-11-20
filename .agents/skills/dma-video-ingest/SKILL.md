@@ -28,6 +28,14 @@ description: 把一期新的双均线 / 趋势交易教学视频整理进 dual-m
 
 `--model` 必须指向这个 NPZ 快照目录。写成 `mlx-community/whisper-large-v3-turbo` 会取到新版 safetensors，0.3.0 报 `[load_npz] Input must be a zip file`。
 
+**繁体字幕先转简体**（项目统一用简体，原话照简体抄）。作者 2020 年那批视频的人工字幕是繁体：
+
+```bash
+uv run <SKILL_DIR>/scripts/to_simplified.py videoes/<名字>.zh-Hant.vtt --move-raw
+```
+
+只换字形不改用词（OpenCC `t2s`），时间轴原样保留；写出 `<名字>.zh-Hans.vtt`，繁体原件挪到 `videoes/raw/`。之后所有步骤都用简体那份。
+
 给视频定代号：读 DMA `references/cases.md` 开头的代号行，取下一个没用过的字母。
 
 ## 2. 抽条目，写条目文件
@@ -78,7 +86,7 @@ uv run <SKILL_DIR>/scripts/verify_quotes.py <字幕文件> videoes/<名字>.item
 
 每条打印 `OK` / `FAIL` / `SKIP`，最后一行列出失败的编号，有失败时退出码为 1。逐条修到全过：
 
-- 找不到：回字幕找原句重抄。常见原因是顺手改了词、简繁不同、把旧笔记的转述当原话。找不到支撑就改成 `inferred`。
+- 找不到：回字幕找原句重抄。常见原因是顺手改了词、把旧笔记的转述当原话，或者核对的是繁体原件（要用转好的简体那份）。找不到支撑就改成 `inferred`。
 - 时间不符：改 `time`，脚本会给出原话实际所在的时间。默认容差 10 秒，`--tolerance` 可调。
 - `.txt` 字幕没有时间轴，只核原话；能拿到 `.vtt` 就用 `.vtt`。
 
