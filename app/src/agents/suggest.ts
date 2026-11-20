@@ -51,7 +51,8 @@ export function ruleSuggestions(a: Analysis, asof: string | null = null): Sugges
       : { text: "什么叫双交叉？为什么只看一组不够？", intent: "复习概念" },
     { text: `「${a.regime.name}」是什么意思，该怎么做？`, intent: "复习概念" },
   ];
-  if (a.bias_pctl <= 0.05 || a.bias_pctl >= 0.95) {
+  const extreme = a.thresholds.EXTREME_PCTL.value;
+  if (a.bias_pctl <= 1 - extreme || a.bias_pctl >= extreme) {
     advisor.push({ text: `乖离率在历史 ${Math.round(a.bias_pctl * 100)}% 分位说明什么？`, intent: "复习概念" });
   }
   return { analyst, advisor };

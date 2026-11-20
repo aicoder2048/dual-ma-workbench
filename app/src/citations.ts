@@ -6,7 +6,6 @@
  *
  * 服务端在回答结束后调用 validateCitations，把不存在的编号标出来，前端显示成红色。
  */
-import { project } from "./report.ts";
 import type { SourceLibrary } from "./sources.ts";
 
 export type CitationKind = "S" | "D";
@@ -78,7 +77,43 @@ export interface RuleResult {
   status: "满足" | "不满足" | "需看图";
   basis: string;
   levels: Partial<Record<string, number>>;
+  /** 自己满足、但结论相反的另一条规则也满足且优先时，写那条的编号（rules.md 的让位）。 */
+  yields_to: string | null;
 }
+
+/** 五步定位（rules.md J15）：一对线组的转折走到哪一步，每步带日期。 */
+export type StepName = "破线" | "EMA 拐头" | "MA 拐头" | "第一个交叉" | "双交叉";
+export interface Turn { direction: "向上" | "向下"; steps: { step: StepName; date: string | null }[]; progress: number }
+export interface PairProgress { pair: "20/60" | "60/120"; side: "多头" | "空头" | null; completed: Turn | null; current: Turn | null }
+
+/** 门槛路径（rules.md A2）：MA(period) 未来 days 天要扣的价格和它们的最高、最低。 */
+export interface HurdlePath { period: number; days: number; dates: string[]; prices: number[]; max_price: number; max_day: number; min_price: number; min_day: number }
+/** 持平情景：收盘停在 level days 天，每条线第几天转向、每对线第几天交叉、期末排列。 */
+export interface Scenario {
+  name: string; level: number; days: number;
+  turns: { line: string; now: "上" | "下" | "平"; turn_day: number | null }[];
+  crosses: { kind: "MA" | "EMA"; pair: string; now: "上方" | "下方"; cross: "金叉" | "死叉" | null; cross_day: number | null }[];
+  end_arr_ma: string; end_arr_ema: string; end_values: Record<string, number>;
+}
+/** 求解：days 天内让 event 发生（happen=false 时不发生）要持平在 level 的哪一边。 */
+export interface Solve {
+  event: string; happen: boolean; days: number;
+  status: "有临界价位" | "任何价位都成立" | "任何价位都不成立";
+  level: number | null; pct: number | null; side: "以上" | "以下" | null;
+}
+export interface ProjectionOut { hurdles: HurdlePath[]; scenarios: Scenario[]; solves: Solve[] }
+
+export interface FrameLine { period: number; ma: number; ema: number }
+export type Unavailable = { available: false; reason: string };
+/** 周线（大一级）：同一套均线和排列。 */
+export type Weekly = Unavailable | {
+  available: true; bars: number; date: string; partial: boolean; close: number; arr_ma: string; arr_ema: string;
+  lines: (FrameLine & { above: boolean; ma_direction: string; ema_direction: string })[];
+};
+/** 小时线（小一级）：给 P13 用；取不到时 P13 需看图。 */
+export type Hourly = Unavailable | {
+  available: true; source: string; bars: number; last: string; close: number; arr_ma: string; arr_ema: string; lines: FrameLine[];
+};
 
 /** 唯一的打法：key 选 plan.ts 里按仓位的措辞，text 是脚本生成的那段话，rules 是用到的规则编号。 */
 export interface Play { key: string; text: string; rules: string[] }
@@ -102,7 +137,11 @@ export interface Analysis {
   regime: Regime;
   play: Play;
   rules: RuleResult[];
+  steps: PairProgress[];
   thresholds: Record<string, { value: number; source: string }>;
+  projection: ProjectionOut;
+  weekly: Weekly;
+  hourly: Hourly;
   lean: Lean;
   drops: {
     period: number; tomorrow: number; mean: number; max: number; below: number; count: number;
@@ -131,11 +170,14 @@ export function buildFacts(a: Analysis): Facts {
     put(`模糊判断.${b.line}`, `${b.line} 收盘不变能朝今天的方向走几天`, `${b.direction}，${b.hold_days}/${b.days} 天；天天这样走要守在 ${f2(b.level)}（${pct(b.level_pct, 1)}）`);
   }
   put("模糊判断.方向", "6 条均线的方向票数", `${ln.up} 上 · ${ln.flat} 平 · ${ln.down} 下`);
-  put("模糊判断.排布", "20/60、60/120 线组谁在上（≈ 是相差不到价格 0.5%）",
+  put("模糊判断.排布", `20/60、60/120 线组谁在上（≈ 是相差不到价格 ${a.thresholds.ORDER_TIE_PCT.value}%）`,
     ln.pairs.map((p) => `${p.pair} ${p.rel > 0 ? ">" : p.rel < 0 ? "<" : "≈"}`).join("，"));
   put("模糊判断.10天后", `价格不变 ${ln.after.days} 天后的模糊判断`, `${ln.after.label}（${ln.after.up} 上 · ${ln.after.down} 下）`);
   for (const f of ln.flips) put(`改变判断.${f.line}`, `什么会改变判断（转${f.toward}）：${f.line}`, f.text);
-  for (const r of a.rules) put(`规则.${r.id}`, `规则 ${r.id} ${r.name}`, `${r.status}：${r.basis}`);
+  for (const r of a.rules) put(`规则.${r.id}`, `规则 ${r.id} ${r.name}`, `${r.status}${r.yields_to ? `，${r.yields_to} 优先` : ""}：${r.basis}`);
+  for (const p of a.steps) put(`五步.${p.pair}`, `${p.pair} 的五步进度（破线、EMA 拐头、MA 拐头、第一个交叉、双交叉）`, stepsText(p));
+  put("周线.排列", "周线 MA、EMA 排列", a.weekly.available ? `MA ${a.weekly.arr_ma}，EMA ${a.weekly.arr_ema}` : a.weekly.reason);
+  put("小时线.排列", "小时线 MA、EMA 排列", a.hourly.available ? `MA ${a.hourly.arr_ma}，EMA ${a.hourly.arr_ema}（到 ${a.hourly.last}）` : a.hourly.reason);
   put("排列.MA", "MA 排列", a.arr_ma);
   put("排列.EMA", "EMA 排列", a.arr_ema);
   put("间距", "6 条线最大最小差占价格", `${a.spread_pct.toFixed(1)}%`);
@@ -165,14 +207,34 @@ export function buildFacts(a: Analysis): Facts {
     put(`扣${n}.价平变化`, `价格不变时 ${d.count} 天后 MA${n} 的变化`, pct(d.ma_flat_change_pct));
     put(`扣${n}.首次扣低`, `MA${n} 第几天首次扣到低于现价`, d.first_low ? `第 ${d.first_low} 天` : `${n} 天内都不会`);
   }
-  // 价格保持不变时的推演（MA 由抵扣价推出；EMA 用精确公式）
-  const p = project(a);
-  for (const [k, v] of [...Object.entries(p.ma), ...Object.entries(p.ema)]) {
-    put(`推演.${k}`, `价格不变 ${p.days} 天后的 ${k}`, `${f2(v.now)} → ${f2(v.after)}`);
+  for (const h of a.projection.hurdles) {
+    put(`门槛.MA${h.period}`, `MA${h.period} 未来 ${h.days} 天抵扣价的最高、最低（rules.md A2）`,
+      `最高 ${f2(h.max_price)}（第 ${h.max_day} 天）、最低 ${f2(h.min_price)}（第 ${h.min_day} 天）；守在最高之上天天上行，最低之下天天下行`);
   }
-  put("推演.排列.MA", `价格不变 ${p.days} 天后的 MA 排列`, `${p.arrNow.ma} → ${p.arrAfter.ma}`);
-  put("推演.排列.EMA", `价格不变 ${p.days} 天后的 EMA 排列`, `${p.arrNow.ema} → ${p.arrAfter.ema}`);
+  const sc = a.projection.scenarios[0];
+  const lines = a.lines.map((ln) => ln.period);
+  for (const k of [...lines.map((n) => `MA${n}`), ...lines.map((n) => `EMA${n}`)]) {
+    const now = k.startsWith("MA") ? a.lines.find((ln) => `MA${ln.period}` === k)!.ma : a.lines.find((ln) => `EMA${ln.period}` === k)!.ema;
+    const turn = sc.turns.find((t) => t.line === k);
+    put(`推演.${k}`, `价格不变 ${sc.days} 天后的 ${k}`, `${f2(now)} → ${f2(sc.end_values[k])}${turn?.turn_day ? `，第 ${turn.turn_day} 天转向` : ""}`);
+  }
+  put("推演.排列.MA", `价格不变 ${sc.days} 天后的 MA 排列`, `${a.arr_ma} → ${sc.end_arr_ma}`);
+  put("推演.排列.EMA", `价格不变 ${sc.days} 天后的 EMA 排列`, `${a.arr_ema} → ${sc.end_arr_ema}`);
+  for (const s of a.projection.solves) put(`求解.${solveKey(s)}`, `${s.days} 天内${s.happen ? "让" : "不让"}「${s.event}」发生要持平在哪`, solveText(s));
   return facts;
+}
+
+/** 求解的引用键：去掉括号里的说明和空格，例如 "理顺向上.10天"。 */
+export const solveKey = (s: Solve) => `${s.happen ? "" : "不"}${s.event.split("（")[0].replace(/\s/g, "")}.${s.days}天`;
+
+export function solveText(s: Solve): string {
+  if (s.status !== "有临界价位") return s.status;
+  return `持平在 ${f2(s.level!)}（${pct(s.pct!, 1)}）${s.side}`;
+}
+
+export function stepsText(p: PairProgress): string {
+  const cell = (t: Turn | null) => t ? `${t.direction} ${t.progress}/5${t.steps.filter((x) => x.date).map((x) => `，${x.step} ${x.date}`).join("")}` : "—";
+  return `${p.side ?? "未定"}；上一次 ${cell(p.completed)}；现在 ${cell(p.current)}`;
 }
 
 /** 给模型看的数据字段清单：`D:键 = 值（说明）`，一行一个。 */
