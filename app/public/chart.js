@@ -276,19 +276,19 @@ export function createChart(box, legendEl) {
   bar.hidden = true;
   bar.innerHTML = `
     <span class="replay-start-wrap">
-      <button type="button" class="replay-start" aria-haspopup="menu" aria-expanded="false">选起点 ▾</button>
-      <span class="replay-menu" role="menu" hidden>
+      <button type="button" class="replay-start" aria-expanded="false">选起点 ▾</button>
+      <span class="replay-menu" hidden>
         <button type="button" data-start="click">点图选择</button>
         <label>选日期 <input type="date"></label>
         <button type="button" data-start="earliest" title="图上 6 条线都有值的第一天">最早一天</button>
         <button type="button" data-start="random">随机一天</button>
       </span>
     </span>
-    <button type="button" class="replay-play" title="播放 / 暂停（Shift+↓）">▶</button>
+    <button type="button" class="replay-play" aria-label="播放" aria-pressed="false" title="播放 / 暂停（Shift+↓）">▶</button>
     <button type="button" class="replay-forward" title="前进一根（Shift+→）">前进一根</button>
     <select class="replay-speed" title="播放速度：1x = 一秒一根">${SPEEDS.map((x) => `<option value="${x}">${x}x</option>`).join("")}</select>
     <button type="button" class="replay-realtime">回到最新</button>
-    <span class="replay-label"></span>
+    <span class="replay-label" aria-live="polite"></span>
     <button type="button" class="replay-analyze" title="退出回放，载入只用这一天及以前数据的完整分析">按这一天分析</button>
     <button type="button" class="replay-exit" aria-label="退出回放" title="退出回放">×</button>`;
   box.after(bar);
@@ -317,7 +317,12 @@ export function createChart(box, legendEl) {
 
   function renderReplay(prev) {
     if (rs.mode !== "replay") {
-      if (view !== data) { show(data); applyRange(); }
+      if (view !== data) {
+        // 回放中重选起点：视图留在原处（逻辑序号前后一致），退出回放才回到默认范围
+        const r = rs.mode === "select" ? chart.timeScale().getVisibleLogicalRange() : null;
+        show(data);
+        if (r) chart.timeScale().setVisibleLogicalRange(r); else applyRange();
+      }
     } else if (prev.mode === "replay" && rs.index === prev.index + 1) {
       appendBar(rs.index);
     } else if (prev.mode !== "replay" || rs.index !== prev.index) {
@@ -363,6 +368,8 @@ export function createChart(box, legendEl) {
     const last = (data?.candles.length ?? 0) - 1;
     const atEnd = rs.mode === "replay" && rs.index >= last;
     $r(".replay-play").textContent = rs.playing ? "⏸" : "▶";
+    $r(".replay-play").setAttribute("aria-pressed", String(Boolean(rs.playing)));
+    levelsBtn.disabled = rs.mode === "replay"; // 门槛线属于最新一天，回放时收起，按钮也不能点
     $r(".replay-play").disabled = rs.mode !== "replay" || atEnd;
     $r(".replay-forward").disabled = rs.mode !== "replay" || atEnd;
     $r(".replay-analyze").disabled = rs.mode !== "replay";
@@ -424,7 +431,7 @@ export function createChart(box, legendEl) {
   document.addEventListener("keydown", (e) => {
     if (e.target.closest?.("input, textarea, select, [contenteditable]")) return;
     if (e.key === "Escape" && rs.mode === "select") { dispatch({ type: "exit" }); return; }
-    if (rs.mode !== "replay" || !e.shiftKey) return;
+    if (rs.mode !== "replay" || !e.shiftKey || e.metaKey || e.ctrlKey || e.altKey) return;
     const action = { ArrowDown: "toggle", ArrowRight: "forward" }[e.key];
     if (!action) return;
     e.preventDefault();
@@ -439,15 +446,28 @@ export function createChart(box, legendEl) {
     chart,
     /** key：股票代码（自己画的线按它分开存）。 */
     setData(d, key = null) {
+      // 同一只票重新载入（分析师调了取数、换了数据源）：停在原来回放到的那天，免得露出后面的 K 线；换票才退出回放
+      const sameTicker = key === drawKey;
+      const at = sameTicker && rs.mode === "replay" ? data.candles[rs.index].time : null;
+      const r = at ? chart.timeScale().getVisibleLogicalRange() : null;
       data = d;
-      rs = OFF; // 换票、重新取数：退出回放（不能拿新数据接着放旧的那天）
+      const index = at ? indexOnOrBefore(d.candles, at) : -1;
+      rs = index >= 0 ? { mode: "replay", index, playing: false } : OFF;
       arm();
-      syncReplay();
-      if (key !== drawKey) { drawKey = key; loadDrawn(); }
+      if (!sameTicker) { drawKey = key; loadDrawn(); }
       paintDrawn();
-      show(d);
-      applyRange();
+      if (rs.mode === "replay") {
+        show(sliceAt(d, index));
+        if (r) chart.timeScale().setVisibleLogicalRange(r);
+      } else {
+        show(d);
+        applyRange();
+      }
+      paintLevels();
+      syncReplay();
     },
+    /** 停止回放、回到完整数据（取数失败、中栏收起图表时用）。 */
+    stopReplay() { dispatch({ type: "exit" }); },
     /**
      * 门槛线：lean.flips 里 20 线组还没越过的价位（第 1 个动作 EMA20、第 2 个动作 MA20 抵扣价）。
      * 偏空时是"站上"，偏多时是"跌破"。60 线组的价位留在模糊判断卡片里，图上不画，免得挤。
