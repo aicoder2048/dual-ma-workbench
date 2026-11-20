@@ -64,8 +64,8 @@ def bar_tones(df: pd.DataFrame) -> pd.Series:
     return tone.where(drop.notna() & df["MA20"].notna())
 
 
-def chart_data(df: pd.DataFrame, a: dict) -> dict:
-    view = df.tail(CHART_BARS)
+def chart_data(df: pd.DataFrame, a: dict, bars: int = CHART_BARS) -> dict:
+    view = df.tail(bars)
     dates = [d.strftime("%Y-%m-%d") for d in view.index]
 
     def line(col: str) -> list[dict]:
