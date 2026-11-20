@@ -355,21 +355,23 @@ export function createChart(box, legendEl) {
   }
 
   /** 按钮、提示、徽标、十字线、选起点的覆盖层跟着状态走。 */
+  let shownMode = "off";
   function syncReplay() {
     const on = rs.mode !== "off";
     const selecting = rs.mode === "select";
     replayBtn.setAttribute("aria-pressed", String(on));
-    replayBtn.textContent = selecting ? "选起点中…" : rs.mode === "replay" ? "退出回放" : "回放";
+    replayBtn.textContent = selecting ? "取消选起点" : rs.mode === "replay" ? "退出回放" : "回放";
     bar.hidden = !on;
     badge.hidden = rs.mode !== "replay";
     box.classList.toggle("replay-selecting", selecting);
     chart.applyOptions({ crosshair: { vertLine: { visible: !selecting, labelVisible: !selecting } } });
     if (!selecting) overlay.hidden = true;
-    setMenu(false);
+    if (rs.mode !== shownMode) { setMenu(false); shownMode = rs.mode; } // 只在换状态时收菜单：播放中每走一根不收
     const last = (data?.candles.length ?? 0) - 1;
     const atEnd = rs.mode === "replay" && rs.index >= last;
     $r(".replay-play").textContent = rs.playing ? "⏸ 暂停" : "▶ 播放";
     $r(".replay-play").setAttribute("aria-pressed", String(Boolean(rs.playing)));
+    $r(".replay-label").setAttribute("aria-live", rs.playing ? "off" : "polite"); // 播放中不每秒播报
     levelsBtn.disabled = rs.mode === "replay"; // 门槛线属于最新一天，回放时收起，按钮也不能点
     $r(".replay-play").disabled = rs.mode !== "replay" || atEnd;
     $r(".replay-forward").disabled = rs.mode !== "replay" || atEnd;

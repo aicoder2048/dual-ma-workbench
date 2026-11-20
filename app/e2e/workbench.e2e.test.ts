@@ -861,7 +861,7 @@ describe("K 线回放", () => {
     await page.click(".replay-toggle");
     expect(await visibleAt(".replay-bar")).toBe(true);
     expect(await page.textContent(".replay-label")).toContain("点图上的一天");
-    expect(await page.textContent(".replay-toggle")).toContain("选起点");
+    expect(await page.textContent(".replay-toggle")).toBe("取消选起点");
     const p = await barPoint(page, 150);
     await page.mouse.click(p.x, p.y);
     await waitRp(page, (r) => r.mode === "replay");
@@ -1065,6 +1065,26 @@ describe("K 线回放", () => {
     await page.evaluate(async () => (await import("/app.js")).loadAnalysis("ANT", null));
     await page.waitForSelector("#load-error", { state: "visible" });
     expect((await rp(page)).mode).toBe("off");
+    await page.close();
+  }, 30_000);
+
+  test("正在播放（默认 1x）时打开「选起点 ▾」：菜单不会每走一根就被关掉，向下展开不被挡", async () => {
+    const { page, errors } = await start("RPLK");
+    await page.click(".replay-toggle");
+    await page.click(".replay-start");
+    await page.click(".replay-menu [data-start=earliest]");
+    expect((await rp(page)).playing).toBe(true);
+    const i0 = (await rp(page)).index;
+    await page.click(".replay-start");
+    await waitRp(page, (r) => r.index >= i0 + 2); // 至少走了两根
+    expect(await page.isVisible(".replay-menu")).toBe(true);
+    const [menu, btn] = await Promise.all([page.locator(".replay-menu").boundingBox(), page.locator(".replay-start").boundingBox()]);
+    expect(menu!.y).toBeGreaterThanOrEqual(btn!.y + btn!.height - 1); // 在「选起点」按钮下面展开
+    expect(await page.textContent(".replay-toggle")).toBe("退出回放");
+    await page.click(".replay-toggle");
+    await page.click(".replay-toggle");
+    expect(await page.textContent(".replay-toggle")).toBe("取消选起点");
+    expect(errors).toEqual([]);
     await page.close();
   }, 30_000);
 

@@ -42,7 +42,7 @@ describe("回放状态机", () => {
     expect(step(at(N - 1), { type: "toggle" }, N)).toEqual(at(N - 1));
   });
 
-  test("回放中可以重选起点（停下播放）、直接换一天、回到最新", () => {
+  test("回放中可以重选起点（enter 停下播放）、直接换一天（pick 接着播）、回到最新", () => {
     expect(step(at(50, true), { type: "enter" }, N)).toEqual(select);
     expect(step(at(50, true), { type: "pick", index: 10 }, N)).toEqual(at(10, true));
     expect(step(at(50, true), { type: "realtime" }, N)).toEqual(off);
