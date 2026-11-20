@@ -305,10 +305,13 @@ describe("止损和失效的内容来自 playbooks", () => {
     expect(item(p.holding, "止损")).toContain("死叉");
     expect(item(p.flat, "止损")).toContain("假突破");
   });
-  test("稳定上涨：碰到 MA60 不算，60 线组拐头或 20/60 双死叉才走", () => {
-    const s = item(at("稳定上涨", 0.8).holding, "止损");
-    expect(s).toContain("双死叉");
-    expect(s).toContain("不算");
+  test("稳定上涨：60 线组拐头向下才走；碰到 MA60、20/60 双死叉都不算（rules.md J7）", () => {
+    const p = at("稳定上涨", 0.8).holding;
+    const s = item(p, "止损");
+    expect(s).toContain("60 线组拐头向下");
+    expect(s).not.toMatch(/双死叉(才|就)走/);
+    expect(s).toMatch(/双死叉[^。]*不算/);
+    expect(p.items.find((i) => i.label === "止损")!.rules).not.toContain("J16");
   });
   test("稳定上涨、稳定下跌的失效看 60/120：20/60 交叉只是深回撤（反弹），不是失效（rules.md J7）", () => {
     for (const [trend, score] of [["稳定上涨", 0.8], ["稳定下跌", -0.8]] as const) {
