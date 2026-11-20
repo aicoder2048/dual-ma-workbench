@@ -12,9 +12,10 @@ import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "
 import { dirname, resolve } from "node:path";
 import { Type, type Static } from "typebox";
 import { Value } from "typebox/value";
-import { outcomeOf, summarize, type Action, type JournalEntry, type Summary } from "../journal.ts";
+import { group, outcomeOf, summarize, type Action, type Group, type JournalEntry, type Summary } from "../journal.ts";
 import { PROJECT_ROOT } from "../sources.ts";
 import type { Bar } from "./blind.ts";
+import { levelOf, scoreOf, TradeDisciplineT, type TradeDiscipline } from "./discipline.ts";
 
 const Day = Type.String({ pattern: "^\\d{4}-\\d{2}-\\d{2}$" });
 const Index = Type.Integer({ minimum: 0 });
@@ -29,8 +30,14 @@ const Secret = Type.Object({
 }, Strict);
 export type Secret = Static<typeof Secret>;
 
-/** 揭晓时算好存下：自己这几笔复利的收益、同一段买入持有（T+1 开盘买，揭晓那根收盘卖），都是 %。 */
-const Result = Type.Object({ mine: Type.Number(), hold: Type.Number(), trades: Type.Integer({ minimum: 0 }) }, Strict);
+/**
+ * 揭晓时算好存下：自己这几笔复利的收益、同一段买入持有（T+1 开盘买，揭晓那根收盘卖），都是 %；
+ * discipline：每一笔的「照打法」评分（discipline.ts）。加这一项之前揭晓的题没有它。
+ */
+const Result = Type.Object({
+  mine: Type.Number(), hold: Type.Number(), trades: Type.Integer({ minimum: 0 }),
+  discipline: Type.Optional(Type.Array(TradeDisciplineT)),
+}, Strict);
 export type Result = Static<typeof Result>;
 
 const common = {
@@ -148,6 +155,8 @@ export interface PracticeStats {
   vsHold: { n: number; beat: number; meanExcess: number | null; small: boolean };
   /** 练习的每一笔（已离场）：照计划 / 没照计划，和交易日志的汇总一样算。 */
   trades: Summary;
+  /** 已离场、评过纪律的每一笔：纪律高（没有 ✗）/ 纪律低；scored 是所有揭晓题加起来的 ✓ 项数 / 评了的项数。 */
+  discipline: { high: Group; low: Group; score: { passed: number; scored: number } | null };
 }
 
 export function practiceStats(sessions: Session[], entries: JournalEntry[]): PracticeStats {
@@ -162,7 +171,15 @@ export function practiceStats(sessions: Session[], entries: JournalEntry[]): Pra
       small: done.length < SMALL_SESSIONS,
     },
     trades: summarize(entries.filter((e) => e.practice)),
+    discipline: disciplineStats(done.flatMap((r) => r.discipline ?? []), entries),
   };
+}
+
+function disciplineStats(scored: TradeDiscipline[], entries: JournalEntry[]): PracticeStats["discipline"] {
+  const level = new Map(scored.map((t) => [t.journalId, levelOf(t)]));
+  const closed = entries.filter((e) => e.state === "closed");
+  const pick = (l: "high" | "low") => group(closed.filter((e) => level.get(e.id) === l).map((e) => outcomeOf(e)!));
+  return { high: pick("high"), low: pick("low"), score: scoreOf(scored) };
 }
 
 /** 读写 data/practice/sessions.json：每次从文件读，写入先写临时文件再改名；文件坏了报错，不覆盖。 */

@@ -6,6 +6,7 @@ import { advisorContext, analystContext } from "../src/agents/prompts.ts";
 import { analysisForModel } from "../src/agents/tools.ts";
 import { Analyzer, pythonRunner } from "../src/analyze.ts";
 import { buildFacts } from "../src/citations.ts";
+import { playKey } from "../src/plan.ts";
 import { createHandler } from "../src/http.ts";
 import { Journal, type JournalEntry } from "../src/journal.ts";
 import { DATE_RE, parseCsv } from "../src/practice/blind.ts";
@@ -114,6 +115,7 @@ describe("练习的接口", () => {
       expect(view.delta.candle.time).toBe(cursorDate(t + 1));
       expect(view.chart).toBeUndefined();
       noLookahead(view.raw, t + 1);
+      expect(view.raw).not.toContain("discipline"); // 揭晓前不评纪律
       expect(leaks(view.raw)).toEqual([]);
       const i = t0 + t; // 刚看到的那根
       if (exitAt === null && i >= t0 + entryAt && bars[i].close < stop) exitAt = t + 1;
@@ -141,6 +143,16 @@ describe("练习的接口", () => {
     expect(shown.reveal.chart.candles.find((c: { time: string }) => c.time === shown.reveal.start).close).toBeCloseTo(REAL[real].close, 1);
     expect(shown.reveal.chart.candles.at(-1).time).toBe(shown.reveal.end);
     expect(shown.reveal.result.hold).toBeCloseTo((bars[t0 + view.t].close / bars[t0 + 1].open - 1) * 100, 6);
+    // 照打法评分：T+1 开盘进场，看 T0 收盘时的打法；止损按计划的（没有就用自己的），独立扫一遍收盘
+    const [d] = shown.reveal.result.discipline;
+    expect(d.journalId).toBe("jrnl-0001");
+    expect(d.checks.map((c: { item: string }) => c.item)).toEqual(["打法", "条件", "止损", "仓位"]);
+    expect(d.checks[0]).toMatchObject({ t: 0, mark: RECORD.setups[playKey(a.analysis)] ? "pass" : "fail" });
+    const level = j.snapshot.stop?.price ?? stop;
+    let breach: number | null = null;
+    for (let k = entryAt; k < exitAt!; k++) if (breach === null && bars[t0 + k].close < level) breach = k;
+    expect(d.checks[2]).toMatchObject({ t: breach, mark: breach === null || breach + 1 === exitAt ? "pass" : "fail" });
+    expect(d.checks[3].mark).toBe("na");
     const after = (await json("/api/journal")).entries.find((e: JournalEntry) => e.id === "jrnl-0001");
     expect(after.snapshot.ticker).toBe(`练习 #1 · ${REAL_TICKER}`);
     expect(after.state).toBe("closed");
