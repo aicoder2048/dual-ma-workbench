@@ -52,6 +52,18 @@ def _bullets(items: list[str] | None, cls: str = "notes") -> str:
     return f'<ul class="{cls}">' + "".join(f"<li>{_t(i)}</li>" for i in items) + "</ul>"
 
 
+def bar_tones(df: pd.DataFrame) -> pd.Series:
+    """破线拐头着色：收盘 >= 20 日抵扣价（MA20 不降）且 >= MA20 为 bull，两样都不满足为 bear，只满足一样为 mixed。"""
+    close = df["Close"]
+    drop = close.shift(20)
+    above_drop = close >= drop
+    above_ma = close >= df["MA20"]
+    tone = pd.Series("mixed", index=df.index, dtype=object)
+    tone[above_drop & above_ma] = "bull"
+    tone[~above_drop & ~above_ma] = "bear"
+    return tone.where(drop.notna() & df["MA20"].notna())
+
+
 def chart_data(df: pd.DataFrame, a: dict) -> dict:
     view = df.tail(CHART_BARS)
     dates = [d.strftime("%Y-%m-%d") for d in view.index]
@@ -62,6 +74,9 @@ def chart_data(df: pd.DataFrame, a: dict) -> dict:
     candles = [{"time": t, "open": float(r.get("Open", r["Close"])), "high": float(r.get("High", r["Close"])),
                 "low": float(r.get("Low", r["Close"])), "close": float(r["Close"])}
                for t, (_, r) in zip(dates, view.iterrows())]
+    for c, tone in zip(candles, bar_tones(df).reindex(view.index)):
+        if isinstance(tone, str):
+            c["tone"] = tone
     volume = []
     if "Volume" in view.columns:
         ratio = view["Volume"] / df["Volume"].rolling(50).mean().reindex(view.index)
