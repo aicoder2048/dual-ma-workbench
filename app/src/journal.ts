@@ -108,9 +108,16 @@ export class JournalError extends Error {
   }
 }
 
+/** 页面上会填错的字段，错了用中文说；其余照原样给路径，方便查。 */
+const FIELD_HINT: Record<string, string> = {
+  date: "日期要写成 2024-04-22 这样", price: "价格要填大于 0 的数字", asof: "日期要写成 2024-04-22 这样", cost: "成本价要填大于 0 的数字",
+};
+
 function firstError(schema: TSchema, value: unknown): string {
   const e = [...Value.Errors(schema, value)][0] as { instancePath?: string; message?: string } | undefined;
-  return e ? `${e.instancePath || "/"} ${e.message}` : "格式不对";
+  if (!e) return "格式不对";
+  const field = e.instancePath?.split("/").at(-1) ?? "";
+  return FIELD_HINT[field] ?? `${e.instancePath || "/"} ${e.message}`;
 }
 
 /** 外面来的数据（请求体）→ 类型；不对就 400。 */

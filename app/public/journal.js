@@ -34,8 +34,8 @@ function groupRow(name, g) {
 function summaryHtml(s) {
   const counts = Object.entries(STATE_LABEL).map(([k, label]) => `<span>${label} <b class="num">${s.counts[k]}</b></span>`).join("");
   const c = s.closed;
-  const small = c.all.small
-    ? `<p class="j-small">已离场 ${c.all.n} 笔，少于 ${view.smallSample} 笔：数字只当参考，别据此下结论。</p>` : "";
+  const small = !c.all.n ? `<p class="j-small">还没有已离场的。离场、复盘后，这里按照没照计划分开算。</p>`
+    : c.all.small ? `<p class="j-small">已离场 ${c.all.n} 笔，少于 ${view.smallSample} 笔：数字只当参考，别据此下结论。</p>` : "";
   return `<div class="j-counts">${counts}</div>${small}
     <table class="j-stats"><thead><tr><th></th><th>笔</th><th>胜率</th><th>均值</th><th>中位</th><th>天</th></tr></thead>
       <tbody>${groupRow("照计划", c.followed)}${groupRow("没照", c.deviated)}${groupRow("全部", c.all)}</tbody></table>
@@ -160,7 +160,7 @@ async function submit(form, request, done) {
 
 const fillForm = (name, title, fields, button) =>
   `<form class="j-act" data-act="${name}"><h3>${title}</h3><div class="j-fields">${fields}</div><button type="submit">${button}</button></form>`;
-const dateField = (label, v) => `<label class="j-field"><span>${label}</span><input name="date" type="date" required value="${esc(v ?? "")}"></label>`;
+const dateField = (label, v) => `<label class="j-field"><span>${label}</span><input name="date" type="date" required min="1990-01-01" max="2100-12-31" value="${esc(v ?? "")}"></label>`;
 const priceField = (label, v, hint) =>
   `<label class="j-field"><span>${label}</span><input name="price" inputmode="decimal" required value="${v ?? ""}" placeholder="${esc(hint ?? "")}"></label>`;
 
@@ -221,7 +221,7 @@ function detailDialog(id) {
     ev.preventDefault();
     const v = Object.fromEntries(new FormData(f));
     const act = f.dataset.act;
-    const body = act === "enter" || act === "exit" ? { type: act, date: v.date, price: parseCost(v.price) ?? -1, ...(act === "exit" ? { reason: v.reason } : {}) }
+    const body = act === "enter" || act === "exit" ? { type: act, date: v.date, price: parseCost(v.price), ...(act === "exit" ? { reason: v.reason } : {}) }
       : act === "cancel" ? { type: act, note: v.note }
       : { type: act, followed: v.followed === "yes", deviation: v.deviation, lesson: v.lesson };
     await submit(box, () => api(`/api/journal/${encodeURIComponent(id)}`, { method: "POST", body: JSON.stringify(body) }), () => detailDialog(id));

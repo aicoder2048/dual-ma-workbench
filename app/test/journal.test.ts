@@ -107,7 +107,8 @@ describe("状态转移", () => {
     j.apply(id, { type: "enter", date: "2024-04-22", price: 499 });
     expect(() => j.apply(id, { type: "exit", date: "2024-04-01", price: 520, reason: "" })).toThrow("早于进场");
     expect(() => j.apply(id, { type: "exit", date: "2024-02-30", price: 520, reason: "" })).toThrow("日期不合法");
-    expect(() => parseAction({ type: "enter", date: "2024-04-22", price: 0 })).toThrow("不合法");
+    expect(() => parseAction({ type: "enter", date: "2024-04-22", price: 0 })).toThrow("价格要填大于 0 的数字");
+    expect(() => parseAction({ type: "enter", date: "42220-02-04", price: 1 })).toThrow("日期要写成 2024-04-22 这样");
     expect(() => j.apply("nope-0000", { type: "cancel", note: "" })).toThrow("没有这笔");
   });
 
