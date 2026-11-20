@@ -92,11 +92,6 @@ def _has(t: Turn | None, step: Step) -> bool:
     return t is not None and any(s.step == step and s.date for s in t.steps)
 
 
-def _first_date(t: Turn | None) -> str | None:
-    dates = [s.date for s in (t.steps if t else []) if s.date]
-    return min(dates) if dates else None
-
-
 def _side(p: PairProgress) -> int:
     return {"多头": 1, "空头": -1}.get(p.side or "", 0)
 
@@ -478,19 +473,36 @@ def p10_parallel(c: Ctx) -> Result:
     return _met(d != 0, f"{c.regime.name}，60 线 {c.regime.clock60.hour}" if d else f"不是稳定趋势（{c.regime.name}）")
 
 
+def _pullback_start(c: Ctx, d: int) -> pd.Timestamp | None:
+    """这次回撤（反弹）从哪根开始：最近的波峰（波谷）之后最高价最高（最低价最低）的那根；又创新高就从新高重新算。"""
+    pivot = c.structure.last_high if d > 0 else c.structure.last_low
+    if pivot is None:
+        return None
+    since = c.df.loc[pivot.date:]
+    return since["High"].idxmax() if d > 0 else since["Low"].idxmin()
+
+
 def p11_pullback_reach(c: Ctx) -> Result:
     d = _pullback_dir(c)
     if not d:
         return _met(False, f"不是稳定趋势（{c.regime.name}）")
-    group = max(c.row["MA60"], c.row["EMA60"]) if d > 0 else min(c.row["MA60"], c.row["EMA60"])
-    reached = (c.close <= group) if d > 0 else (c.close >= group)
+    if c.structure is None:
+        return Result(Status.CHART, "没有最高价、最低价，定不出这次回撤从哪开始")
+    word = "回撤" if d > 0 else "反弹"
+    start = _pullback_start(c, d)
+    if start is None:
+        return _met(False, f"还没有{'波峰' if d > 0 else '波谷'}，没有这次{word}")
+    w = c.df.loc[start:]
+    group = w[["MA60", "EMA60"]].max(axis=1) if d > 0 else w[["MA60", "EMA60"]].min(axis=1)
+    hits = w.index[(w["Close"] <= group) if d > 0 else (w["Close"] >= group)]
     h = hurdle_path(c.df, 120, HURDLE_DAYS[120])
     keep = h.max_price < c.close if d > 0 else h.min_price > c.close
     edge = h.max_price if d > 0 else h.min_price
-    word = "回撤" if d > 0 else "反弹"
-    basis = (f"{word}到 60 线组：{'是' if reached else '否'}；MA120 {h.days} 天抵扣价{'最高' if d > 0 else '最低'} "
+    reached = f"{hits[0].date()} 起到过" if len(hits) else "没到过"
+    basis = (f"这次{word}（{start.date()} 起）{reached} 60 线组；MA120 {h.days} 天抵扣价{'最高' if d > 0 else '最低'} "
              f"{_f(edge)}（{_pct(edge, c.close)}），收盘不变{'方向不变' if keep else '会拐头'}")
-    return _met(reached and keep, basis, {"60 线组": float(group), f"MA120 {h.days} 天抵扣价{'最高' if d > 0 else '最低'}": edge})
+    return _met(len(hits) > 0 and keep, basis,
+                {"60 线组": float(group.iloc[-1]), f"MA120 {h.days} 天抵扣价{'最高' if d > 0 else '最低'}": edge})
 
 
 def p12_pullback_construct(c: Ctx) -> Result:
@@ -500,7 +512,8 @@ def p12_pullback_construct(c: Ctx) -> Result:
     k = _construct(c, top=d < 0)
     if k.status == Status.CHART:
         return k
-    since = _first_date(c.p20.current)
+    start = _pullback_start(c, d)
+    since = None if start is None else str(start.date())
     pivot = (c.structure.bottom if d > 0 else c.structure.top)
     fresh = pivot is not None and since is not None and pivot.pivot_date >= since
     ok = k.status == Status.MET and fresh
