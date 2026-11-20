@@ -4,10 +4,12 @@
  * 只监听本机地址。HTTP 提供页面和数据；WebSocket（/ws）连接两个 Pi agent 会话。
  */
 import { resolve } from "node:path";
-import { Analyzer } from "./analyze.ts";
+import { Analyzer, pythonRunner } from "./analyze.ts";
 import { codeFingerprint } from "./build.ts";
 import { createHandler } from "./http.ts";
 import { Journal } from "./journal.ts";
+import { Practice, yfinancePrices } from "./practice/service.ts";
+import { SessionStore } from "./practice/session.ts";
 import { PROJECT_ROOT, SOURCE_DOCS, SourceLibrary } from "./sources.ts";
 import { initialModel, piCatalog, piDefaultModel } from "./agents/catalog.ts";
 import { SettingsStore } from "./settings.ts";
@@ -22,12 +24,16 @@ const catalog = piCatalog();
 const models = await catalog.list();
 const settings = new SettingsStore(undefined, { model: initialModel(models, piDefaultModel()) });
 const analyzer = new Analyzer(undefined, undefined, () => settings.get().dataSource);
+const journal = new Journal();
+const practice = new Practice({ store: new SessionStore(), journal, prices: yfinancePrices(), run: pythonRunner });
+analyzer.mount(practice);
 const library = SourceLibrary.load();
 const workbench = new Workbench(analyzer, library, { settings });
 const handler = createHandler({
   analyzer,
   watchlist: new Watchlist(),
-  journal: new Journal(),
+  journal,
+  practice,
   library,
   publicDir: resolve(import.meta.dir, "../public"),
   settings,
