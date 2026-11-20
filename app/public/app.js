@@ -152,6 +152,7 @@ function showPane(ok) {
 /** 取数失败：中栏换成这只票和错误原因，不留上一只票的内容。 */
 function showLoadError(ticker, asof, message) {
   collapseDrawer();
+  chartApi?.stopReplay(); // 图表要收起了，回放不能在藏起来的图上接着走
   state.ticker = ticker;
   state.asof = asof;
   state.data = null;
@@ -468,6 +469,7 @@ async function main() {
   initAgents();
   installCitationHandlers(() => (state.data ? `${state.data.analysis.label} ${state.data.analysis.date}` : ""));
   chartApi = createChart($("chart"), $("legend"));
+  chartApi?.onAnalyzeDate((date) => state.ticker && loadAnalysis(state.ticker, date));
   initDrawer();
   initSelection({
     chart: chartApi,

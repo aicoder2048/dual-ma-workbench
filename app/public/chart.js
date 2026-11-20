@@ -1,4 +1,6 @@
 // K 线 + 6 条均线 + 抵扣价小黄点 + 成交量（TradingView lightweight-charts 4.2.0）。
+import { DEFAULT_SPEED, OFF, SPEEDS, earliestIndex, indexOnOrBefore, randomIndex, sliceAt, speedMs, step } from "./replay.js";
+
 const SPECS = [];
 [20, 60, 120].forEach((n) => ["MA", "EMA"].forEach((k) =>
   SPECS.push({ key: k + n, token: `--${k.toLowerCase()}${n}`, dashed: k === "EMA", width: k === "MA" ? 2 : 1 })));
@@ -79,9 +81,9 @@ export function createChart(box, legendEl) {
   box.before(readout);
   const f2 = (x) => (x == null ? "—" : x.toFixed(2));
   const showReadout = (time) => {
-    if (!data?.candles.length) { readout.textContent = ""; return; }
-    const c = data.candles.find((x) => x.time === time) ?? data.candles.at(-1);
-    const at = (k) => (data.lines[k] || []).find((p) => p.time === c.time)?.value;
+    if (!view?.candles.length) { readout.textContent = ""; return; }
+    const c = view.candles.find((x) => x.time === time) ?? view.candles.at(-1);
+    const at = (k) => (view.lines[k] || []).find((p) => p.time === c.time)?.value;
     readout.innerHTML = `<b>${c.time}</b><span>收 <b>${f2(c.close)}</b></span>`
       + SPECS.map((sp) => `<span><i class="${sp.dashed ? "dash" : ""}" style="--c: var(${sp.token})"></i>${sp.key} ${f2(at(sp.key))}</span>`).join("");
   };
@@ -95,6 +97,7 @@ export function createChart(box, legendEl) {
   tools.className = "chart-tools";
   tools.innerHTML = RANGES.map(([k, label]) => `<button type="button" class="range-btn" data-range="${k}">${label}</button>`).join("")
     + `<button type="button" class="range-btn" data-range="reset" title="回到当前范围的默认视图">复位</button>`
+    + `<button type="button" class="replay-toggle" aria-pressed="false" title="从过去某一天开始，一根一根往后放 K 线">回放</button>`
     + `<button type="button" class="draw-toggle" aria-pressed="false" title="点这里，再点图上任意一处，就在那个价位画一条横线">画线</button>`
     + `<button type="button" class="draw-clear" title="删掉这只股票上自己画的线">清除</button>`
     + `<button type="button" class="levels-toggle" aria-pressed="true" title="把「什么会改变判断」的价位画成虚线">门槛线</button>`
@@ -102,13 +105,13 @@ export function createChart(box, legendEl) {
   legendEl.after(tools);
   const applyRange = () => {
     tools.querySelectorAll(".range-btn").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.range === rangeKey)));
-    if (!data?.candles.length) return;
+    if (!view?.candles.length) return;
     const days = RANGES.find(([k]) => k === rangeKey)[2];
-    const last = data.candles.at(-1).time;
+    const last = view.candles.at(-1).time; // 回放时以回放到的那天为准
     if (!days) { chart.timeScale().fitContent(); return; }
     const from = new Date(last);
     from.setDate(from.getDate() - days);
-    const first = data.candles.find((c) => c.time >= from.toISOString().slice(0, 10))?.time ?? data.candles[0].time;
+    const first = view.candles.find((c) => c.time >= from.toISOString().slice(0, 10))?.time ?? view.candles[0].time;
     chart.timeScale().setVisibleRange({ from: first, to: last });
   };
   tools.addEventListener("click", (e) => {
@@ -134,9 +137,10 @@ export function createChart(box, legendEl) {
   let levels = [];
   let levelLines = [];
   let levelsOn = true;
+  const levelsShown = () => levelsOn && rs.mode !== "replay"; // 门槛线属于最新一天，回放时收起
   const paintLevels = () => {
     levelLines.forEach((l) => candles.removePriceLine(l));
-    levelLines = levelsOn ? levels.map((lv) => candles.createPriceLine({
+    levelLines = levelsShown() ? levels.map((lv) => candles.createPriceLine({
       price: lv.price, color: css(lv.line.endsWith("20") ? "--ma20" : "--ma60"), lineWidth: 1, lineStyle: 2,
       axisLabelVisible: true, title: lv.title,
     })) : [];
@@ -160,7 +164,10 @@ export function createChart(box, legendEl) {
     <p><b>画线</b>：点「画线」，再点图上一处，就在那个价位画一条横线，刷新后还在。常画的是前高、前低、自己的成本价、"跌破就重新看"的价位。
       图上的<b>虚线门槛线</b>是自动画的：价格过了它，20 线组才会拐头（先 EMA20，后 MA20），判断才值得改。</p>
     <p><b>看量</b>：底部的量柱，黄色是超过 50 日均量 2 倍的大量。看两种情况：横盘末期突然放量，是要变盘的信号；
-      急涨或急跌的末端连续放量，说明多空分歧在化解，行情往往快要转向，并不代表强势。看到放量先提高警惕，动手还是要等均线拐头。</p>`;
+      急涨或急跌的末端连续放量，说明多空分歧在化解，行情往往快要转向，并不代表强势。看到放量先提高警惕，动手还是要等均线拐头。</p>
+    <p><b>回放</b>：点「回放」，再点图上的一天（或在「选起点」里选日期、最早一天、随机一天），图上就只剩那天及以前的 K 线，
+      然后一根一根往后放，像当时身在其中那样练判断：先想好"这里该怎么做"，再放下一根看结果。快捷键 <b>Shift+↓</b> 播放 / 暂停，<b>Shift+→</b> 前进一根。
+      想看那天的完整分析，点「按这一天分析」。点「回到最新」或 × 退出。</p>`;
   tools.after(help);
   const helpBtn = tools.querySelector(".chart-help-toggle");
   helpBtn.addEventListener("click", () => {
@@ -200,7 +207,7 @@ export function createChart(box, legendEl) {
     paintDrawn();
   });
   chart.subscribeClick((param) => {
-    if (!drawing || !param.point) return;
+    if (!drawing || rs.mode === "select" || !param.point) return;
     const price = candles.coordinateToPrice(param.point.y);
     if (price == null) return;
     drawn.push(Math.round(price * 100) / 100);
@@ -209,10 +216,11 @@ export function createChart(box, legendEl) {
     setTimeout(() => setDrawing(false)); // 同一次点击的其他处理（问鸿雁）还要看到"正在画线"
   });
 
-  let data = null;
+  let data = null; // 完整数据
+  let view = null; // 图上画着的：平时就是 data，回放时是截到那天的
 
   function paint() {
-    if (!data) return;
+    if (!view) return;
     const muted = css("--muted");
     chart.applyOptions({
       layout: { background: { type: "solid", color: css("--card") }, textColor: muted, fontFamily: css("--mono") },
@@ -220,14 +228,216 @@ export function createChart(box, legendEl) {
       rightPriceScale: { borderColor: css("--line") }, timeScale: { borderColor: css("--line") },
     });
     candles.applyOptions({ upColor: "rgba(0,0,0,0)", downColor: muted, borderUpColor: muted, borderDownColor: muted, wickUpColor: muted, wickDownColor: muted });
-    vol.setData(data.volume.map((v) => ({ time: v.time, value: v.value, color: v.spike ? css("--drop") : css("--line") })));
+    vol.setData(view.volume.map(volBar));
     for (const s of SPECS) series[s.key].applyOptions({ color: css(s.token) });
-    const drop = css("--drop");
     paintLevels();
-    candles.setMarkers(data.drops.slice().sort((a, b) => (a.time < b.time ? -1 : 1)).map((d) => ({
+    paintMarkers();
+  }
+  const volBar = (v) => ({ time: v.time, value: v.value, color: css(v.spike ? "--drop" : "--line") });
+  function paintMarkers() {
+    const drop = css("--drop");
+    candles.setMarkers(view.drops.slice().sort((a, b) => (a.time < b.time ? -1 : 1)).map((d) => ({
       time: d.time, position: "belowBar", color: drop, shape: "circle", text: `${d.period}扣`,
     })));
   }
+  /** 把一份图表数据（完整的，或回放截到某天的）画到图上。 */
+  function show(v) {
+    view = v;
+    candles.setData(v.candles);
+    for (const s of SPECS) series[s.key].setData(v.lines[s.key] || []);
+    paint();
+    showReadout(null);
+  }
+
+  // ---------- 回放：从过去某一天开始，一根一根往后放（状态机在 replay.js） ----------
+  let rs = OFF;
+  let timer = null;
+  let analyzeDate = null;
+  let speed = DEFAULT_SPEED;
+  try { speed = SPEEDS.find((x) => String(x) === localStorage.getItem("dma-replay-speed")) ?? DEFAULT_SPEED; } catch { /* 隐私模式 */ }
+
+  const replayBtn = tools.querySelector(".replay-toggle");
+  const badge = document.createElement("span");
+  badge.className = "replay-badge";
+  badge.textContent = "回放中";
+  badge.hidden = true;
+  box.closest(".chart-card")?.querySelector(".card-head h2")?.append(badge);
+
+  // 选起点时的竖线 + 右边变暗 + 日期（盖在图上，不挡鼠标）
+  const overlay = document.createElement("div");
+  overlay.className = "replay-overlay";
+  overlay.hidden = true;
+  overlay.innerHTML = '<div class="replay-dim"></div><div class="replay-line"></div><div class="replay-date"></div>';
+  box.append(overlay);
+  const [dimEl, lineEl, dateEl] = overlay.children;
+
+  const bar = document.createElement("div");
+  bar.className = "replay-bar";
+  bar.hidden = true;
+  bar.innerHTML = `
+    <span class="replay-start-wrap">
+      <button type="button" class="replay-start" aria-expanded="false">选起点 ▾</button>
+      <span class="replay-menu" hidden>
+        <button type="button" data-start="click">点图选择</button>
+        <label>选日期 <input type="date"></label>
+        <button type="button" data-start="earliest" title="图上 6 条线都有值的第一天">最早一天</button>
+        <button type="button" data-start="random">随机一天</button>
+      </span>
+    </span>
+    <button type="button" class="replay-play" aria-label="播放" aria-pressed="false" title="播放 / 暂停（Shift+↓）">▶</button>
+    <button type="button" class="replay-forward" title="前进一根（Shift+→）">前进一根</button>
+    <select class="replay-speed" title="播放速度：1x = 一秒一根">${SPEEDS.map((x) => `<option value="${x}">${x}x</option>`).join("")}</select>
+    <button type="button" class="replay-realtime">回到最新</button>
+    <span class="replay-label" aria-live="polite"></span>
+    <button type="button" class="replay-analyze" title="退出回放，载入只用这一天及以前数据的完整分析">按这一天分析</button>
+    <button type="button" class="replay-exit" aria-label="退出回放" title="退出回放">×</button>`;
+  box.after(bar);
+  const $r = (sel) => bar.querySelector(sel);
+  const menu = $r(".replay-menu");
+  const speedSel = $r(".replay-speed");
+  speedSel.value = String(speed);
+
+  const setMenu = (open) => {
+    menu.hidden = !open;
+    $r(".replay-start").setAttribute("aria-expanded", String(open));
+  };
+
+  /** 状态机走一步，再把图和按钮对上。定时器每次都先清掉，只有在播放才重新挂。 */
+  function dispatch(action) {
+    if (!data) return;
+    const prev = rs;
+    rs = step(rs, action, data.candles.length);
+    if (rs !== prev) renderReplay(prev);
+    arm();
+  }
+  function arm() {
+    clearTimeout(timer);
+    timer = rs.mode === "replay" && rs.playing ? setTimeout(() => dispatch({ type: "forward" }), speedMs(speed)) : null;
+  }
+
+  function renderReplay(prev) {
+    if (rs.mode !== "replay") {
+      if (view !== data) {
+        // 回放中重选起点：视图留在原处（逻辑序号前后一致），退出回放才回到默认范围
+        const r = rs.mode === "select" ? chart.timeScale().getVisibleLogicalRange() : null;
+        show(data);
+        if (r) chart.timeScale().setVisibleLogicalRange(r); else applyRange();
+      }
+    } else if (prev.mode === "replay" && rs.index === prev.index + 1) {
+      appendBar(rs.index);
+    } else if (prev.mode !== "replay" || rs.index !== prev.index) {
+      const r = chart.timeScale().getVisibleLogicalRange();
+      show(sliceAt(data, rs.index));
+      windowAt(rs.index, r ? r.to - r.from : 120);
+    }
+    if ((prev.mode === "replay") !== (rs.mode === "replay")) paintLevels();
+    syncReplay();
+  }
+
+  /** 往后放一根：只追加，不重画，视图不跳。 */
+  function appendBar(i) {
+    view = sliceAt(data, i);
+    const t = data.candles[i].time;
+    candles.update({ ...data.candles[i] }); // 传副本：图表库会把 time 就地改成 {year, month, day}
+    const v = view.volume.at(-1);
+    if (v?.time === t) vol.update(volBar(v));
+    for (const s of SPECS) {
+      const p = view.lines[s.key]?.at(-1);
+      if (p?.time === t) series[s.key].update({ ...p });
+    }
+    paintMarkers();
+    showReadout(null);
+  }
+
+  /** 选好起点：保持现在看的跨度，右边留出空位给新的 K 线。 */
+  function windowAt(i, span) {
+    chart.timeScale().setVisibleLogicalRange({ from: i + 8 - span, to: i + 8 });
+  }
+
+  /** 按钮、提示、徽标、十字线、选起点的覆盖层跟着状态走。 */
+  function syncReplay() {
+    const on = rs.mode !== "off";
+    const selecting = rs.mode === "select";
+    replayBtn.setAttribute("aria-pressed", String(on));
+    bar.hidden = !on;
+    badge.hidden = rs.mode !== "replay";
+    box.classList.toggle("replay-selecting", selecting);
+    chart.applyOptions({ crosshair: { vertLine: { visible: !selecting, labelVisible: !selecting } } });
+    if (!selecting) overlay.hidden = true;
+    setMenu(false);
+    const last = (data?.candles.length ?? 0) - 1;
+    const atEnd = rs.mode === "replay" && rs.index >= last;
+    $r(".replay-play").textContent = rs.playing ? "⏸" : "▶";
+    $r(".replay-play").setAttribute("aria-pressed", String(Boolean(rs.playing)));
+    levelsBtn.disabled = rs.mode === "replay"; // 门槛线属于最新一天，回放时收起，按钮也不能点
+    $r(".replay-play").disabled = rs.mode !== "replay" || atEnd;
+    $r(".replay-forward").disabled = rs.mode !== "replay" || atEnd;
+    $r(".replay-analyze").disabled = rs.mode !== "replay";
+    $r(".replay-label").textContent = selecting ? "点图上的一天作为回放起点"
+      : rs.mode === "replay" ? `回放 ${data.candles[rs.index].time} · 第 ${rs.index + 1}/${last + 1} 根${atEnd ? " · 已到最新一根" : ""}` : "";
+  }
+
+  replayBtn.addEventListener("click", () => {
+    if (rs.mode === "off") { setDrawing(false); dispatch({ type: "enter" }); } else dispatch({ type: "exit" });
+  });
+  $r(".replay-start").addEventListener("click", () => setMenu(menu.hidden));
+  menu.addEventListener("click", (e) => {
+    const how = e.target.closest("[data-start]")?.dataset.start;
+    if (!how || !data) return;
+    if (how === "click") { dispatch({ type: "enter" }); return; }
+    dispatch({ type: "pick", index: how === "earliest" ? earliestIndex(data) : randomIndex(data) });
+  });
+  menu.querySelector("input").addEventListener("change", (e) => {
+    const i = data ? indexOnOrBefore(data.candles, e.target.value) : -1;
+    if (i >= 0) dispatch({ type: "pick", index: i });
+  });
+  $r(".replay-play").addEventListener("click", () => dispatch({ type: "toggle" }));
+  $r(".replay-forward").addEventListener("click", () => dispatch({ type: "forward" }));
+  $r(".replay-realtime").addEventListener("click", () => dispatch({ type: "realtime" }));
+  $r(".replay-exit").addEventListener("click", () => dispatch({ type: "exit" }));
+  $r(".replay-analyze").addEventListener("click", () => {
+    if (rs.mode !== "replay") return;
+    const date = data.candles[rs.index].time;
+    dispatch({ type: "exit" });
+    analyzeDate?.(date);
+  });
+  speedSel.addEventListener("change", () => {
+    speed = Number(speedSel.value);
+    try { localStorage.setItem("dma-replay-speed", String(speed)); } catch { /* 忽略 */ }
+    arm(); // 正在放的话，换速度立刻生效
+  });
+
+  // 选起点：竖线跟着鼠标，右边变暗，时间轴上写出日期
+  chart.subscribeCrosshairMove((param) => {
+    if (rs.mode !== "select" || !param.point || !param.time) { overlay.hidden = true; return; }
+    const x = chart.timeScale().timeToCoordinate(param.time) ?? param.point.x;
+    const w = chart.timeScale().width();
+    const axis = chart.timeScale().height();
+    overlay.hidden = false;
+    overlay.style.bottom = `${axis}px`;
+    overlay.style.width = `${w}px`;
+    lineEl.style.left = dimEl.style.left = `${x}px`;
+    dimEl.style.width = `${Math.max(0, w - x)}px`;
+    dateEl.style.left = `${x}px`;
+    dateEl.textContent = `回放起点 ${isoDate(param.time)}`;
+  });
+  chart.subscribeClick((param) => {
+    if (rs.mode !== "select" || !param.time) return;
+    const i = data.candles.findIndex((c) => c.time === isoDate(param.time));
+    setTimeout(() => dispatch({ type: "pick", index: i })); // 同一次点击的问鸿雁还要看到"正在选起点"
+  });
+
+  // 快捷键：Shift+↓ 播放 / 暂停，Shift+→ 前进一根；Esc 取消选起点。焦点在输入框里时不管。
+  document.addEventListener("keydown", (e) => {
+    if (e.target.closest?.("input, textarea, select, [contenteditable]")) return;
+    if (e.key === "Escape" && rs.mode === "select") { dispatch({ type: "exit" }); return; }
+    if (rs.mode !== "replay" || !e.shiftKey || e.metaKey || e.ctrlKey || e.altKey) return;
+    const action = { ArrowDown: "toggle", ArrowRight: "forward" }[e.key];
+    if (!action) return;
+    e.preventDefault();
+    dispatch({ type: action });
+  });
+  document.addEventListener("mousedown", (e) => { if (!e.target.closest(".replay-start-wrap")) setMenu(false); });
 
   matchMedia("(prefers-color-scheme: dark)").addEventListener("change", paint);
   new MutationObserver(paint).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
@@ -236,15 +446,28 @@ export function createChart(box, legendEl) {
     chart,
     /** key：股票代码（自己画的线按它分开存）。 */
     setData(d, key = null) {
+      // 同一只票重新载入（分析师调了取数、换了数据源）：停在原来回放到的那天，免得露出后面的 K 线；换票才退出回放
+      const sameTicker = key === drawKey;
+      const at = sameTicker && rs.mode === "replay" ? data.candles[rs.index].time : null;
+      const r = at ? chart.timeScale().getVisibleLogicalRange() : null;
       data = d;
-      if (key !== drawKey) { drawKey = key; loadDrawn(); }
+      const index = at ? indexOnOrBefore(d.candles, at) : -1;
+      rs = index >= 0 ? { mode: "replay", index, playing: false } : OFF;
+      arm();
+      if (!sameTicker) { drawKey = key; loadDrawn(); }
       paintDrawn();
-      candles.setData(d.candles);
-      for (const s of SPECS) series[s.key].setData(d.lines[s.key] || []);
-      paint();
-      applyRange();
-      showReadout(null);
+      if (rs.mode === "replay") {
+        show(sliceAt(d, index));
+        if (r) chart.timeScale().setVisibleLogicalRange(r);
+      } else {
+        show(d);
+        applyRange();
+      }
+      paintLevels();
+      syncReplay();
     },
+    /** 停止回放、回到完整数据（取数失败、中栏收起图表时用）。 */
+    stopReplay() { dispatch({ type: "exit" }); },
     /**
      * 门槛线：lean.flips 里 20 线组还没越过的价位（第 1 个动作 EMA20、第 2 个动作 MA20 抵扣价）。
      * 偏空时是"站上"，偏多时是"跌破"。60 线组的价位留在模糊判断卡片里，图上不画，免得挤。
@@ -256,16 +479,21 @@ export function createChart(box, legendEl) {
       paintLevels();
     },
     /** 当前画在图上的门槛线（测试和问鸿雁用）。 */
-    levels: () => (levelsOn ? levels.map(({ title, price }) => ({ title, price })) : []),
+    levels: () => (levelsShown() ? levels.map(({ title, price }) => ({ title, price })) : []),
     /** 自己画的线（价格列表）。 */
     drawn: () => [...drawn],
-    /** 点图表时回调 { time, candle, lines, drops, point }，给"问鸿雁"用。画线模式下不回调。 */
+    /** 回放状态（测试用）：mode / index / playing，加上速度、回放到的日期、图上几根 K 线。 */
+    replay: () => ({ ...rs, speed, date: rs.mode === "replay" ? data.candles[rs.index].time : null, bars: view?.candles.length ?? 0 }),
+    /** 回放里点「按这一天分析」时回调那天的日期。 */
+    onAnalyzeDate(cb) { analyzeDate = cb; },
+    /** 点图表时回调 { time, candle, lines, drops, point }，给"问鸿雁"用。画线、选回放起点时不回调；回放时按回放到的数据。 */
     onPick(cb) {
       chart.subscribeClick((param) => {
-        if (drawing || !param.time || !data) return;
-        const candle = data.candles.find((c) => c.time === param.time);
-        const lines = Object.fromEntries(SPECS.map((s) => [s.key, (data.lines[s.key] || []).find((p) => p.time === param.time)?.value]));
-        const drops = data.drops.filter((d) => d.time === param.time).map((d) => d.period);
+        if (drawing || rs.mode === "select" || !param.time || !view) return;
+        const candle = view.candles.find((c) => c.time === param.time);
+        if (!candle) return; // 回放时右边空白处
+        const lines = Object.fromEntries(SPECS.map((s) => [s.key, (view.lines[s.key] || []).find((p) => p.time === param.time)?.value]));
+        const drops = view.drops.filter((d) => d.time === param.time).map((d) => d.period);
         cb({ time: param.time, candle, lines, drops, point: param.point });
       });
     },

@@ -825,3 +825,218 @@ describe("定策略：成本价决定浮盈 / 浮亏的做法", () => {
     await page.close();
   }, 30_000);
 });
+
+describe("K 线回放", () => {
+  const rp = (page: Page) => page.evaluate(async () => (await import("/app.js")).getChart().replay());
+  const levels = (page: Page) => page.evaluate(async () => (await import("/app.js")).getChart().levels());
+  /** 等回放状态满足条件（轮询，最多 10 秒）。 */
+  async function waitRp(page: Page, ok: (r: any) => boolean) {
+    for (const end = Date.now() + 10_000; Date.now() < end; await page.waitForTimeout(50)) if (ok(await rp(page))) return;
+    throw new Error(`回放状态一直不满足：${JSON.stringify(await rp(page))}`);
+  }
+  /** 图上第 i 根 K 线的屏幕坐标（先把图表放到滚动区顶部，坐标才稳）。 */
+  async function barPoint(page: Page, i: number) {
+    await page.evaluate(() => document.getElementById("chart")!.scrollIntoView({ block: "start" }));
+    const x = await page.evaluate(async (t) => (await import("/app.js")).getChart().chart.timeScale().timeToCoordinate(t), CHART.candles[i].time);
+    const box = (await page.locator("#chart").boundingBox())!;
+    return { x: box.x + x!, y: box.y + box.height * 0.4 };
+  }
+  async function start(ticker: string) {
+    const r = await open(undefined, ticker);
+    await r.page.waitForSelector("#chart canvas");
+    return r;
+  }
+
+  test("选起点：竖线跟着鼠标、右边变暗、写出日期；点下去只剩那天以前的 K 线，门槛线收起", async () => {
+    const { page, errors } = await start("RPLA");
+    expect(await page.isVisible(".replay-bar")).toBe(false);
+    await page.click(".replay-toggle");
+    expect((await rp(page)).mode).toBe("select");
+    expect(await page.textContent(".replay-label")).toContain("点图上的一天作为回放起点");
+    const askLabel = () => page.evaluate(() => document.getElementById("ask-advisor")!.textContent);
+    const before = await askLabel();
+    const p = await barPoint(page, 200);
+    await page.mouse.move(p.x, p.y);
+    await page.waitForSelector(".replay-overlay", { state: "visible" });
+    expect(await page.textContent(".replay-overlay")).toContain(`回放起点 ${CHART.candles[200].time}`);
+    const dim = (await page.locator(".replay-dim").boundingBox())!;
+    expect(Math.abs(dim.x - p.x)).toBeLessThan(3); // 暗块从竖线开始往右
+    expect(dim.width).toBeGreaterThan(10);
+    await page.mouse.click(p.x, p.y);
+    await waitRp(page, (r) => r.mode === "replay");
+    expect(await rp(page)).toMatchObject({ mode: "replay", index: 200, playing: false, date: CHART.candles[200].time, bars: 201 });
+    await page.waitForSelector(".replay-overlay", { state: "hidden" });
+    expect(await levels(page)).toEqual([]);
+    expect(await page.isVisible(".replay-badge")).toBe(true);
+    expect(await page.textContent(".replay-label")).toContain(`第 201/300 根`);
+    expect(await askLabel()).toBe(before); // 选起点那一下不触发问鸿雁
+    // 鼠标移开，读数条显示回放到的那天
+    await page.mouse.move(5, 5);
+    await page.waitForFunction((t) => document.getElementById("chart-readout")!.textContent!.includes(t), CHART.candles[200].time);
+    expect(errors).toEqual([]);
+    await page.close();
+  }, 30_000);
+
+  test("前进一根、Shift+→、Shift+↓ 播放暂停（暂停后不再走）；回到最新恢复全部 K 线和门槛线", async () => {
+    const { page, errors } = await start("RPLB");
+    await page.click(".replay-toggle");
+    const p = await barPoint(page, 200);
+    await page.mouse.click(p.x, p.y);
+    await waitRp(page, (r) => r.mode === "replay");
+    // 图表库在下一帧才把视图改好：等两帧再读
+    const lr = () => page.evaluate(async () => {
+      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+      return (await import("/app.js")).getChart().chart.timeScale().getVisibleLogicalRange();
+    });
+    const r0 = (await lr())!;
+    expect(r0.to).toBeGreaterThan(200); // 回放那天在视图里，右边留着空位
+    await page.click(".replay-forward");
+    expect(await rp(page)).toMatchObject({ index: 201, bars: 202 });
+    const r1 = (await lr())!;
+    expect(Math.abs((r1.to - r1.from) - (r0.to - r0.from))).toBeLessThan(1); // 视图不跳、不复位
+    expect(r1.to).toBeGreaterThanOrEqual(r0.to);
+    expect(r1.to).toBeGreaterThan(201);
+    await page.keyboard.press("Shift+ArrowRight");
+    expect(await rp(page)).toMatchObject({ index: 202, bars: 203 });
+    await page.selectOption(".replay-speed", "10");
+    await page.locator(".replay-speed").blur(); // 焦点在下拉框里时快捷键不生效（和输入框一样）
+    await page.keyboard.press("Shift+ArrowDown");
+    await waitRp(page, (r) => r.index >= 206);
+    await page.keyboard.press("Shift+ArrowDown");
+    const paused = await rp(page);
+    expect(paused.playing).toBe(false);
+    await page.waitForTimeout(400); // 10x 是 100ms 一根：定时器没清掉的话这里会多走几根
+    expect((await rp(page)).index).toBe(paused.index);
+    await page.click(".replay-realtime");
+    expect(await rp(page)).toMatchObject({ mode: "off", bars: 300 });
+    expect((await levels(page)).length).toBeGreaterThan(0);
+    expect(await page.isVisible(".replay-badge")).toBe(false);
+    expect(await page.isVisible(".replay-bar")).toBe(false);
+    expect(await page.textContent("#chart-readout")).toContain(CHART.candles.at(-1)!.time);
+    expect(errors).toEqual([]);
+    await page.close();
+  }, 30_000);
+
+  test("选日期：落到那天；放到最新一根自动停下", async () => {
+    const { page, errors } = await start("RPLC");
+    await page.click(".replay-toggle");
+    await page.click(".replay-start");
+    await page.fill(".replay-menu input[type=date]", CHART.candles[296].time);
+    await waitRp(page, (r) => r.mode === "replay");
+    expect((await rp(page)).index).toBe(296);
+    await page.selectOption(".replay-speed", "10");
+    await page.click(".replay-play");
+    await waitRp(page, (r) => r.index === 299 && !r.playing);
+    expect(await page.textContent(".replay-label")).toContain("已到最新");
+    expect(errors).toEqual([]);
+    await page.close();
+  }, 30_000);
+
+  test("最早一天：6 条线都有值的第一根（假数据从第一根起就齐）；随机一天落在中间；× 退出", async () => {
+    const { page } = await start("RPLD");
+    await page.click(".replay-toggle");
+    await page.click(".replay-start");
+    await page.click(".replay-menu [data-start=earliest]");
+    expect(await rp(page)).toMatchObject({ mode: "replay", index: 0 });
+    await page.click(".replay-start");
+    await page.click(".replay-menu [data-start=random]");
+    const r = await rp(page);
+    expect(r.index).toBeGreaterThanOrEqual(0);
+    expect(r.index).toBeLessThanOrEqual(298);
+    await page.click(".replay-exit");
+    expect(await rp(page)).toMatchObject({ mode: "off", bars: 300 });
+    await page.close();
+  }, 30_000);
+
+  test("Esc 取消选起点；换一只票退出回放", async () => {
+    const { page } = await start("RPLE");
+    await page.click(".replay-toggle");
+    await page.keyboard.press("Escape");
+    expect((await rp(page)).mode).toBe("off");
+    await page.click(".replay-toggle");
+    await page.click(".replay-start");
+    await page.click(".replay-menu [data-start=earliest]");
+    await page.click(".replay-play");
+    await page.evaluate(async () => (await import("/app.js")).loadAnalysis("RPLF", null));
+    await page.waitForFunction(() => document.getElementById("ticker")!.textContent === "RPLF");
+    expect(await rp(page)).toMatchObject({ mode: "off", bars: 300 });
+    expect(await page.isVisible(".replay-badge")).toBe(false);
+    await page.close();
+  }, 30_000);
+
+  test("按这一天分析：退出回放，载入那天的历史分析", async () => {
+    const { page } = await start("RPLG");
+    await page.click(".replay-toggle");
+    await page.click(".replay-start");
+    await page.click(".replay-menu [data-start=earliest]");
+    const date = CHART.candles[0].time;
+    await page.click(".replay-analyze");
+    await page.waitForFunction((h) => location.hash === h, `#RPLG@${date}`);
+    await page.waitForFunction(() => document.getElementById("meta-line")!.textContent!.includes("回放"));
+    expect((await rp(page)).mode).toBe("off");
+    await page.close();
+  }, 30_000);
+
+  test("回放中同一只票被重新载入（分析师调了取数）：停在原来那天，不露出后面的 K 线；换票才退出", async () => {
+    const { page, errors } = await start("RPLH");
+    await page.click(".replay-toggle");
+    await page.click(".replay-start");
+    await page.fill(".replay-menu input[type=date]", CHART.candles[150].time);
+    await page.dispatchEvent(".replay-menu input[type=date]", "change");
+    await waitRp(page, (r) => r.mode === "replay" && r.index === 150);
+    await page.click(".replay-play");
+    // 分析师工具推来同一只票的最新分析 → showAnalysis → setData
+    await page.evaluate(async () => {
+      const app = await import("/app.js");
+      const data = await (await fetch("/api/analyze?ticker=RPLH")).json();
+      app.showAnalysis(data);
+    });
+    const r = await rp(page);
+    expect(r.mode).toBe("replay");
+    expect(r.playing).toBe(false);
+    expect(r.bars).toBe(r.index + 1);
+    expect(r.index).toBeLessThan(160);
+    expect(await levels(page)).toEqual([]);
+    expect(errors).toEqual([]);
+    await page.close();
+  }, 30_000);
+
+  test("回放中重选起点：视图留在原处，不跳回最新一年", async () => {
+    const { page } = await start("RPLI");
+    await page.click(".replay-toggle");
+    await page.click(".replay-start");
+    await page.fill(".replay-menu input[type=date]", CHART.candles[60].time);
+    await page.dispatchEvent(".replay-menu input[type=date]", "change");
+    await waitRp(page, (r) => r.mode === "replay" && r.index === 60);
+    await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
+    const range = () => page.evaluate(async () => (await import("/app.js")).getChart().chart.timeScale().getVisibleLogicalRange());
+    const before = (await range())!;
+    await page.click(".replay-start");
+    await page.click(".replay-menu [data-start=click]");
+    expect((await rp(page)).mode).toBe("select");
+    await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
+    const after = (await range())!;
+    expect(Math.abs(after.to - before.to)).toBeLessThan(1);
+    await page.close();
+  }, 30_000);
+
+  test("回放中打开一只取数失败的票：回放停下，不在藏起来的图上接着走", async () => {
+    const { page } = await start("RPLJ");
+    await page.click(".replay-toggle");
+    await page.click(".replay-start");
+    await page.click(".replay-menu [data-start=earliest]");
+    await page.click(".replay-play");
+    await page.evaluate(async () => (await import("/app.js")).loadAnalysis("ANT", null));
+    await page.waitForSelector("#load-error", { state: "visible" });
+    expect((await rp(page)).mode).toBe("off");
+    await page.close();
+  }, 30_000);
+
+  test("「怎么用」讲了回放和两个快捷键", async () => {
+    const { page } = await start("RPLH");
+    await page.click(".chart-help-toggle");
+    const text = (await page.textContent(".chart-help"))!;
+    for (const k of ["回放", "Shift+↓", "Shift+→"]) expect(text).toContain(k);
+    await page.close();
+  }, 30_000);
+});
