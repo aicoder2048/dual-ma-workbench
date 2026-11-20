@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { ema, forwardOutcome, ma20Check, renderReport, summarize, type Bar, type Sample } from "../src/replay.ts";
+import { ema, forwardOutcome, ma20Check, renderCompare, renderReport, summarize, type Bar, type Sample } from "../src/replay.ts";
 
 const bars = (closes: number[]): Bar[] => closes.map((close, i) => ({ date: `d${i}`, close }));
 
@@ -110,5 +110,28 @@ describe("回放汇总", () => {
     expect(md).toContain("样本 1");
     expect(md).toContain("日期少");
     expect(md).toContain("不独立");
+  });
+});
+
+describe("改造前后对照", () => {
+  const before = [
+    s({ ticker: "SPY", date: "2024-04-19", play: "过渡态", flat: "条件不满足，不做。", ret: 0.05 }),
+    s({ ticker: "SPY", date: "2024-05-17", play: "健康上涨", ret: 0.01 }),
+    s({ ticker: "QQQ", date: "2024-04-19", play: "过渡态", ret: 0.03 }),
+  ];
+  const after = [
+    s({ ticker: "SPY", date: "2024-04-19", play: "稳定上涨", stage: "回撤中", ret: 0.05 }),
+    s({ ticker: "SPY", date: "2024-05-17", play: "稳定上涨", stage: "延伸", ret: 0.01 }),
+    s({ ticker: "NVDA", date: "2024-04-19", play: "过渡", ret: -0.02 }),
+  ];
+  test("只比两边都有的（票、日期），写出另一边没有的个数", () => {
+    const md = renderCompare(before, after, 20);
+    expect(md).toContain("两边都有的样本 2 个（改造后另有 1 个改造前没有）");
+    expect(md).toContain("| 稳定上涨（日期少） | 2 | 2 | +3.0% | 100% | 过渡态 1、健康上涨 1 |");
+  });
+  test("稳定上涨·回撤中：样本数、结果、改造前对同一批样本的说法", () => {
+    const md = renderCompare(before, after, 20);
+    expect(md).toContain("稳定上涨、回撤中的样本 1 个（1 个日期，日期少），之后 20 日平均 +5.0%");
+    expect(md).toContain("改造前对这些样本的打法：过渡态 1；空仓计划：条件不满足，不做。 1");
   });
 });

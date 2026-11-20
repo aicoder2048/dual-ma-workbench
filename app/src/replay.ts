@@ -78,6 +78,8 @@ export interface Sample extends Outcome {
   score: number;
   /** 当时用的打法（plan.ts 的 playKey：五种类型、空头结构反弹中、多头结构回撤中、过渡、横盘破位）。 */
   play: string;
+  /** 阶段（regime.stage：延伸 / 回撤中 / 反弹中 / 转折中）；改造前的回放没有这个字段。 */
+  stage?: string | null;
   /** 当时空仓计划的那句话（buildPlans(a).flat.action）。 */
   flat: string;
   /** 空仓计划的进场条件是不是"站上 EMA20 + MA20 抵扣价"。 */
@@ -212,6 +214,61 @@ export function renderReport(sum: Summary, m: ReportMeta): string {
         `同样卖在那天、但回放当天就买，平均 ${pc(sum.entry.startMean)}。两者的差就是"等拐头"付出的代价（或省下的亏损）。` +
         `最后 ${h} 天内才触发的样本数据不够，不算。触发按"同一天两条都满足"算（比"先站上 EMA20、之后再站上抵扣价"严）。`
       : "没有带这条进场条件的样本。",
+    "",
+  ].join("\n");
+}
+
+const key = (s: Sample) => `${s.ticker} ${s.date}`;
+
+/** 一组样本里出现最多的几种值，例如 "健康上涨 30、过渡态 5"。 */
+function top(xs: string[], k = 3): string {
+  const m = new Map<string, number>();
+  for (const x of xs) m.set(x, (m.get(x) ?? 0) + 1);
+  return [...m].sort((a, b) => b[1] - a[1]).slice(0, k).map(([x, n]) => `${x} ${n}`).join("、");
+}
+
+/**
+ * 改造前后对照：两次回放在同一批（票、日期）上各说了什么、之后 horizon 天怎么走。
+ * before 是改造前那次回放的样本 JSON，只取两边都有的（票、日期）。
+ */
+export function renderCompare(before: Sample[], after: Sample[], horizon: number): string {
+  const old = new Map(before.map((s) => [key(s), s]));
+  const both = after.filter((s) => old.has(key(s)));
+  const prev = both.map((s) => old.get(key(s))!);
+  const [b, a] = [summarize(prev), summarize(both)];
+  const lean = (sum: Summary, l: string) => sum.byLean.find((r) => r.key === l);
+  const cell = (r: Row | undefined) => (r ? `${r.n} | ${pc(r.mean)} | ${pct0(r.hit)}` : "0 | — | —");
+  const entry = (sum: Summary) => `${pc(sum.entry.afterMean)}（${sum.entry.afterN} 个）`;
+  const pullback = both.filter((s) => s.play === "稳定上涨" && s.stage === "回撤中");
+  const pr = pullback.length ? row("稳定上涨·回撤中", pullback) : null;
+  const plays = groupBy(both, (s) => s.play);
+  return [
+    `## 改造前后（同一批样本，之后 ${horizon} 日）`,
+    "",
+    `改造前是 c8aadfe 的引擎，改造后是现在的规则层，两边用同一份行情、同样的回放点。两边都有的样本 ${both.length} 个` +
+      (both.length < after.length ? `（改造后另有 ${after.length - both.length} 个改造前没有）` : "") + "。",
+    "",
+    "| 指标 | 改造前 | 改造后 |",
+    "|---|---:|---:|",
+    `| 全部样本 ${horizon} 日平均 | ${pc(b.all.mean)} | ${pc(a.all.mean)} |`,
+    `| MA20 推演命中 / 只看斜率 | ${pct0(b.ma20.hit)} / ${pct0(b.ma20.slope)}（${b.ma20.n} 个） | ${pct0(a.ma20.hit)} / ${pct0(a.ma20.slope)}（${a.ma20.n} 个） |`,
+    `| "站上 EMA20 + MA20 抵扣价"触发后 ${horizon} 日 | ${entry(b)} | ${entry(a)} |`,
+    "",
+    "| 模糊判断 | 前·样本 | 前·平均 | 前·方向命中 | 后·样本 | 后·平均 | 后·方向命中 |",
+    "|---|---:|---:|---:|---:|---:|---:|",
+    ...LEAN_ORDER.map((l) => `| ${l} | ${cell(lean(b, l))} | ${cell(lean(a, l))} |`),
+    "",
+    "| 改造后打法 | 样本 | 日期数 | 平均 | 上涨占比 | 同一批样本改造前怎么说 |",
+    "|---|---:|---:|---:|---:|---|",
+    ...[...plays].map(([k, xs]) => ({ r: row(k, xs), xs })).sort((x, y) => y.r.n - x.r.n).map(({ r, xs }) =>
+      `| ${r.key}${r.dates < FEW ? "（日期少）" : ""} | ${r.n} | ${r.dates} | ${pc(r.mean)} | ${pct0(r.up)} | ${top(xs.map((s) => old.get(key(s))!.play))} |`),
+    "",
+    `### "稳定上涨·回撤中"（SPY 2024-04-19 这一类）`,
+    "",
+    pr
+      ? `改造后判成稳定上涨、回撤中的样本 ${pr.n} 个（${pr.dates} 个日期${pr.dates < FEW ? "，日期少" : ""}），之后 ${horizon} 日平均 ${pc(pr.mean)}、中位数 ${pc(pr.median)}、上涨占比 ${pct0(pr.up)}。` +
+        `改造前对这些样本的打法：${top(pullback.map((s) => old.get(key(s))!.play), 5)}；空仓计划：${top(pullback.map((s) => old.get(key(s))!.flat), 3)}。`
+      : "改造后没有判成稳定上涨、回撤中的样本。",
     "",
   ].join("\n");
 }
