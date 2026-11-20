@@ -60,6 +60,7 @@
     <div class="left-tabs" role="tablist" aria-label="左栏">
       <button type="button" role="tab" id="tab-watch" aria-controls="watch-pane" aria-selected="true">自选股</button>
       <button type="button" role="tab" id="tab-journal" aria-controls="journal-pane" aria-selected="false">交易日志<span class="tab-count" id="journal-count"></span></button>
+      <button type="button" role="tab" id="tab-practice" aria-controls="practice-pane" aria-selected="false">练习</button>
     </div>
     <div id="watch-pane" class="tab-pane" role="tabpanel" aria-labelledby="tab-watch">
       <p class="pane-note">标签：接下来几周对谁有利</p>
@@ -70,6 +71,16 @@
       <div id="journal-summary" class="j-summary"></div>
       <ul id="journal-list" class="j-list"></ul>
       <p class="left-foot">只存在本机 data/journal.json。</p>
+    </div>
+    <div id="practice-pane" class="tab-pane" role="tabpanel" aria-labelledby="tab-practice" hidden>
+      <div class="pr-start">
+        <button type="button" id="practice-new" class="pr-new">出一道题</button>
+        <p class="pane-note">随机一只票、随机一天。藏起代码和日期，价格换成指数（第一根 = 100），只给你看到那天为止的数据。记下计划，一根一根往后放，碰到价位自动成交，最后揭晓。</p>
+        <p id="practice-note" class="search-msg" role="status" aria-live="polite" hidden></p>
+      </div>
+      <div id="practice-stats" class="j-summary"></div>
+      <ul id="practice-list" class="j-list"></ul>
+      <p class="left-foot">只存在本机 data/practice/。</p>
     </div>
   </aside>
 
@@ -101,6 +112,7 @@
         </div>
         <div class="kpis" id="kpis"></div>
       </section>
+      <section id="practice" class="card practice" aria-label="盲测练习" hidden></section>
       <div id="error" class="warn error" role="alert" hidden><span id="error-text"></span><button type="button" id="error-close" class="warn-x" aria-label="关闭">×</button></div>
       <div id="warning" class="warn" hidden><span id="warning-text"></span><button type="button" id="warning-close" class="warn-x" aria-label="关闭提醒" title="关闭（盘中提醒今天不再弹出）">×</button></div>
       <section id="load-error" class="card load-error" role="alert" hidden>

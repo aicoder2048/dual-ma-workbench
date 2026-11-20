@@ -704,3 +704,46 @@ footer .j-close { font-size: 13px; }
 .j-yn { border: 0; margin: 0; padding: 0; display: flex; gap: 16px; font-size: 13.5px; }
 .j-yn legend { font-size: 12.5px; color: var(--muted); margin-bottom: 2px; }
 .j-outcome { font-size: 14px; }
+
+/* ===================== 盲测练习 ===================== */
+.j-tag { font: 500 10.5px var(--sans); color: var(--neutral); border: 1px solid color-mix(in srgb, var(--neutral) 50%, var(--line)); border-radius: 999px; padding: 0 6px; vertical-align: 2px; }
+.pr-start { margin: 8px 12px 0; display: grid; gap: 6px; }
+.pr-new { justify-self: start; border: 1px solid var(--accent); background: var(--accent); color: var(--card); border-radius: 8px; padding: 4px 14px; font: 600 13px var(--sans); cursor: pointer; }
+.pr-new:disabled { opacity: .6; cursor: default; }
+.pr-start .pane-note { margin: 0; }
+.pr-hold { margin: 6px 0 0; }
+/* 练习时：真实代码、日期的入口都收起来；指标块说的是分析那天，练习条上已经有现在的收盘，也收起 */
+/* 标题和指标块也收起：练习条上有题号、T 几、现在的收盘（指标块说的是分析那天） */
+body.practicing .center-scroll > .hero { display: none; }
+/* 往后放时要一直看着图：练习条、图排最前，结论和三步排在图后面 */
+body.practicing .center-scroll > #practice { order: -2; }
+body.practicing .center-scroll > .chart-card { order: -1; }
+/* 练习条 + 整张图放进默认视图：均线开关那行收起（读数条带颜色，也是图例），工具排一行，图高跟着窗口 */
+body.practicing .chart-card .legend { display: none; }
+body.practicing .chart-card .chart-tools { flex-wrap: nowrap; overflow-x: auto; }
+body.practicing .chart-card .chart-tools > * { flex: none; }
+body.practicing .chart { height: clamp(220px, calc(100vh - 470px), 420px); }
+/* 揭晓后图上是真实价格，中栏的分析还是指数：收起分析，免得两套数字对不上 */
+body.practice-revealed #verdict, body.practice-revealed #steps, body.practice-revealed #kpis { display: none; }
+.practice { display: grid; gap: 6px; padding: 10px 12px; border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
+.practice[hidden] { display: none; }
+.pr-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; font-size: 13px; }
+.pr-head > b { font: 600 15px var(--heading); }
+.pr-phase { font-size: 11px; padding: 0 7px; border-radius: 999px; border: 1px solid var(--accent); color: var(--accent); line-height: 18px; }
+.pr-msg { flex-basis: 100%; color: var(--accent); font-size: 12.5px; }
+.pr-msg:empty { display: none; }
+.pr-order { display: flex; flex-wrap: wrap; gap: 2px 12px; font-size: 12.5px; }
+.practice .muted { color: var(--muted); }
+.pr-pending { color: var(--neutral); }
+.pr-tools { display: flex; flex-wrap: wrap; gap: 6px; }
+.pr-tools button, .pr-tools select { font-size: 12.5px; background: var(--card); border: 1px solid var(--line); border-radius: 999px; padding: 2px 12px; cursor: pointer; color: var(--fg); }
+.pr-tools button:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+.pr-tools button:disabled { color: var(--faint); cursor: default; }
+.pr-tools [data-act="plan"]:not(:disabled) { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+.pr-tools .pr-reveal { margin-left: auto; }
+.pr-tools .pr-reveal[data-armed="1"] { border-color: var(--down); color: var(--down); }
+.pr-result { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 13.5px; }
+.pr-trades { margin: 0; padding-left: 18px; font-size: 12.5px; color: var(--muted); }
+.practice p { margin: 0; font-size: 12.5px; }
+.j-tag { white-space: nowrap; }
+.journal-dialog .j-yn label { margin-right: 12px; }

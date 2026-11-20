@@ -6,7 +6,8 @@ import { initAsofInput, initSplitters } from "./layout.js";
 import { initSelection } from "./selection.js";
 import { initAskMenu, selectionLabel } from "./askmenu.js";
 import { collapseDrawer, initDrawer, updatePeek } from "./drawer.js";
-import { initJournal } from "./journal.js";
+import { initJournal, refreshJournal, selectTab } from "./journal.js";
+import * as practice from "./practice.js";
 import { resolveTicker } from "./names.js";
 import { applyRemoteSettings, initSettings, openSettings } from "./settings.js";
 import { chartLevels, conclusionCard, forecastAnswer, holdingRow, installTips, leanName, planBody, playAnswer, pnlText, stanceOf, stepVisuals, trendAnswer } from "./viz.js";
@@ -152,6 +153,7 @@ function showPane(ok) {
 /** 取数失败：中栏换成这只票和错误原因，不留上一只票的内容。 */
 function showLoadError(ticker, asof, message) {
   collapseDrawer();
+  if (!practice.chartFor(ticker)) practice.leave();
   chartApi?.stopReplay(); // 图表要收起了，回放不能在藏起来的图上接着走
   state.ticker = ticker;
   state.asof = asof;
@@ -187,10 +189,13 @@ $("load-error-retry").addEventListener("click", async (e) => {
 export function showAnalysis(data, asof = null) {
   collapseDrawer(); // 下面要重新渲染三步卡片：抽屉里不能留着旧的
   const a = data.analysis;
+  // 练习里中栏的图是"到现在那根"的（服务端只发到那里），不是分析那天的；换了别的票就离开练习
+  const practiceChart = practice.chartFor(a.label);
+  if (!practiceChart) practice.leave();
   state.ticker = a.label;
   state.asof = asof;
   state.data = data;
-  location.hash = asof ? `${a.label}@${asof}` : a.label;
+  location.hash = practiceChart ? `practice:${practice.active().view.id}` : asof ? `${a.label}@${asof}` : a.label;
 
   $("ticker").textContent = a.label;
   $("meta-line").textContent = asof ? "回放：只用这一天及以前的数据" : `${a.date} 收盘`;
@@ -203,7 +208,7 @@ export function showAnalysis(data, asof = null) {
   updatePeek(a, leanName(data.report.visual.lean), a.regime.name);
   const status = $("data-status");
   status.classList.toggle("partial", Boolean(a.warning));
-  $("data-status-v").textContent = `${a.source.replace("（复权日线）", "")} · ${a.warning ? "盘中" : a.date}`;
+  $("data-status-v").textContent = `${a.source.replace(/（(复权日线|真实日线换算成指数[^）]*)）/, "")} · ${a.warning ? "盘中" : a.date}`;
   status.title = a.warning ?? `数据来源：${a.source}`;
 
   // 盘中提醒关掉一次，同一交易日不再弹出；顶部「盘中」标记和悬停全文照旧
@@ -215,7 +220,7 @@ export function showAnalysis(data, asof = null) {
   const v = $("verdict");
   v.hidden = false;
   v.style.setProperty("--stance", `var(--${r.stance === "bullish" ? "up" : r.stance === "bearish" ? "down" : "neutral"})`);
-  chartApi?.setData(data.chart, a.label);
+  chartApi?.setData(practiceChart ?? data.chart, a.label);
 
   const steps = $("steps");
   steps.innerHTML = "";
@@ -241,8 +246,14 @@ export function showAnalysis(data, asof = null) {
 
   document.querySelectorAll(".wl-item").forEach((li) =>
     li.classList.toggle("active", li.dataset.ticker === a.label && !asof));
+  practice.afterAnalysis(a);
   listeners.forEach((cb) => cb(data));
   send({ type: "view", ticker: a.label, asof }); // 服务端据此更新问法、给鸿雁准备数据
+}
+
+/** 图上的价位线：练习里有单时画自己的单，否则按结论。 */
+function paintLevels(r, a, p) {
+  chartApi?.setLevels(practice.levelsFor(a.label) ?? chartLevels(r, p, a.close));
 }
 
 // ---------- 结论和三步的回答：结论（空仓、持仓两行）、看大局（类型）、找打法（清单 + 按处境的做法）、做推演（三问） ----------
@@ -262,7 +273,7 @@ function paintAnswers(r, a, p, facts) {
   box("play").innerHTML = playAnswer(r, p, a.close);
   renderInline(box("play").querySelector(".play-text"), `${a.play.text} [[D:打法]] [[S:skill#第2步]]`, facts);
   box("forecast").innerHTML = forecastAnswer(r.forecast);
-  chartApi?.setLevels(chartLevels(r, p, a.close));
+  paintLevels(r, a, p);
   box("play").querySelectorAll("[data-pos]").forEach((b) => b.addEventListener("click", () => {
     const next = { ...p, pos: b.dataset.pos };
     savePosition(a.label, next);
@@ -276,7 +287,7 @@ function paintAnswers(r, a, p, facts) {
     v.querySelector(".pnl").innerHTML = pnlText(next.cost, a.close);
     v.querySelector(".holding-row").innerHTML = holdingRow(r, a.close, next);
     box("play").querySelector(".plan-body").innerHTML = planBody(r.plans, next, a.close);
-    chartApi?.setLevels(chartLevels(r, next, a.close));
+    paintLevels(r, a, next);
   });
 }
 
@@ -480,12 +491,29 @@ async function main() {
       input.select();
     },
   });
-  const journal = initJournal({ api, current: () => ({ data: state.data, asof: state.asof, pos: loadPosition(state.ticker) }) });
-  const [t, asof] = decodeURIComponent(location.hash.slice(1)).split("@");
+  const journal = initJournal({
+    api, current: () => ({ data: state.data, asof: state.asof, pos: loadPosition(state.ticker) }),
+    record: () => Boolean(practice.active() && (practice.planDialog(), true)),
+  });
+  const drills = practice.initPractice({
+    api, chart: getChart, loadAnalysis, refreshJournal, showJournal: () => selectTab("journal"),
+    data: () => state.data,
+    analysisDate: () => (state.data && practice.chartFor(state.data.analysis.label) ? state.data.analysis.date : null),
+    setLevels: (list) => {
+      if (list) return chartApi?.setLevels(list);
+      if (state.data) chartApi?.setLevels(chartLevels(state.data.report, loadPosition(state.ticker), state.data.analysis.close));
+    },
+  });
+  const hash = decodeURIComponent(location.hash.slice(1));
   const wl = refreshWatchlist();
-  const first = t || (await api("/api/watchlist"))[0];
-  if (first) await loadAnalysis(first, asof || null);
-  await Promise.all([wl, journal]);
+  if (hash.startsWith("practice:")) {
+    await practice.open(hash.slice("practice:".length)).catch((err) => showLoadError("练习", null, err.message));
+  } else {
+    const [t, asof] = hash.split("@");
+    const first = t || (await api("/api/watchlist"))[0];
+    if (first) await loadAnalysis(first, asof || null);
+  }
+  await Promise.all([wl, journal, drills]);
 }
 
 main();
