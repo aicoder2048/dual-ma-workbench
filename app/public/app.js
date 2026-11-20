@@ -232,7 +232,7 @@ export function showAnalysis(data, asof = null) {
     sec.innerHTML = `<div class="step-head"><span class="no">${i + 1}</span><h2>${s.title}</h2><span>${s.subtitle}</span>
         <button type="button" class="ask-card" data-ask-card="${s.key}" aria-haspopup="menu">问鸿雁</button></div>
       <div class="step-answer"></div>
-      <div class="step-viz">${stepVisuals(s.key, r.visual, r.forecast.days)}</div>
+      <div class="step-viz">${stepVisuals(s.key, r.visual, r.forecast)}</div>
       <details class="points-box"><summary>要点和出处（${s.items.length} 条，规则生成）</summary><ul class="points"></ul></details>`;
     const ul = sec.querySelector(".points");
     for (const item of s.items) {

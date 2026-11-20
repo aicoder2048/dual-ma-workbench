@@ -61,6 +61,9 @@ beforeAll(async () => {
       if (args[0] === "ANT") throw new Error("取不到 ANT 的行情");
       if (args[0] === "SLOW") { await Bun.sleep(1500); throw new Error("SLOW 超时"); }
       if (args[0] === "SPY") return JSON.stringify({ analysis: spy, chart: CHART }); // 稳定上涨·回撤中：交易日志用
+      if (args[0] === "BOUNCE") { // 空头结构反弹中：计划里有推演求解的辅助条，清单里有回测不支持的 J18
+        return JSON.stringify({ analysis: { ...(nvda as Analysis), label: "BOUNCE", play: { ...nvda.play, key: "空头结构反弹中", rules: ["P17", "J18", "J17"] } }, chart: CHART });
+      }
       return JSON.stringify({ analysis: { ...(nvda as Analysis), label: args[0], warning: warningNext ?? nvda.warning }, chart: CHART });
   });
   analyzer.mount(practice);
@@ -676,6 +679,35 @@ describe("中栏：结论 → 看大局 → 找打法 → 做推演", () => {
     expect(ans).toContain("206.26");
     expect(await page.locator(`${card} .answer ul.solves li`).count()).toBeLessThanOrEqual(3);
     expect(await page.locator(`${card} details.more`).getAttribute("open")).toBeNull();
+    await page.close();
+  }, 30_000);
+
+  test("做推演：求解给的答案标「辅助」，相关求解折叠，评估结论（H4）一行小字；滚到时看得见、没被挡", async () => {
+    const { page, errors } = await open();
+    const card = '[data-step="forecast"] .answer';
+    await scrollIntoCenter(page, card);
+    expect(await page.textContent(`${card} .q3 li.invalid .aux-tag`)).toContain("辅助");
+    expect(await page.locator(`${card} details.aux-solves`).getAttribute("open")).toBeNull();
+    expect(await notCovered(page, `${card} .ev-note`)).toBe(true);
+    expect(await page.textContent(`${card} .ev-note`)).toContain("97% 真的发生了，但未达到事先定的有用标准（H4）");
+    expect(errors).toEqual([]);
+    await page.close();
+  }, 30_000);
+
+  test("找打法：「就别等」那条推演标辅助、附评估结论；回测不支持的规则带小标签；滚到时看得见、没被挡", async () => {
+    const { page, errors } = await open(undefined, "BOUNCE");
+    const card = '[data-step="play"]';
+    await scrollIntoCenter(page, `${card} .checklist`);
+    const tag = `${card} .checklist li[data-rule="J18"] .ev-tag`;
+    expect(await notCovered(page, tag)).toBe(true);
+    expect(await page.textContent(tag)).toContain("回测不支持");
+    await scrollIntoCenter(page, `${card} .plan-items li.aux`);
+    expect(await notCovered(page, `${card} .plan-items li.aux`)).toBe(true);
+    const aux = (await page.textContent(`${card} .plan-items li.aux`))!;
+    expect(aux).toContain("辅助 · 推演");
+    expect(aux).toContain("就别等");
+    expect(aux).toContain("（H4）");
+    expect(errors).toEqual([]);
     await page.close();
   }, 30_000);
 

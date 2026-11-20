@@ -14,7 +14,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import type { Analysis, HurdlePath, Lean, PairProgress, RuleResult, Scenario, Solve } from "./citations.ts";
 import { buildChecklist, buildForecast, buildPlans, playKey, type Check, type Forecast, type Plan, type Situation } from "./plan.ts";
-import { recordNote, type RecordNote } from "./record.ts";
+import { RULE_EVIDENCE, recordNote, type RecordNote } from "./record.ts";
 import { PROJECT_ROOT } from "./sources.ts";
 
 export type Stance = "bullish" | "bearish" | "neutral";
@@ -44,7 +44,8 @@ export interface ReportVisual {
   hurdles: HurdlePath[];
   scenario: Scenario;
   solves: Solve[];
-  rules: RuleResult[];
+  /** evidence：rules.md 里这条规则的评估标注（回测不支持之类），没有就是 null。 */
+  rules: (RuleResult & { evidence: string | null })[];
   /** 模糊判断排布里"贴近"的门槛（thresholds.ORDER_TIE_PCT）。 */
   tie: number;
 }
@@ -65,8 +66,8 @@ export interface Report {
   playKey: string;
   /** 结论和找打法：空仓、持仓（没填成本）、浮盈、浮亏各一份计划，带触发价、止损、风险。 */
   plans: Record<Situation, Plan>;
-  /** 找打法：打法用到的规则逐条的状态和还差什么。 */
-  checklist: Check[];
+  /** 找打法：打法用到的规则逐条的状态和还差什么；evidence 同 visual.rules。 */
+  checklist: (Check & { evidence: string | null })[];
   /** 做推演的三问（30 天）。 */
   forecast: Forecast;
   /** 结论卡片上那句回测记录。 */
@@ -187,13 +188,13 @@ export function buildReport(a: Analysis): Report {
 
   // ---------- 2. 找打法：结论的依据，打法用到的规则逐条对照 ----------
   const plans = buildPlans(a);
-  const checklist = buildChecklist(a);
+  const checklist = buildChecklist(a).map((c) => ({ ...c, evidence: RULE_EVIDENCE.get(c.id) ?? null }));
   const record = recordNote(playKey(a));
   const play = [
     `打法按「${trend}」定 [[D:趋势初判]] [[S:skill#第2步]]：${a.play.text} [[D:打法]]`,
     `空仓：${plans.flat.action} [[D:结论.空仓]]`,
     `持仓：${plans.holding.action} [[D:结论.持仓]]`,
-    ...checklist.map((c) => `${c.id} ${c.name}：${c.status}${c.yieldsTo ? `，${c.yieldsTo} 优先 [[S:rules#${c.yieldsTo}]]` : ""} [[S:rules#${c.id}]] [[D:规则.${c.id}]]。`),
+    ...checklist.map((c) => `${c.id} ${c.name}：${c.status}${c.yieldsTo ? `，${c.yieldsTo} 优先 [[S:rules#${c.yieldsTo}]]` : ""}${c.evidence ? `，${c.evidence}` : ""} [[S:rules#${c.id}]] [[D:规则.${c.id}]]。`),
     "这套打法的回测记录 [[D:回测]]。",
     "仓位以心态稳得住为准 [[S:article#7.3]]。",
   ];
@@ -205,6 +206,7 @@ export function buildReport(a: Analysis): Report {
     `类型线能保持多久 [[D:推演.保持]]。`,
     `条件最早哪天齐 [[D:推演.最早]]。`,
     `推翻判断的价位 [[D:推演.失效]]。`,
+    "推演求解只当辅助：没达到事先定的有用标准 [[S:skill#评估结论]]。",
     ...a.projection.hurdles.filter((h) => h.days === forecast.days).map((h) =>
       `MA${h.period}：${h.days} 天内收盘在 ${f2(h.max_price)} 之上，天天上行；在 ${f2(h.min_price)} 之下，天天下行 [[D:门槛.MA${h.period}]] [[S:rules#A2]]。`),
     ...["MA60", "MA120"].map((k) => turnSentence(sc, k)).filter((x): x is string => x !== null),
@@ -243,7 +245,7 @@ export function buildReport(a: Analysis): Report {
       hurdles: a.projection.hurdles,
       scenario: sc,
       solves: a.projection.solves,
-      rules: a.rules,
+      rules: a.rules.map((r) => ({ ...r, evidence: RULE_EVIDENCE.get(r.id) ?? null })),
       tie: a.thresholds.ORDER_TIE_PCT.value,
     },
   };

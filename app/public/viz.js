@@ -255,6 +255,11 @@ export function scenarioFlow(v) {
     </div>`;
 }
 
+/** 规则旁的小标签：rules.md 里标了评估结论的（例如"回测不支持（评估 2026-11-20，H6）"）。 */
+const evidenceTag = (r) => (r.evidence ? `<span class="ev-tag">${esc(r.evidence)}</span>` : "");
+/** 推演求解的评估结论，一行小字。 */
+const evidenceNote = (text) => `<p class="ev-note">${esc(text)}</p>`;
+
 /** 求解：K 天内让某件事发生（或不发生）要持平在什么价位。 */
 export function solveList(solves) {
   const text = (s) => s.status !== "有临界价位" ? s.status
@@ -266,7 +271,7 @@ export function solveList(solves) {
 function ruleRow(r) {
   const yields = r.yields_to ? `<span class="yield">让位：${ruleBtn(r.yields_to)} 优先</span>` : "";
   return `<li class="rule ${r.yields_to ? "yielded" : ""}" data-rule="${esc(r.id)}">${ruleBtn(r.id)}<b>${esc(r.name)}</b>
-      <span class="rs ${STATUS_CLS[r.status]}">${esc(r.status)}</span>${yields}<span class="rb">${esc(r.basis)}</span></li>`;
+      <span class="rs ${STATUS_CLS[r.status]}">${esc(r.status)}</span>${yields}<span class="rb">${esc(r.basis)}</span>${evidenceTag(r)}</li>`;
 }
 /** 全部规则，按动作、判定、公理分组，折叠着（打法用到的那几条在找打法的清单里）。 */
 export function allRules(v) {
@@ -346,8 +351,8 @@ export function planBody(plans, p, close) {
   const fill = (t) => esc(t).replaceAll("{cost}", k === "profit" || k === "loss" ? f2(parseCost(p.cost)) : "成本");
   const plan = plans[k];
   return `<b class="big">${fill(plan.action)}</b>
-      <ul class="plan-items">${plan.items.map((i) => `<li><span class="pl">${esc(i.label)}</span>${fill(i.text)}${
-        i.rules?.length ? `<span class="plan-rules">${i.rules.map(ruleBtn).join("")}</span>` : ""}</li>`).join("")}</ul>`;
+      <ul class="plan-items">${plan.items.map((i) => `<li${i.evidence ? ` class="aux"` : ""}><span class="pl">${i.evidence ? "辅助 · " : ""}${esc(i.label)}</span>${fill(i.text)}${
+        i.rules?.length ? `<span class="plan-rules">${i.rules.map(ruleBtn).join("")}</span>` : ""}${i.evidence ? evidenceNote(i.evidence) : ""}</li>`).join("")}</ul>`;
 }
 
 // ---------- 结论：空仓、持仓各一行，带触发价、止损、风险；回测记录 ----------
@@ -417,7 +422,7 @@ export function checklist(checks) {
     const [mark, cls] = MARK[c.status];
     return `<li class="${cls}" data-rule="${esc(c.id)}"><span class="mark ${cls}" aria-label="${esc(c.status)}">${mark}</span>${ruleBtn(c.id)}<b>${esc(c.name)}</b>
       <span class="rb">${esc(c.basis)}</span>${c.need ? `<span class="need">还差：${esc(c.need)}</span>` : ""}${
-      c.yieldsTo ? `<span class="yield">让位：${ruleBtn(c.yieldsTo)} 优先，不按它做</span>` : ""}</li>`;
+      c.yieldsTo ? `<span class="yield">让位：${ruleBtn(c.yieldsTo)} 优先，不按它做</span>` : ""}${evidenceTag(c)}</li>`;
   }).join("")}</ul>`;
 }
 
@@ -444,15 +449,17 @@ export function playAnswer(r, p, close) {
     </div>`;
 }
 
-// ---------- 做推演：三问，跨度 30 天 ----------
+// ---------- 做推演：三问，跨度 30 天；推演求解给的答案标「辅助」，相关求解折叠 ----------
 export function forecastAnswer(f) {
+  const aux = (k) => (f.aux.includes(k) ? `<span class="aux-tag">辅助 · 推演求解</span>` : "");
   return `<div class="answer forecast"><span class="ak">只看 ${f.days} 天</span>
       <ol class="q3">
         <li><span class="pl">类型线能撑多久</span>${esc(f.hold)}</li>
-        <li><span class="pl">条件最早哪天齐</span>${esc(f.earliest)}</li>
-        <li class="invalid"><span class="pl">什么价位推翻判断</span>${esc(f.invalid.text)}</li>
+        <li><span class="pl">条件最早哪天齐</span>${esc(f.earliest)}${aux("earliest")}</li>
+        <li class="invalid"><span class="pl">什么价位推翻判断</span>${esc(f.invalid.text)}${aux("invalid")}</li>
       </ol>
-      ${f.solves.length ? `<p class="evidence-title">和这套打法有关的求解（${f.days} 天）</p>${solveList(f.solves)}` : ""}
+      ${f.solves.length ? `<details class="aux-solves"><summary>辅助：和这套打法有关的求解（${f.days} 天）</summary>${solveList(f.solves)}</details>` : ""}
+      ${f.aux.length || f.solves.length ? evidenceNote(f.evidence) : ""}
     </div>`;
 }
 
@@ -480,8 +487,9 @@ function bigPictureEvidence(v) {
     + `<details class="ref"><summary>趋势类型对照（现在是哪一种）</summary>${trendTable(v)}</details>`;
 }
 
-/** 每一步的证据（结论在 step-answer 里）。forecast 只给 30 天的门槛，其余推演折叠。 */
-export function stepVisuals(key, v, days = 30) {
+/** 每一步的证据（结论在 step-answer 里）。forecast 只给 30 天的门槛，其余推演折叠；f 是做推演的三问（跨度、求解的评估结论）。 */
+export function stepVisuals(key, v, f) {
+  const days = f.days;
   if (key === "big_picture") return bigPictureEvidence(v);
   if (key === "play") return allRules(v);
   if (key === "forecast") {
@@ -490,7 +498,7 @@ export function stepVisuals(key, v, days = 30) {
       + hurdleTable(long)
       + `<details class="ref more"><summary>更多推演：模糊判断、抵扣价、持平情景、全部求解</summary>`
       + `<div class="lean-box">${leanCard(v.lean, v.close, v.trend, v.tie)}</div>`
-      + dropMultiples(v) + hurdleTable(v) + scenarioFlow(v) + solveList(v.solves) + `</details>`;
+      + dropMultiples(v) + hurdleTable(v) + scenarioFlow(v) + solveList(v.solves) + evidenceNote(f.evidence) + `</details>`;
   }
   return "";
 }
