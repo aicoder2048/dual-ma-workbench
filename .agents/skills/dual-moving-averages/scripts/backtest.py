@@ -137,24 +137,27 @@ def hourly_at(bars30: pd.DataFrame | None, day: pd.Timestamp) -> dict:
 
 # ---------- 每天的分析 ----------
 
+def history_at(px: pd.DataFrame, i: int) -> pd.DataFrame:
+    """第 i 根当天往前 HISTORY_YEARS 年：那天实时取数能拿到的历史，周线用它。不含之后的任何一根，不够 5 年就用现有的。"""
+    return dma.windows(px.iloc[:i + 1], px.index[i])[1]
+
+
 def cut_at(px: pd.DataFrame, i: int) -> pd.DataFrame:
-    """第 i 根当天往前 DAILY_YEARS 年（和 app 回放切给 dma_analyze.py 的 CSV 一样），不含之后的任何一根。"""
+    """第 i 根当天往前 DAILY_YEARS 年：日线分析用的那段，不含之后的任何一根。"""
     end = px.index[i]
-    lo = end - pd.DateOffset(years=dma.DAILY_YEARS)
-    cut = px.iloc[:i + 1]
-    cut = cut[cut.index >= lo]
-    if cut.index[0] > lo + 7 * DAY:
+    cut = dma.windows(px.iloc[:i + 1], end)[0]
+    if cut.index[0] > end - pd.DateOffset(years=dma.DAILY_YEARS) + 7 * DAY:
         raise ValueError(f"{end.date()}：历史从 {cut.index[0].date()} 起，不够 {dma.DAILY_YEARS} 年")
     return cut
 
 
 def analyze_on(px: pd.DataFrame, i: int, label: str, hourly: dict | None = None) -> dict:
-    """第 i 根收盘后的完整分析，等于 dma_analyze.py --csv <cut_at 那段> --asof <那天> 的 analysis。
+    """第 i 根收盘后的完整分析，等于 dma_analyze.py --csv <history_at 那段> --asof <那天> 的 analysis。
 
     hourly 给了就代替 CSV 模式的"不取小时线"（hourly_at 的结果），只影响 P13 和用到它的 P14、打法文字。
     """
     cut = cut_at(px, i)
-    a = dma.analyze(add_indicators(cut.copy()), label, f"CSV {label}", cut, hourly or CSV_HOURLY)
+    a = dma.analyze(add_indicators(cut.copy()), label, f"CSV {label}", history_at(px, i), hourly or CSV_HOURLY)
     if a["date"] != str(px.index[i].date()):
         raise AssertionError(f"{label}：分析日期 {a['date']} 不是决定日 {px.index[i].date()}")
     return a
@@ -477,7 +480,7 @@ def main() -> None:
         print(f"回测记录：{out}", file=sys.stderr)
         return
     need = (pd.Timestamp(a.history_from) if a.history_from
-            else pd.Timestamp(a.start) - pd.DateOffset(years=dma.DAILY_YEARS) - 10 * DAY)
+            else pd.Timestamp(a.start) - pd.DateOffset(years=dma.HISTORY_YEARS) - 10 * DAY)
     csvs = {t: ensure_data(t, a.data, need, a.refresh) for t in tickers}
     if a.fetch_only:
         return

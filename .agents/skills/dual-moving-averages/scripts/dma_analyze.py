@@ -161,15 +161,22 @@ def fetch_yfinance(ticker: str, start: str, end: str) -> pd.DataFrame:
     return df
 
 
+def windows(df: pd.DataFrame, end: pd.Timestamp) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """截到 end：(日线分析用的最近 DAILY_YEARS 年, 周线用的最近 HISTORY_YEARS 年)。实时、CSV、回放都这么切。"""
+    history = df[(df.index <= end) & (df.index >= end - pd.DateOffset(years=HISTORY_YEARS))]
+    return history[history.index >= end - pd.DateOffset(years=DAILY_YEARS)], history
+
+
 def load_prices(ticker: str | None, csv: str | None, asof: str | None,
                 env_file: str | None, source: str) -> tuple[pd.DataFrame, pd.DataFrame, str]:
-    """返回 (日线分析用的数据, 全部历史, 数据来源说明)。ticker 模式下先 Polygon，失败或不够长再 yfinance。
+    """返回 (日线分析用的数据, 周线用的历史, 数据来源说明)。ticker 模式下先 Polygon，失败或不够长再 yfinance。
 
-    ticker 模式取 HISTORY_YEARS 年，日线分析只用最近 DAILY_YEARS 年，全部历史给周线；CSV 两者都是整份文件。
+    两种模式切法一样（windows）：CSV 只是换了数据来源，不给 asof 时截到文件最后一行。
     """
     end_ts = pd.Timestamp(asof) if asof else pd.Timestamp.today().normalize()
     if csv:
         df, src = pd.read_csv(csv, parse_dates=["Date"]).set_index("Date"), f"CSV {csv}"
+        end_ts = end_ts if asof else df.index.max()
     else:
         start = (end_ts - pd.DateOffset(years=HISTORY_YEARS)).strftime("%Y-%m-%d")
         end = end_ts.strftime("%Y-%m-%d")
@@ -195,9 +202,7 @@ def load_prices(ticker: str | None, csv: str | None, asof: str | None,
             src += "；回退原因：" + "；".join(notes)
     if "Close" not in df.columns:
         sys.exit("数据里没有 Close 列")
-    df = df.sort_index()
-    history = df[df.index <= end_ts].dropna(subset=["Close"])
-    daily = history if csv else history[history.index >= end_ts - pd.DateOffset(years=DAILY_YEARS)]
+    daily, history = windows(df.sort_index().dropna(subset=["Close"]), end_ts)
     if len(daily) < MIN_BARS:
         sys.exit(f"数据只有 {len(daily)} 根 K 线，至少需要 {MIN_BARS} 根（来源：{src}）")
     return daily.copy(), history, src
