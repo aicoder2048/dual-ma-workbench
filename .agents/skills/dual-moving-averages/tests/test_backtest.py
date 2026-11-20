@@ -138,6 +138,15 @@ def test_ignore_hourly_takes_p14_from_p10_to_p12():
     assert run(days, tr.Chart.MET) == []
 
 
+def test_stable_uptrend_holds_through_20_60_double_cross_until_60_group_turns_down():
+    def held(**kw) -> tr.Day:
+        return tr.Day(**{**day("", key="稳定上涨").__dict__, **kw})
+    cross = held(side20="空头")
+    turn = held(side20="空头", dirs={"MA60": -1, "EMA60": -1, "EMA20": -1})
+    ts = run([day("", key="稳定上涨", P14="满足"), cross, cross, turn, day("")])
+    assert [(t.entry_i, t.exit_i, t.reason) for t in ts] == [(1, 4, "60 线组拐头向下")]
+
+
 def test_hourly_slice_equals_load_hourly_on_the_same_feed():
     """hourly_at 切出的那段，等于 load_hourly(asof=那天) 向 Polygon 请求 [那天 − 60 天, 那天] 得到的结果。"""
     utc = pd.date_range("2024-01-02 09:00", "2024-05-01 00:00", freq="30min", tz="UTC")

@@ -158,7 +158,7 @@ const PLAYS: Record<string, Record<Position, (l: L) => Plan>> = {
     ] }),
     holding: (l) => ({ action: "持有，回调可以加仓。", items: [
       { label: "加仓", text: `回撤到 60 线组、MA120 方向不变、出现底部构造、小时线多头排列，四条齐了加（现在 ${l.st("P14")}）。`, rules: ["P14"] },
-      { label: "止损", text: `60 线组拐头向下，或 20/60 双死叉才走。只是碰到 MA60 ${f2(l.ma60)} 不算：价格击穿均线、MA 方向不变，就是吃回撤区。`, rules: ["A1", "J16"] },
+      { label: "止损", text: `60 线组拐头向下（MA60 ${f2(l.ma60)}、EMA60 ${f2(l.ema60)} 都向下）才走。只是碰到 MA60 不算：价格击穿均线、MA 方向不变，就是吃回撤区；20/60 双死叉也不算，60/120 还平行向上就是深回撤。`, rules: ["A1", "J7"] },
       { label: "失效", text: `${TYPE_END(l, true)}，就不是稳定上涨了：不再回调加仓，改按过渡 / 下跌的打法。`, rules: ["J7"] },
       SIZE,
     ] }),
