@@ -1,17 +1,20 @@
 /**
  * 规则版报告：完全由脚本的分析结果生成，不经过 LLM。
  *
- * 两部分：
+ * 中栏按"结论 → 看大局 → 找打法 → 做推演"排：
+ * - plans / record：结论卡片（空仓、持仓各一行：做法、触发价、止损、风险；这套打法的回测记录）。
+ * - checklist：找打法的条件清单；forecast：做推演的三问（30 天）。都在 plan.ts，价位读脚本结果。
  * - visual：给前端画图用的结构化数据（均线状态、价位梯子、乖离分位、五步进度、周线和小时线、类型总表、
  *   门槛路径、持平情景和求解、规则清单）。都是脚本的输出，这里不重算。
- * - steps[].items：按 ASD-STE100 简明中文写的短句，一句一事，每句带引用。
+ * - steps[].items：给模型看的看大局、找打法、做推演，按 ASD-STE100 简明中文写的短句，一句一事，每句带引用。
  *
  * 类型总表读 SKILL.md 第 1 步那一张（唯一的一份），不在这里另写。
  */
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import type { Analysis, HurdlePath, Lean, PairProgress, RuleResult, Scenario, Solve } from "./citations.ts";
-import { buildOutlook, buildPlans, type Outlook, type Plan, type Situation } from "./plan.ts";
+import { buildChecklist, buildForecast, buildPlans, playKey, type Check, type Forecast, type Plan, type Situation } from "./plan.ts";
+import { recordNote, type RecordNote } from "./record.ts";
 import { PROJECT_ROOT } from "./sources.ts";
 
 export type Stance = "bullish" | "bearish" | "neutral";
@@ -42,11 +45,12 @@ export interface ReportVisual {
   scenario: Scenario;
   solves: Solve[];
   rules: RuleResult[];
-  playRules: string[];
+  /** 模糊判断排布里"贴近"的门槛（thresholds.ORDER_TIE_PCT）。 */
+  tie: number;
 }
 
 export interface ReportStep {
-  key: "big_picture" | "strategy" | "direction" | "rules";
+  key: "big_picture" | "play" | "forecast";
   title: string;
   subtitle: string;
   items: string[];
@@ -57,10 +61,16 @@ export interface Report {
   stance: Stance;
   /** 第 1 步的结论：趋势类型和它长什么样。 */
   trend: { type: string; look: string };
-  /** 第 2 步的输出：空仓、持仓（没填成本）、浮盈、浮亏各一份计划。 */
+  /** 这份分析用哪套打法（plan.ts 的 playKey，横盘破位在这里另判）。 */
+  playKey: string;
+  /** 结论和找打法：空仓、持仓（没填成本）、浮盈、浮亏各一份计划，带触发价、止损、风险。 */
   plans: Record<Situation, Plan>;
-  /** 第 3 步的输出：方向结论、最早何时会变、对你意味着什么。 */
-  outlook: Outlook;
+  /** 找打法：打法用到的规则逐条的状态和还差什么。 */
+  checklist: Check[];
+  /** 做推演的三问（30 天）。 */
+  forecast: Forecast;
+  /** 结论卡片上那句回测记录。 */
+  record: RecordNote;
   steps: ReportStep[];
   visual: ReportVisual;
 }
@@ -139,11 +149,6 @@ function turnSentence(sc: Scenario, line: string): string | null {
   return t.turn_day ? `${line} 现在${way}，第 ${t.turn_day} 天转向 [[D:推演.${line}]]。` : `${line} 现在${way}，${sc.days} 天内不转向 [[D:推演.${line}]]。`;
 }
 
-function ruleLine(r: RuleResult): string {
-  const yields = r.yields_to ? `，${r.yields_to} 优先 [[S:rules#${r.yields_to}]]` : "";
-  return `${r.id} ${r.name}：${r.status}${yields} [[S:rules#${r.id}]] [[D:规则.${r.id}]]。`;
-}
-
 export function buildReport(a: Analysis): Report {
   const crosses = a.crosses.map((c) => {
     const ma = parseCross(c.ma);
@@ -179,41 +184,46 @@ export function buildReport(a: Analysis): Report {
   }
   big.push("类型是规则判的，边界情况要看图复核 [[S:skill#第1步]]。");
 
-  // ---------- 2. 定策略：结论在 plans（按有没有仓位），这里是依据 ----------
-  const strategy = [
+  // ---------- 2. 找打法：结论的依据，打法用到的规则逐条对照 ----------
+  const plans = buildPlans(a);
+  const checklist = buildChecklist(a);
+  const record = recordNote(playKey(a));
+  const play = [
     `打法按「${trend}」定 [[D:趋势初判]] [[S:skill#第2步]]：${a.play.text} [[D:打法]]`,
-    `用到的规则：${a.play.rules.map((id) => `${id} [[S:rules#${id}]]`).join("、")}。`,
-    "有没有仓位，做法不同 [[S:skill#第2步]]。",
-    "价位来自 EMA20 和 MA20 抵扣价 [[D:改变判断.EMA20]] [[D:改变判断.MA20]]。",
+    `空仓：${plans.flat.action} [[D:结论.空仓]]`,
+    `持仓：${plans.holding.action} [[D:结论.持仓]]`,
+    ...checklist.map((c) => `${c.id} ${c.name}：${c.status}${c.yieldsTo ? `，${c.yieldsTo} 优先 [[S:rules#${c.yieldsTo}]]` : ""} [[S:rules#${c.id}]] [[D:规则.${c.id}]]。`),
+    "这套打法的回测记录 [[D:回测]]。",
     "仓位以心态稳得住为准 [[S:article#7.3]]。",
   ];
 
-  // ---------- 3. 看方向 ----------
-  const direction = a.projection.hurdles.map((h) =>
-    `MA${h.period}：${h.days} 天内收盘在 ${f2(h.max_price)} 之上，天天上行；在 ${f2(h.min_price)} 之下，天天下行 [[D:门槛.MA${h.period}]] [[S:rules#A2]]。`);
-  direction.push(
-    ...["MA20", "MA60", "MA120"].map((k) => turnSentence(sc, k)).filter((x): x is string => x !== null),
+  // ---------- 3. 做推演：三问，跨度 30 天 ----------
+  const forecast = buildForecast(a, plans);
+  const ahead = [
+    `做推演看 ${forecast.days} 天 [[S:skill#第3步]]。`,
+    `类型线能保持多久 [[D:推演.保持]]。`,
+    `条件最早哪天齐 [[D:推演.最早]]。`,
+    `推翻判断的价位 [[D:推演.失效]]。`,
+    ...a.projection.hurdles.filter((h) => h.days === forecast.days).map((h) =>
+      `MA${h.period}：${h.days} 天内收盘在 ${f2(h.max_price)} 之上，天天上行；在 ${f2(h.min_price)} 之下，天天下行 [[D:门槛.MA${h.period}]] [[S:rules#A2]]。`),
+    ...["MA60", "MA120"].map((k) => turnSentence(sc, k)).filter((x): x is string => x !== null),
     `价格不变 ${sc.days} 天后：MA 排列 ${sc.end_arr_ma} [[D:推演.排列.MA]]，EMA 排列 ${sc.end_arr_ema} [[D:推演.排列.EMA]]。`,
-    `价格不变 ${ln.after.days} 天后，模糊判断是${ln.after.label} [[D:模糊判断.10天后]]。`,
     "收盘价高于抵扣价，MA 就上升 [[S:article#2.3]]。推演链：抵扣价 → 方向 → 排列 [[S:skill#第3步]]。",
-  );
-
-  // ---------- 4. 规则清单：打法用到的规则在前 ----------
-  const byId = new Map(a.rules.map((r) => [r.id, r]));
-  const rules = a.play.rules.map((id) => byId.get(id)).filter((r): r is RuleResult => Boolean(r)).map(ruleLine);
-  for (const r of a.rules) if (r.yields_to && !a.play.rules.includes(r.id)) rules.push(ruleLine(r));
+  ];
 
   return {
     headline: `${a.label} · ${ln.label} · ${trend}`,
     stance: stanceOf(ln),
     trend: { type: trend, look: row.look },
-    plans: buildPlans(a),
-    outlook: buildOutlook(a),
+    playKey: playKey(a),
+    plans,
+    checklist,
+    forecast,
+    record,
     steps: [
       { key: "big_picture", title: "看大局", subtitle: "现在是什么趋势", items: big },
-      { key: "strategy", title: "定策略", subtitle: "你该怎么做", items: strategy },
-      { key: "direction", title: "看方向", subtitle: "接下来会不会变", items: direction },
-      { key: "rules", title: "规则清单", subtitle: "每条规则今天满不满足", items: rules },
+      { key: "play", title: "找打法", subtitle: "这种趋势用哪套打法、条件齐了没有", items: play },
+      { key: "forecast", title: "做推演", subtitle: `接下来 ${forecast.days} 天会不会变`, items: ahead },
     ],
     visual: {
       close: a.close,
@@ -233,7 +243,7 @@ export function buildReport(a: Analysis): Report {
       scenario: sc,
       solves: a.projection.solves,
       rules: a.rules,
-      playRules: a.play.rules,
+      tie: a.thresholds.ORDER_TIE_PCT.value,
     },
   };
 }

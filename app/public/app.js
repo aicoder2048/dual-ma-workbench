@@ -8,7 +8,7 @@ import { initAskMenu, selectionLabel } from "./askmenu.js";
 import { collapseDrawer, initDrawer, updatePeek } from "./drawer.js";
 import { resolveTicker } from "./names.js";
 import { applyRemoteSettings, initSettings, openSettings } from "./settings.js";
-import { effectLine, installTips, leanCard, leanName, outlookAnswer, planAnswer, planBody, pnlText, rulesAnswer, stanceOf, stepVisuals, trendAnswer } from "./viz.js";
+import { chartLevels, conclusionCard, forecastAnswer, holdingRow, installTips, leanName, planBody, playAnswer, pnlText, stanceOf, stepVisuals, trendAnswer } from "./viz.js";
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -134,7 +134,7 @@ export async function loadAnalysis(ticker, asof) {
   }
 }
 
-/** 中栏两种状态：有分析结果（总结、K 线图、三步），或这只票取数失败（只有错误卡片）。 */
+/** 中栏两种状态：有分析结果（结论、K 线图、三步），或这只票取数失败（只有错误卡片）。 */
 function showPane(ok) {
   for (const el of [$("verdict"), document.querySelector(".chart-card"), $("steps")]) el.hidden = !ok;
   $("load-error").hidden = ok;
@@ -214,16 +214,11 @@ export function showAnalysis(data, asof = null) {
   const v = $("verdict");
   v.hidden = false;
   v.style.setProperty("--stance", `var(--${r.stance === "bullish" ? "up" : r.stance === "bearish" ? "down" : "neutral"})`);
-  v.innerHTML = leanCard(r.visual.lean, a.close, a.regime.name, a.thresholds.ORDER_TIE_PCT.value);
-  renderInline(v.querySelector(".lean-play"), `${a.play.text} [[D:打法]] [[S:skill#模糊判断]]`, data.facts);
-
   chartApi?.setData(data.chart, a.label);
-  chartApi?.setLevels(r.visual.lean);
 
   const steps = $("steps");
   steps.innerHTML = "";
   steps.dataset.meta = `${a.label} ${a.date} · ${a.source}`;
-  const pos = loadPosition(a.label);
   r.steps.forEach((s, i) => {
     const sec = document.createElement("section");
     sec.className = "card step";
@@ -231,7 +226,7 @@ export function showAnalysis(data, asof = null) {
     sec.innerHTML = `<div class="step-head"><span class="no">${i + 1}</span><h2>${s.title}</h2><span>${s.subtitle}</span>
         <button type="button" class="ask-card" data-ask-card="${s.key}" aria-haspopup="menu">问鸿雁</button></div>
       <div class="step-answer"></div>
-      <div class="step-viz">${stepVisuals(s.key, r.visual)}</div>
+      <div class="step-viz">${stepVisuals(s.key, r.visual, r.forecast.days)}</div>
       <details class="points-box"><summary>要点和出处（${s.items.length} 条，规则生成）</summary><ul class="points"></ul></details>`;
     const ul = sec.querySelector(".points");
     for (const item of s.items) {
@@ -241,7 +236,7 @@ export function showAnalysis(data, asof = null) {
     }
     steps.appendChild(sec);
   });
-  paintAnswers(r, a, pos);
+  paintAnswers(r, a, loadPosition(a.label), data.facts);
 
   document.querySelectorAll(".wl-item").forEach((li) =>
     li.classList.toggle("active", li.dataset.ticker === a.label && !asof));
@@ -249,7 +244,7 @@ export function showAnalysis(data, asof = null) {
   send({ type: "view", ticker: a.label, asof }); // 服务端据此更新问法、给鸿雁准备数据
 }
 
-// ---------- 三步的结论：看大局（趋势类型）、定策略（按持仓）、看方向（对你意味着什么） ----------
+// ---------- 结论和三步的回答：结论（空仓、持仓两行）、看大局（类型）、找打法（清单 + 按处境的做法）、做推演（三问） ----------
 const POS_KEY = (t) => `dma-pos:${t}`;
 function loadPosition(ticker) {
   try { return { pos: "flat", cost: "", ...JSON.parse(localStorage.getItem(POS_KEY(ticker)) ?? "{}") }; } catch { return { pos: "flat", cost: "" }; }
@@ -258,26 +253,29 @@ function savePosition(ticker, p) {
   try { localStorage.setItem(POS_KEY(ticker), JSON.stringify(p)); } catch { /* 隐私模式：只在本页有效 */ }
 }
 
-function paintAnswers(r, a, p) {
+function paintAnswers(r, a, p, facts) {
   const box = (key) => document.querySelector(`[data-step="${key}"] .step-answer`);
+  const v = $("verdict");
+  v.innerHTML = conclusionCard(r, a.close, p);
   box("big_picture").innerHTML = trendAnswer(r.trend);
-  box("strategy").innerHTML = planAnswer(r.plans, p, a.close);
-  box("direction").innerHTML = outlookAnswer(r.outlook, p, a.close);
-  box("rules").innerHTML = rulesAnswer(r.visual);
-  const plan = box("strategy");
-  plan.querySelectorAll("[data-pos]").forEach((b) => b.addEventListener("click", () => {
+  box("play").innerHTML = playAnswer(r, p, a.close);
+  renderInline(box("play").querySelector(".play-text"), `${a.play.text} [[D:打法]] [[S:skill#第2步]]`, facts);
+  box("forecast").innerHTML = forecastAnswer(r.forecast);
+  chartApi?.setLevels(chartLevels(r, p, a.close));
+  box("play").querySelectorAll("[data-pos]").forEach((b) => b.addEventListener("click", () => {
     const next = { ...p, pos: b.dataset.pos };
     savePosition(a.label, next);
-    paintAnswers(r, a, next);
+    paintAnswers(r, a, next, facts);
   }));
-  plan.querySelector("#pos-cost")?.addEventListener("input", (e) => {
+  v.querySelector("#pos-cost").addEventListener("input", (e) => {
     const next = { ...p, cost: e.target.value };
     savePosition(a.label, next);
     p = next; // 之后点空仓/持仓时带上最新的成本
-    plan.querySelector(".pnl").innerHTML = pnlText(next.cost, a.close);
-    // 只重画计划正文和看方向那一行，输入框不动（边打字边更新，不丢焦点）
-    plan.querySelector(".plan-body").innerHTML = planBody(r.plans, next, a.close);
-    box("direction").querySelector(".effect").innerHTML = effectLine(r.outlook, next, a.close);
+    // 只重画持仓那一行、盈亏和找打法的计划正文，输入框不动（边打字边更新，不丢焦点）
+    v.querySelector(".pnl").innerHTML = pnlText(next.cost, a.close);
+    v.querySelector(".holding-row").innerHTML = holdingRow(r, a.close, next);
+    box("play").querySelector(".plan-body").innerHTML = planBody(r.plans, next, a.close);
+    chartApi?.setLevels(chartLevels(r, next, a.close));
   });
 }
 
@@ -461,7 +459,7 @@ async function main() {
   initSplitters();
   asofUi = initAsofInput({ onChange: (d) => state.ticker && loadAnalysis(state.ticker, d) });
   initAskMenu({
-    getState: () => state.data && { analysis: state.data.analysis, visual: state.data.report.visual, aiSuggestions: advisorSuggestions },
+    getState: () => state.data && { analysis: state.data.analysis, report: state.data.report, aiSuggestions: advisorSuggestions },
     ask: (question, selection) => { setSelection(selection); panels.advisor.submit(question); },
   });
   await initSettings({ onDataSourceChange: reloadAll });

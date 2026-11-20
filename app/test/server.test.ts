@@ -37,7 +37,7 @@ describe("规则报告", () => {
   test("每一条要点都至少有一个引用", () => {
     for (const item of report.steps.flatMap((s) => s.items)) expect(item).toMatch(/\[\[(S|D):/);
   });
-  test("三步齐全", () => expect(report.steps.map((s) => s.key)).toEqual(["big_picture", "strategy", "direction", "rules"]));
+  test("三步齐全：看大局、找打法、做推演", () => expect(report.steps.map((s) => s.key)).toEqual(["big_picture", "play", "forecast"]));
 });
 
 describe("输入校验", () => {

@@ -111,7 +111,7 @@ export function createChart(box, legendEl) {
     + `<button type="button" class="draw-clear" title="删掉这只股票上自己画的线">清除</button>`
     + `<button type="button" class="tone-toggle" title="${TONE_TITLE}">`
     + `${Object.values(TONE_TOKENS).map((t) => `<i style="--c: var(${t})"></i>`).join("")}着色</button>`
-    + `<button type="button" class="levels-toggle" aria-pressed="true" title="把「什么会改变判断」的价位画成虚线">门槛线</button>`
+    + `<button type="button" class="levels-toggle" aria-pressed="true" title="把结论里的触发价、止损和推翻判断的价位画成虚线">价位线</button>`
     + `<button type="button" class="chart-help-toggle" aria-expanded="false">怎么用</button>`;
   legendEl.after(tools);
 
@@ -156,15 +156,16 @@ export function createChart(box, legendEl) {
     ts.setVisibleLogicalRange({ from: r.to - next, to: r.to }); // 以最右边（最新一天）为锚
   }, { passive: false });
 
-  // ---------- 门槛线：模糊判断里"什么会改变判断"的价位 ----------
+  // ---------- 价位线：结论里的触发价、止损，和做推演里推翻判断的价位 ----------
+  const LEVEL_COLOR = { trigger: "--up", stop: "--down", invalid: "--neutral" };
   let levels = [];
   let levelLines = [];
   let levelsOn = true;
-  const levelsShown = () => levelsOn && rs.mode !== "replay"; // 门槛线属于最新一天，回放时收起
+  const levelsShown = () => levelsOn && rs.mode !== "replay"; // 价位线属于最新一天，回放时收起
   const paintLevels = () => {
     levelLines.forEach((l) => candles.removePriceLine(l));
     levelLines = levelsShown() ? levels.map((lv) => candles.createPriceLine({
-      price: lv.price, color: css(lv.line.endsWith("20") ? "--ma20" : "--ma60"), lineWidth: 1, lineStyle: 2,
+      price: lv.price, color: css(LEVEL_COLOR[lv.kind]), lineWidth: 1, lineStyle: 2,
       axisLabelVisible: true, title: lv.title,
     })) : [];
   };
@@ -185,7 +186,7 @@ export function createChart(box, legendEl) {
     <p><b>固定范围</b>（1 周 / 1 月 / 半年 / 1 年 / 全部）：均线的斜率（几点钟方向）只有在同样长的时间里比才不失真，所以要固定时长、用对数坐标。
       <b>1 年</b>（默认）判断现在是几点钟、属于哪种趋势；<b>全部</b>看大周期和横盘有多长（"横有多长，竖有多高"）；<b>半年</b>看最近的细节，比如这次回调比上次深还是浅；<b>1 周、1 月</b>看最近几根 K 线怎么走。</p>
     <p><b>画线</b>：点「画线」，再点图上一处，就在那个价位画一条横线，刷新后还在。常画的是前高、前低、自己的成本价、"跌破就重新看"的价位。
-      图上的<b>虚线门槛线</b>是自动画的：价格过了它，20 线组才会拐头（先 EMA20，后 MA20），判断才值得改。</p>
+      图上的<b>虚线价位线</b>是自动画的：绿色是结论里的触发价（不买的打法是"先看"），红色是止损，黄色是推翻判断的价位。</p>
     <p><b>着色</b>：绿 = 收盘在 MA20 上方且高于 20 日抵扣价（MA20 向上）；黑 = 两样都不满足（MA20 向下）；灰 = 只满足一样。
       第一根黑柱就是 20 线破线拐头；连续黑柱、收不回去，才说明拐头确认了。点工具栏里的「着色」可以关掉。</p>
     <p><b>看量</b>：底部的量柱，黄色是超过 50 日均量 2 倍的大量。看两种情况：横盘末期突然放量，是要变盘的信号；
@@ -411,7 +412,7 @@ export function createChart(box, legendEl) {
     $r(".replay-play").textContent = rs.playing ? "⏸ 暂停" : "▶ 播放";
     $r(".replay-play").setAttribute("aria-pressed", String(Boolean(rs.playing)));
     $r(".replay-label").setAttribute("aria-live", rs.playing ? "off" : "polite"); // 播放中不每秒播报
-    levelsBtn.disabled = rs.mode === "replay"; // 门槛线属于最新一天，回放时收起，按钮也不能点
+    levelsBtn.disabled = rs.mode === "replay"; // 价位线属于最新一天，回放时收起，按钮也不能点
     $r(".replay-play").disabled = rs.mode !== "replay" || atEnd;
     $r(".replay-forward").disabled = rs.mode !== "replay" || atEnd;
     $r(".replay-back").disabled = rs.mode !== "replay" || rs.index <= 0;
@@ -512,17 +513,13 @@ export function createChart(box, legendEl) {
     },
     /** 停止回放、回到完整数据（取数失败、中栏收起图表时用）。 */
     stopReplay() { dispatch({ type: "exit" }); },
-    /**
-     * 门槛线：lean.flips 里 20 线组的价位（第 1 个动作 EMA20、第 2 个动作 MA20 抵扣价）。
-     * 在现价上方是"站上"（转多），下方是"跌破"（转空）。60 线组的价位留在模糊判断卡片里，图上不画，免得挤。
-     */
-    setLevels(lean) {
-      levels = lean.flips.filter((f) => f.line.endsWith("20") && !f.line.endsWith("120"))
-        .map((f) => ({ line: f.line, price: f.price, title: `${f.toward === "多" ? "站上" : "跌破"} ${f.line.startsWith("EMA") ? f.line : `${f.line} 抵扣价`}` }));
+    /** 价位线：[{ kind: trigger | stop | invalid, price, title }]，来自 viz.js 的 chartLevels。 */
+    setLevels(list) {
+      levels = list;
       paintLevels();
     },
-    /** 当前画在图上的门槛线（测试和问鸿雁用）。 */
-    levels: () => (levelsShown() ? levels.map(({ title, price }) => ({ title, price })) : []),
+    /** 当前画在图上的价位线（测试和问鸿雁用）。 */
+    levels: () => (levelsShown() ? levels.map(({ kind, title, price }) => ({ kind, title, price })) : []),
     /** 自己画的线（价格列表）。 */
     drawn: () => [...drawn],
     /** 回放状态（测试用）：mode / index / playing，加上速度、回放到的日期、图上几根 K 线。 */

@@ -570,7 +570,6 @@ details.points-box .points { margin-top: 6px; }
   background: var(--bg); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 16px 40px rgba(0,0,0,.18); padding: 10px; display: flex; flex-direction: column; gap: 8px; }
 .center-scroll { scroll-padding-top: 44px; }
 .drawer-close { align-self: center; font-size: 12px; border: 1px solid var(--line); background: var(--card); border-radius: 999px; padding: 2px 16px; cursor: pointer; color: var(--muted); }
-.plan-items li.timing { background: color-mix(in srgb, var(--accent) 8%, transparent); border-radius: 6px; padding: 2px 4px; }
 .speak-ctl { margin-left: auto; display: inline-flex; gap: 4px; }
 .speak-ctl .speak { margin-left: 0; }
 .speak-stop { font-size: 11.5px; border: 1px solid var(--line); background: transparent; color: var(--muted); border-radius: 999px; padding: 0 9px; line-height: 20px; cursor: pointer; }
@@ -600,3 +599,45 @@ ul.solves li { display: flex; justify-content: space-between; gap: 12px; padding
 .rs { font-size: 12px; padding: 0 8px; border-radius: 999px; border: 1px solid currentColor; white-space: nowrap; }
 .rs.met { color: var(--up); } .rs.unmet { color: var(--muted); } .rs.chart { color: var(--neutral); }
 .step-viz h4 { margin: 10px 0 0; font-size: 12.5px; color: var(--muted); font-weight: 500; }
+
+/* ===================== 结论：空仓、持仓两行，价位标签，回测 ===================== */
+.verdict { display: grid; gap: 8px; }
+.concl-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.concl-trend { font: 700 18px var(--heading); }
+.concl-lean { font-size: 13px; color: var(--muted); }
+.concl-lean .lean-label { font: 600 14px var(--heading); }
+.concl-head .ask-card { margin-left: auto; }
+.concl-row { display: grid; grid-template-columns: 5.5em 1fr; gap: 10px; align-items: start; padding: 6px 0 0; border-top: 1px solid var(--line); }
+.concl-row .who { font-size: 12px; color: var(--muted); padding-top: 2px; }
+.concl-row .what > b { font: 600 15px/1.5 var(--heading); }
+.chips-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+.pchip { display: inline-flex; align-items: baseline; gap: 6px; font-size: 12.5px; border: 1px solid var(--line); border-radius: 8px; padding: 1px 8px; background: var(--panel); }
+.pchip .ck { font-size: 11px; color: var(--muted); }
+.pchip.trigger { border-color: color-mix(in srgb, var(--up) 45%, var(--line)); }
+.pchip.stop { border-color: color-mix(in srgb, var(--down) 45%, var(--line)); }
+.pchip .muted { color: var(--muted); font-size: 11.5px; }
+.verdict .pos-cost { padding-left: calc(5.5em + 10px); }
+.verdict .record { margin: 0; font-size: 12.5px; color: var(--muted); border-top: 1px dashed var(--line); padding-top: 6px; }
+.verdict .record .pl, .answer .missing .pl { display: inline-block; font-size: 11.5px; color: var(--muted); border: 1px solid var(--line); border-radius: 6px; padding: 0 6px; margin-right: 8px; }
+
+/* 找打法：条件清单 */
+.checklist { list-style: none; padding: 0; margin: 2px 0; font-size: 13.5px; }
+.checklist li { display: grid; grid-template-columns: 3.4em auto 1fr; gap: 2px 8px; align-items: baseline; padding: 5px 0; border-bottom: 1px solid var(--line); }
+.checklist .rb, .checklist .need { grid-column: 3 / -1; font-size: 12px; color: var(--muted); }
+.checklist .need { color: var(--fg); }
+.checklist .yield { grid-column: 3 / -1; font-size: 12px; color: var(--neutral); }
+.checklist .mark { font-weight: 700; text-align: center; border-radius: 6px; font-size: 12px; padding: 0 4px; }
+.checklist .mark.met { color: var(--up); }
+.checklist .mark.unmet { color: var(--down); }
+.checklist .mark.chart { color: var(--neutral); border: 1px solid currentColor; }
+.answer .play-text { font-size: 13px; color: var(--muted); }
+
+/* 做推演：三问 */
+.q3 { margin: 0; padding-left: 1.4em; display: grid; gap: 6px; font-size: 14px; }
+.q3 li::marker { color: var(--muted); }
+details.more > *:not(summary) { margin-top: 10px; }
+
+@media (max-width: 640px) {
+  .concl-row { grid-template-columns: 1fr; gap: 2px; }
+  .verdict .pos-cost { padding-left: 0; }
+}

@@ -1,15 +1,14 @@
 /**
- * 定策略、看方向的输出（规则生成，不经过模型）。
+ * 结论、找打法、做推演的输出（规则生成，不经过模型）。
  *
- * - buildPlans：按"脚本的打法键（analysis.play.key）× 你的处境"给一句做法 + 两三条带价位的条件。用哪几条规则取自
- *   skill 的 references/playbooks.md；规则满不满足、阈值是多少都读脚本的 rules 和 thresholds，这里不重算。
- *   价位取自模糊判断的门槛（EMA20、MA20 抵扣价）和均线值。每条条件带上它依据的规则编号（PlanItem.rules）。
+ * - buildPlans：按"脚本的打法键（analysis.play.key）× 你的处境"给一句做法、两三条带价位的条件，和两个价位：
+ *   trigger（空仓：进场触发；不买的打法是"先看"的价位；持仓：加仓或减仓的价位）、stop（空仓：进场后止损；持仓：止损）。
+ *   用哪几条规则取自 skill 的 references/playbooks.md；规则满不满足、阈值、构造下一步价位、30 天求解都读脚本结果，这里不重算。
  *   处境分四种：空仓、持仓（没填成本）、持仓浮盈、持仓浮亏。成本只在浏览器里，文字里写 {cost}，由页面填上。
- * - buildOutlook：看方向的结论（按模糊判断分三档，档位是脚本的 LEAN_SOME）。类型和模糊判断分开算
- *   （类型看 60/120 线组，模糊判断看 MA60、MA120 能保持几天），任何打法都可能配上任意一档。抵扣价推演出 20 线组还会朝原方向走多久、
- *   最早什么时候会变，再翻译成"对空仓 / 持仓意味着什么"。空头结构反弹中、多头结构回撤中这两种打架的状态，影响服从结构。
+ * - buildChecklist：打法用到的每条规则今天的状态，没满足的写还差什么（价位读规则的 levels）。
+ * - buildForecast：做推演只答三问，跨度都是 30 天：类型线还能保持多久、容忍到哪；打法的条件最早哪天能齐；什么价位推翻这个判断。
  */
-import type { Analysis, RuleResult } from "./citations.ts";
+import type { Analysis, RuleResult, Solve } from "./citations.ts";
 
 export type Position = "flat" | "holding";
 /** 你的处境：空仓；持仓但没填成本；持仓浮盈；持仓浮亏。页面按"空仓/持仓"和成本价选一个。 */
@@ -19,11 +18,23 @@ export const SITUATIONS: Situation[] = ["flat", "holding", "profit", "loss"];
 export const COST = "{cost}";
 /** rules：这条条件依据的规则编号（rules.md），页面上可以点开。 */
 export interface PlanItem { label: string; text: string; rules?: string[] }
-export interface Plan { action: string; items: PlanItem[] }
-export type EffectTag = "支持" | "调整时机" | "不变";
-/** 看方向对上面策略的影响：支持原做法、调整执行时机，或方向不明、策略不变。 */
-export interface Effect { tag: EffectTag; text: string }
-export interface Outlook { verdict: string; change: string; effect: Record<Situation, Effect> }
+/** 一个价位和它是什么。离现价多远由页面按收盘价算。 */
+export interface Level { label: string; price: number }
+/** risk：从进场价（空仓：触发价，没有就是现价；持仓：现价）到止损的距离，%；没有止损或止损不在下方时为 null。 */
+export interface Plan { action: string; items: PlanItem[]; trigger: Level | null; stop: Level | null; risk: number | null }
+type Draft = Omit<Plan, "risk">;
+
+/** 找打法的清单：一条规则今天的状态；need 是没满足时还差什么（带价位就写价位）。 */
+/** yieldsTo：自己满足、但让位给这条规则（rules.md 的让位），这时不按它做。 */
+export interface Check { id: string; name: string; status: RuleResult["status"]; basis: string; need: string | null; yieldsTo: string | null }
+/** 做推演的三问。invalid.level 是推翻判断的价位（画在 K 线图上）；没有单一价位时为 null。 */
+export interface Forecast {
+  days: number;
+  hold: string;
+  earliest: string;
+  invalid: { text: string; level: Level | null };
+  solves: Solve[];
+}
 
 const f2 = (x: number) => x.toFixed(2);
 
@@ -46,7 +57,7 @@ const st = (a: Analysis, id: string) => `${ruleOf(a, id).status}（${id}）`;
  * 当下的均线状态，全部读脚本结果：止损、失效的条件可能现在就已经成立，那时要照实说"已经"。
  * - death / gold：20/60 最近一次完整站在哪边（steps 的 side，双交叉之后才换边）。
  * - ema20Down：EMA20 在向下（20 线组里先拐的那条）。
- * - lo / hi / spread：6 条线的最低、最高、相差（占价格 %）；rangeMax、dense、clear、some 是脚本的阈值。
+ * - lo / hi / spread：6 条线的最低、最高、相差（占价格 %）；rangeMax、dense、clear 是脚本的阈值。
  */
 function stateOf(a: Analysis) {
   const side = a.steps.find((p) => p.pair === "20/60")?.side ?? null;
@@ -56,27 +67,44 @@ function stateOf(a: Analysis) {
     gold: side === "多头",
     ema20Down: (a.lean.dirs.EMA20 ?? 0) < 0,
     lo: Math.min(...a.lines.flatMap((x) => [x.ma, x.ema])), hi: Math.max(...a.lines.flatMap((x) => [x.ma, x.ema])),
-    spread: a.spread_pct, rangeMax: th("RANGE_SPREAD_PCT"), dense: th("DENSE_PCT"), clear: th("LEAN_CLEAR"), some: th("LEAN_SOME"),
+    spread: a.spread_pct, rangeMax: th("RANGE_SPREAD_PCT"), dense: th("DENSE_PCT"), clear: th("LEAN_CLEAR"),
     score: a.lean.score,
     flip: a.lean.flips.find((f) => f.toward === (a.lean.score >= 0 ? "空" : "多"))?.text ?? null,
     st: (id: string) => st(a, id),
     met: (id: string) => met(a, id),
     basis: (id: string) => ruleOf(a, id).basis,
+    /** 规则给的价位（levels），没有就是 null。 */
+    lvl: (id: string, key: string) => ruleOf(a, id).levels[key] ?? null,
+    stage: a.regime.stage,
+    /** 30 天求解：事件名以 prefix 开头、有临界价位的那条。 */
+    solve30: (prefix: string, happen = true): Solve | null => a.projection.solves.find((s) =>
+      s.days === FORECAST_DAYS && s.happen === happen && s.event.startsWith(prefix) && s.status === "有临界价位") ?? null,
   };
 }
+
+/** 做推演的跨度：和 MA60、MA120 的门槛路径、持平情景、模糊判断的依据同一个（脚本的 SCENARIO_DAYS）。 */
+export const FORECAST_DAYS = 30;
 
 function levels(a: Analysis) {
   const line = (n: number) => a.lines.find((l) => l.period === n)!;
   const drop = (n: number) => a.drops.find((d) => d.period === n)!;
+  const ema60 = line(60).ema, drop60 = drop(60).tomorrow;
   return {
     close: a.close,
-    ema20: line(20).ema, ma20: line(20).ma, ma60: line(60).ma, ema60: line(60).ema,
-    drop20: drop(20).tomorrow, drop60: drop(60).tomorrow,
+    ema20: line(20).ema, ma20: line(20).ma, ma60: line(60).ma, ema60,
+    drop20: drop(20).tomorrow, drop60,
+    /** 60 线组明天一起向下的价位：MA60 看抵扣价、EMA60 看线本身，收盘低于两者中较低的那个，两条都向下。 */
+    turn60: Math.min(ema60, drop60),
     p: (x: number) => at(x, a.close),
     ...stateOf(a),
   };
 }
 type L = ReturnType<typeof levels>;
+const lv = (label: string, price: number | null | undefined): Level | null => (price == null ? null : { label, price });
+/** 构造下一步：下一根最高价（底部）/ 最低价（顶部）越过 next_at，最少还差 bars_left 根（脚本的 structure）。 */
+const constructStep = (l: L, id: string) => lv("底部构造下一步", l.lvl(id, "下一步价"));
+/** 30 天理顺向上要守在的价位。打架和过渡的空仓打法拿它当"先看"的价位，不是买点。 */
+const alignUp = (l: L) => lv("30 天内理顺向上要守在", l.solve30("理顺向上")?.level);
 
 /** "收盘站上 X"；现价已经在 X 上方时说"已经在 X 上方"。 */
 const above = (l: L, name: string, x: number) => (l.close >= x ? `已经在 ${name} ${l.p(x)} 上方` : `收盘站上 ${name} ${l.p(x)}`);
@@ -111,23 +139,31 @@ const TRANSITION_END = (l: L, up: string, down: string) =>
  * 过渡、两种打架的进场条件是排列理顺，理顺时价格必然在 EMA20 上方，同一条也适用。
  */
 const ENTRY_STOP = (l: L): PlanItem =>
-  ({ label: "止损", text: `按条件进场后，收盘重新跌回 EMA20 下方（EMA20 现在 ${f2(l.ema20)}）、EMA20 再拐头向下，就走。` });
+  ({ label: "进场后止损", text: `按条件进场后，收盘重新跌回 EMA20 下方（EMA20 现在 ${f2(l.ema20)}）、EMA20 再拐头向下，就走。` });
+
+/** 稳定上涨吃回撤还差的第一步：没回撤到 60 线组就等它；到过了、没底部构造就等构造下一步；只差小时线时没有日线价位。 */
+function pullbackStep(l: L): Level | null {
+  if (!l.met("P11")) return lv("回撤到 60 线组", l.lvl("P11", "60 线组"));
+  if (!l.met("P12")) return constructStep(l, "P12");
+  return l.met("P14") ? lv("四条齐了，现价", l.close) : null;
+}
 
 /**
  * 打法键 → 空仓 / 持仓的打法。键是脚本的 play.key（五种类型、空头结构反弹中、多头结构回撤中、过渡），横盘破位在这里另判。
- * 每份计划都有「止损」（空仓时指按计划进场之后）和「失效」（判断错了的标志，以及接下来改用哪套打法）。
+ * 每份计划都有止损（空仓叫「进场后止损」，进场前要过的关叫「进场门槛」）和「失效」（判断错了的标志，以及接下来改用哪套打法）。
+ * 做法那一句跟阶段走：已经在回撤（反弹）里，不再说"等回调"。
  * 用哪几条规则按 playbooks.md 的"类型 × 仓位"；每条条件的 rules 写出依据的规则编号，状态读脚本的规则清单。
  */
-const PLAYS: Record<string, Record<Position, (l: L) => Plan>> = {
+const PLAYS: Record<string, Record<Position, (l: L) => Draft>> = {
   横盘: {
-    flat: (l) => ({ action: "中段不做，等末期条件齐了再埋伏。", items: [
+    flat: (l) => ({ action: "中段不做，等末期条件齐了再埋伏。", trigger: null, stop: lv("20/60 死叉（守住）", l.lvl("P3", "避免双死叉")), items: [
       { label: "等什么", text: `末期三个条件：横满 6 个月 ${l.st("J12")}，最高最低均线相差 < ${l.dense}% ${l.st("J13")}，均线向上张嘴 ${l.st("J14")}。`, rules: ["P1", "J12", "J13", "J14"] },
       { label: "方向", text: `横盘结束后往哪走跟周线：${l.basis("J11")}。`, rules: ["J11"] },
       { label: "怎么进", text: "三个条件齐了、还没突破时小仓位埋伏，不在箱体中间追。加分项：此前有大量、缺口，或假跌破后收回。", rules: ["P2", "P6"] },
-      { label: "止损", text: `埋伏后 20/60 死叉或不可避免要死叉（MA20 落到 MA60 ${f2(l.ma60)} 下方）就走；先突破前高后很快跌回、随后跌破 20 线组（假突破的两个动作），也走。`, rules: ["P3", "P5"] },
+      { label: "进场后止损", text: `埋伏后 20/60 死叉或不可避免要死叉（MA20 落到 MA60 ${f2(l.ma60)} 下方）就走；先突破前高后很快跌回、随后跌破 20 线组（假突破的两个动作），也走。`, rules: ["P3", "P5"] },
       { label: "失效", text: TANGLE_END(l, "多半转上涨", "多半转下跌") },
     ] }),
-    holding: (l) => ({ action: "拿着，但守住底线。", items: [
+    holding: (l) => ({ action: "拿着，但守住底线。", trigger: null, stop: lv("20/60 死叉（守住）", l.lvl("P3", "避免双死叉")), items: [
       { label: "软规则", text: "进场后磨蹭不涨，没到止损也先出来。", rules: ["P4"] },
       { label: "止损", text: `20 线组和 60 线组死叉（MA60 ${f2(l.ma60)} 附近），或不可避免要死叉，就走。${l.basis("P3")}。`, rules: ["P3"] },
       { label: "失效", text: TANGLE_END(l, "多半转上涨，可以拿着", "多半转下跌，减仓") },
@@ -136,27 +172,30 @@ const PLAYS: Record<string, Record<Position, (l: L) => Plan>> = {
   },
   // 横盘、但埋伏的底线已经破了（P3 满足）
   横盘破位: {
-    flat: (l) => ({ action: "中段不做，等末期条件齐了再埋伏。", items: [
+    flat: (l) => ({ action: "底线已经破了：不埋伏，等多头排列。", trigger: null, stop: null, items: [
       { label: "等什么", text: `末期三个条件：横满 6 个月 ${l.st("J12")}，最高最低均线相差 < ${l.dense}% ${l.st("J13")}，均线向上张嘴 ${l.st("J14")}。`, rules: ["P1", "J12", "J13", "J14"] },
-      { label: "止损", text: `埋伏的底线现在就破了（${l.basis("P3")}）：MA20 ${f2(l.ma20)} / MA60 ${f2(l.ma60)}、EMA20 ${f2(l.ema20)} / EMA60 ${f2(l.ema60)}，别进；等多头排列再埋伏，之后一死叉就走。`, rules: ["P3"] },
+      { label: "进场门槛", text: `埋伏的底线现在就破了（${l.basis("P3")}）：MA20 ${f2(l.ma20)} / MA60 ${f2(l.ma60)}、EMA20 ${f2(l.ema20)} / EMA60 ${f2(l.ema60)}，别进；等多头排列再埋伏，之后一死叉就走。`, rules: ["P3"] },
       { label: "失效", text: TANGLE_END(l, "多半转上涨", "多半转下跌") },
     ] }),
-    holding: (l) => ({ action: "底线已经破了：离场。", items: [
+    holding: (l) => ({ action: "底线已经破了：离场。", trigger: null, stop: lv("底线已破，现价离场", l.close), items: [
       { label: "止损", text: `埋伏仓位的底线已经触发（${l.basis("P3")}；MA20 ${f2(l.ma20)} / MA60 ${f2(l.ma60)}、EMA20 ${f2(l.ema20)} / EMA60 ${f2(l.ema60)}）：离场，条件重新满足再进。`, rules: ["P3"] },
       { label: "失效", text: TANGLE_END(l, "多半转上涨，按上涨的打法重新进", "多半转下跌，更不该拿") },
       SIZE,
     ] }),
   },
   稳定上涨: {
-    flat: (l) => ({ action: "等回调再买，不追高。", items: [
+    flat: (l) => ({
+      action: l.met("P14") ? "吃回撤四个条件齐了：可以进。"
+        : l.stage === "回撤中" ? "已经在回撤：等吃回撤的条件齐了再买，不抢。" : "等回调再买，不追高。",
+      trigger: pullbackStep(l), stop: lv("60 线组拐头向下", l.turn60), items: [
       { label: "等什么", text: `吃回撤四个条件：中长期均线平行向上 ${l.st("P10")}；回撤到 60 线组（MA60 ${f2(l.ma60)}、EMA60 ${f2(l.ema60)}）且 MA120 方向不变 ${l.st("P11")}；这次回撤后出现底部构造 ${l.st("P12")}；小时线多头排列 ${l.st("P13")}。`, rules: ["P10", "P11", "P12", "P13"] },
       { label: "怎么进", text: `四条都满足才进场（现在 ${l.st("P14")}）。趋势确立后第一次回到 20 / 60 / 120 线组，是非常好的入场点。`, rules: ["P14", "P15"] },
-      { label: "止损", text: l.close >= l.drop20
-        ? `买进后小时线的多头排列被破坏就走；日线价格低于 MA20 抵扣价（现在 ${f2(l.drop20)}）、MA20 拐头向下，也走。`
-        : `现在价格已经在 MA20 抵扣价 ${f2(l.drop20)} 下方，MA20 要拐头向下：先别买。买进后的止损是小时线多头排列被破坏，或日线 MA20 拐头向下。` },
+      { label: "进场后止损", text: `和持仓同一条：60 线组拐头向下（MA60、EMA60 都向下；明天收盘低于 ${f2(l.turn60)} 两条就都向下）才走。20/60 双死叉不算，60/120 还平行向上就是深回撤。`, rules: ["A1", "J7"] },
       { label: "失效", text: `${TYPE_END(l, true)}：不再是稳定上涨，不再等回调买。20/60 交叉不算，60/120 还平行向上就是深回撤。`, rules: ["J7"] },
     ] }),
-    holding: (l) => ({ action: "持有，回调可以加仓。", items: [
+    holding: (l) => ({
+      action: l.met("P14") ? "持有：吃回撤四个条件齐了，可以加。" : l.stage === "回撤中" ? "持有：已经在回撤，四个条件齐了再加。" : "持有，回调可以加仓。",
+      trigger: pullbackStep(l), stop: lv("60 线组拐头向下", l.turn60), items: [
       { label: "加仓", text: `回撤到 60 线组、MA120 方向不变、出现底部构造、小时线多头排列，四条齐了加（现在 ${l.st("P14")}）。`, rules: ["P14"] },
       { label: "止损", text: `60 线组拐头向下（MA60 ${f2(l.ma60)}、EMA60 ${f2(l.ema60)} 都向下）才走。只是碰到 MA60 不算：价格击穿均线、MA 方向不变，就是吃回撤区；20/60 双死叉也不算，60/120 还平行向上就是深回撤。`, rules: ["A1", "J7"] },
       { label: "失效", text: `${TYPE_END(l, true)}，就不是稳定上涨了：不再回调加仓，改按过渡 / 下跌的打法。`, rules: ["J7"] },
@@ -164,13 +203,14 @@ const PLAYS: Record<string, Record<Position, (l: L) => Plan>> = {
     ] }),
   },
   加速上涨: {
-    flat: (l) => ({ action: "不追，只看不做。", items: [
+    flat: (l) => ({ action: "不追，只看不做。", trigger: lv("回落到 MA20（先看）", l.ma20), stop: null, items: [
       { label: "等什么", text: `等价格回落、靠近 MA20 ${l.p(l.ma20)}，均线重新组织后再看。`, rules: ["P7"] },
       { label: "为什么", text: "价格离成本太远，要回归：要么急跌找均线，要么横着走等均线。", rules: ["J9"] },
-      { label: "止损", text: `没仓位，不用止损。回落后按稳定上涨的买法进，止损跟着那套走：MA20 拐头向下（价格低于 MA20 抵扣价，现在 ${f2(l.drop20)}）就走。` },
+      { label: "进场后止损", text: `现在不进，没有止损。回落后按稳定上涨的买法进，止损跟着那套走：60 线组拐头向下才走。` },
       { label: "失效", text: `回落很浅、20 线组一直向上：回归是靠横盘等均线完成的，按稳定上涨的打法等回撤；${DEATH(l)}：上涨结束。` },
     ] }),
-    holding: (l) => ({ action: l.met("P8") ? "拿着：没见顶部构造不下车。" : "见了顶部构造：只是提醒，等关键性波动再走。", items: [
+    holding: (l) => ({ action: l.met("P8") ? "拿着：没见顶部构造不下车。" : "见了顶部构造：只是提醒，等关键性波动再走。",
+      trigger: null, stop: lv("跌破 EMA20、EMA20 向下", l.ema20), items: [
       { label: "构造", text: l.met("P8")
         ? `顶部构造还没出现（${l.basis("J20")}），不必自己吓自己。`
         : `顶部构造已经出现（${l.basis("J20")}）。构造是路牌不是路，还不动手。`, rules: ["P8", "P9", "J20"] },
@@ -180,13 +220,15 @@ const PLAYS: Record<string, Record<Position, (l: L) => Plan>> = {
     ] }),
   },
   稳定下跌: {
-    flat: (l) => ({ action: "不抄底，空仓等。", items: [
+    flat: (l) => ({ action: l.stage === "反弹中" ? "已经在反弹：不抄底，空仓等。" : "不抄底，空仓等。",
+      trigger: lv("站上 EMA20（转强第一步，不是买点）", l.ema20), stop: null, items: [
       { label: "等什么", text: BUY_TURN(l), rules: ["P19", "P20"] },
       { label: "再等", text: "排列理顺成多头，才算底部确认。" },
       ENTRY_STOP(l),
       { label: "失效", text: `${TYPE_END(l, false)}：下跌判断失效，按过渡 / 上涨的打法看。20/60 金叉不算，60/120 还平行向下就是反弹。`, rules: ["J7"] },
     ] }),
-    holding: (l) => ({ action: "反弹到均线附近，减仓或离场。", items: [
+    holding: (l) => ({ action: l.stage === "反弹中" ? "已经在反弹：到均线附近减仓或离场。" : "反弹到均线附近，减仓或离场。",
+      trigger: lv("反弹减仓位 EMA20", l.ema20), stop: null, items: [
       { label: "减仓位", text: (l.close >= l.ema20 ? `已经在 EMA20 ${l.p(l.ema20)} 上方，现在就是减仓位（MA20 ${f2(l.ma20)} 附近也是）。`
         : `反弹到 EMA20 ${l.p(l.ema20)}、MA20 ${f2(l.ma20)} 附近。`)
         + `反弹卖出的四个触发：平行向下 ${l.st("P10")}，反弹到 60 线组 ${l.st("P11")}，顶部构造 ${l.st("P12")}，小时线空头排列 ${l.st("P13")}。`, rules: ["P10", "P11", "P12", "P13", "P14"] },
@@ -197,13 +239,14 @@ const PLAYS: Record<string, Record<Position, (l: L) => Plan>> = {
     ] }),
   },
   加速下跌: {
-    flat: (l) => ({ action: "不抢反弹，等底部构造和均线拐头。", items: [
+    flat: (l) => ({ action: "不抢反弹，等底部构造和均线拐头。",
+      trigger: (l.met("J21") ? null : constructStep(l, "J21")) ?? lv("站上 EMA20（转强第一步，不是买点）", l.ema20), stop: null, items: [
       { label: "等什么", text: `底部构造 ${l.st("J21")}；20 线组拐头向上（关键性波动）：${BUY_TURN(l)}`, rules: ["P7", "J21", "J19"] },
       { label: "再等", text: "排列理顺成多头之前，不买。" },
       ENTRY_STOP(l),
       { label: "失效", text: `${GOLD(l)}：下跌判断失效，按过渡 / 上涨的打法看。` },
     ] }),
-    holding: (l) => ({ action: "不在急跌里割最低点，反弹再减仓。", items: [
+    holding: (l) => ({ action: "不在急跌里割最低点，反弹再减仓。", trigger: lv("反弹减仓位 EMA20", l.ema20), stop: null, items: [
       { label: "减仓位", text: l.close >= l.ema20 ? `已经在 EMA20 ${l.p(l.ema20)} 上方，现在就是减仓机会。` : `反弹到 EMA20 ${l.p(l.ema20)} 附近，是减仓机会。` },
       { label: "为什么", text: "跌太急会回归成本，常有反弹找均线；但趋势没变，反弹是卖点。", rules: ["J9"] },
       { label: "止损", text: `下方没有均线托底，止损不靠均线：${l.close >= l.ema20 ? `现在已经在 EMA20 ${f2(l.ema20)} 上方，就是离场点` : `反弹到 EMA20 ${f2(l.ema20)} 一带就是离场点`}；不在急跌里割最低点，但也不把"心理价"一路往下挪。` },
@@ -212,27 +255,27 @@ const PLAYS: Record<string, Record<Position, (l: L) => Plan>> = {
     ] }),
   },
   过渡: {
-    flat: (l) => ({ action: "条件不满足，不做。", items: [
+    flat: (l) => ({ action: "条件不满足，不做。", trigger: alignUp(l), stop: null, items: [
       { label: "等什么", text: l.gold ? `20 线组已经在 60 线组上方（MA60 ${f2(l.ma60)}）；还差多数线一起向上，模糊判断到明显偏多。`
         : `排列理顺：20 线组升到 60 线组上方（MA60 ${f2(l.ma60)}），多数线一起向上。`, rules: ["J6", "J15"] },
       { label: "小心", text: "中长期线压着的反弹，多半是假动作。", rules: ["J18"] },
       ENTRY_STOP(l),
       { label: "失效", text: TRANSITION_END(l, "（明显偏多）按上涨打", "（明显偏空）按下跌打") },
     ] }),
-    holding: (l) => ({ action: "不加仓，减到心态稳得住。", items: [
+    holding: (l) => ({ action: "不加仓，减到心态稳得住。", trigger: null, stop: lv("跌破 EMA20、EMA20 向下", l.ema20), items: [
       { label: "止损", text: ema20Stop(l, "减"), rules: ["P18"] },
       { label: "失效", text: TRANSITION_END(l, "可以按上涨拿着", "按下跌减仓") },
       SIZE,
     ] }),
   },
   空头结构反弹中: {
-    flat: (l) => ({ action: "不买：中长期线压着的反弹，多半是假动作。", items: [
+    flat: (l) => ({ action: "不买：中长期线压着的反弹，多半是假动作。", trigger: alignUp(l), stop: null, items: [
       { label: "等什么", text: `20 线组升到 60 线组上方（MA20 过 MA60 ${f2(l.ma60)}、EMA20 过 EMA60 ${f2(l.ema60)}），排列理顺再看。`, rules: ["P17", "J18"] },
       { label: "推演", text: `${l.basis("J17")}。要很多天、价格得一直很强，就别等。`, rules: ["J17"] },
       ENTRY_STOP(l),
       { label: "失效", text: `${GOLD(l)}、60 线组拐头向上：不再受压，这次反弹是真的，按上涨的打法看。` },
     ] }),
-    holding: (l) => ({ action: "逢高减仓。", items: [
+    holding: (l) => ({ action: "逢高减仓。", trigger: lv("减仓位 MA60", l.ma60), stop: lv("跌破 EMA20、EMA20 向下", l.ema20), items: [
       { label: "减仓位", text: l.close >= l.ma60
         ? `已经在 MA60 ${l.p(l.ma60)} 上方，现在就是减仓机会。`
         : `反弹到 MA60 ${l.p(l.ma60)} 附近，是减仓机会。`, rules: ["P16"] },
@@ -243,7 +286,9 @@ const PLAYS: Record<string, Record<Position, (l: L) => Plan>> = {
     ] }),
   },
   多头结构回撤中: {
-    flat: (l) => ({ action: "等回调结束再买，不在下跌途中接。", items: [
+    flat: (l) => ({ action: "等回调结束再买，不在下跌途中接。",
+      trigger: l.close < l.ema20 ? lv("站上 EMA20", l.ema20) : l.close < l.drop20 ? lv("高于 MA20 抵扣价", l.drop20) : null,
+      stop: lv("跌回 EMA20 下方、EMA20 向下", l.ema20), items: [
       { label: "等什么", text: l.close < l.ema20 ? `20 线组重新拐头向上：收盘站上 EMA20 ${l.p(l.ema20)}。`
         : l.close < l.drop20 ? `已经在 EMA20 ${l.p(l.ema20)} 上方；再等 MA20 拐头向上：收盘高于 MA20 抵扣价 ${l.p(l.drop20)}。`
         : `已经在 EMA20 ${l.p(l.ema20)} 和 MA20 抵扣价 ${l.p(l.drop20)} 上方：守住几天、MA20 拐头向上，回调就结束了。`, rules: ["P19", "P20"] },
@@ -253,7 +298,8 @@ const PLAYS: Record<string, Record<Position, (l: L) => Plan>> = {
       ENTRY_STOP(l),
       { label: "失效", text: `${DEATH(l)}：结构坏了，不再有撑，按过渡 / 下跌的打法看。`, rules: ["J16"] },
     ] }),
-    holding: (l) => ({ action: "持有观察，不在急跌里卖。", items: [
+    holding: (l) => ({ action: "持有观察，不在急跌里卖。", trigger: null,
+      stop: lv("20/60 双死叉（守住）", l.solve30("20 线组双双跌破 60 线组", false)?.level), items: [
       { label: "止损", text: `${DEATH(l)}才算结构坏，那时再走。`, rules: ["J16"] },
       { label: "失效", text: `出现上面的止损信号就不再有撑：结构转空，剩下没走的仓位按过渡 / 下跌的打法处理（MA60 ${f2(l.ma60)}、EMA60 ${f2(l.ema60)} 是分界）。` },
       SIZE,
@@ -317,35 +363,169 @@ export function playKey(a: Analysis): string {
   if (t === "横盘" && met(a, "P3")) return "横盘破位";
   return t;
 }
-/** 用了打架的打法时是哪一种。 */
-const conflictOf = (a: Analysis) => {
-  const k = playKey(a);
-  return k === "空头结构反弹中" || k === "多头结构回撤中" ? k : null;
-};
 
-/** 只按趋势类型定的打法（还没加看方向给的时机）。浮盈 / 浮亏在持仓打法的做法之后加一行。 */
-function basePlans(a: Analysis): Record<Situation, Plan> {
+/** 进场价到止损的距离（%）。空仓按触发价进（没有触发价就是现价），持仓按现价。止损不在下方时不算。 */
+function riskOf(p: Draft, k: Situation, close: number): number | null {
+  if (!p.stop) return null;
+  const entry = k === "flat" ? p.trigger?.price ?? close : close;
+  return p.stop.price <= entry ? ((entry - p.stop.price) / entry) * 100 : null;
+}
+
+/** 按趋势类型和阶段定的打法。浮盈 / 浮亏在持仓打法的做法之后加一行「盈亏」，价位和持仓一样。 */
+export function buildPlans(a: Analysis): Record<Situation, Plan> {
   const key = playKey(a);
   const play = PLAYS[key];
   const l = levels(a);
   const holding = play.holding(l);
-  const withPnl = (k: "profit" | "loss"): Plan => {
+  const withPnl = (k: "profit" | "loss"): Draft => {
     const t = PNL[key][k];
     return {
+      ...holding,
       action: t.action ?? holding.action,
       items: [{ label: "盈亏", text: t.line }, ...holding.items.filter((i) => !t.omit?.includes(i.label))],
     };
   };
-  return { flat: play.flat(l), holding, profit: withPnl("profit"), loss: withPnl("loss") };
+  const drafts: Record<Situation, Draft> = { flat: play.flat(l), holding, profit: withPnl("profit"), loss: withPnl("loss") };
+  return Object.fromEntries(SITUATIONS.map((k) => [k, { ...drafts[k], risk: riskOf(drafts[k], k, a.close) }])) as Record<Situation, Plan>;
 }
 
-/** 打法 + 第一行"时机"：来自看方向（buildOutlook 的 effect），两处说的是同一句话。 */
-export function buildPlans(a: Analysis): Record<Situation, Plan> {
-  const base = basePlans(a);
-  const { effect } = buildOutlook(a);
-  const withTiming = (k: Situation): Plan => ({ ...base[k], items: [{ label: "时机", text: effect[k].text }, ...base[k].items] });
-  return Object.fromEntries(SITUATIONS.map((k) => [k, withTiming(k)])) as Record<Situation, Plan>;
+/** 结论里的一行（给模型看的数据字段）：做法、触发价、止损、风险。空仓的止损叫进场后止损。 */
+export function planLine(p: Plan, close: number, flat: boolean): string {
+  const parts = [p.action.replace(/。$/, "")];
+  if (p.trigger) parts.push(`${p.trigger.label} ${at(p.trigger.price, close)}`);
+  if (p.stop) parts.push(`${flat ? "进场后止损" : "止损"}：${p.stop.label} ${at(p.stop.price, close)}`);
+  if (p.risk !== null) parts.push(`到止损 ${p.risk.toFixed(1)}%`);
+  return parts.join("；");
 }
+
+// ---------- 找打法：条件清单 ----------
+
+/** 没满足的规则还差什么：读规则自己给的价位；构造类给下一根要越过的价位和最少还差几根（脚本的 structure）。 */
+function needOf(a: Analysis, r: RuleResult): string | null {
+  if (r.status === "满足") return null;
+  if (r.status === "需看图") return r.id === "P13" ? "小时线取不到，看小时图" : "脚本算不了，看图";
+  const v = (k: string) => r.levels[k] ?? null;
+  const step = v("下一步价");
+  if (step !== null) {
+    const k = [a.structure.bottom, a.structure.top].find((c) => c?.next_at === step)!;
+    const word = k.side === "底部构造" ? "最高价高于" : "最低价低于";
+    return `${k.side}：下一根${word} ${at(step, a.close)}${k.bars_left === 1 ? "就完成" : "，再来一根越过那根才完成"}（最少还差 ${k.bars_left} 根）`;
+  }
+  const group = v("60 线组");
+  if (r.id === "P11" && group !== null && a.close > group) return `回撤到 60 线组 ${at(group, a.close)}`;
+  if (r.id === "P19" && a.close < v("EMA20")!) return `收盘站上 EMA20 ${at(v("EMA20")!, a.close)}，EMA20 拐头向上`;
+  if (r.id === "P20") return `收盘高于 MA20 抵扣价 ${at(v("MA20 明天抵扣价")!, a.close)}，MA20 拐头向上`;
+  if (r.id === "P14") return "上面几条都满足";
+  if (r.id === "P13") return "小时线排列理顺（看小时图，日线推不出价位）";
+  return null;   // 没有价位可给：依据一栏已经说了现在是什么样
+}
+
+/** 打法用到的规则（按 play.rules 的顺序），加上满足但让位给别人的规则。 */
+export function buildChecklist(a: Analysis): Check[] {
+  const ids = [...a.play.rules, ...a.rules.filter((r) => r.yields_to && !a.play.rules.includes(r.id)).map((r) => r.id)];
+  return ids.map((id) => {
+    const r = ruleOf(a, id);
+    return { id, name: r.name, status: r.status, basis: r.basis, need: needOf(a, r), yieldsTo: r.yields_to };
+  });
+}
+
+// ---------- 做推演：三问，跨度 30 天 ----------
+
+const WAY = { 上: "向上", 下: "向下", 平: "走平" } as const;
+
+/** 问一：类型线 MA60、MA120 收盘不变能朝今天的方向走几天；天天这样走要守在哪（安全边际）。数字来自 lean.basis。 */
+function holdText(a: Analysis): string {
+  return a.lean.basis.map((b) => {
+    const kept = b.hold_days >= b.days ? `${b.days} 天都${WAY[b.direction]}` : `还能${WAY[b.direction]} ${b.hold_days} 天`;
+    if (b.direction === "平") return `${b.line} 走平`;
+    return `${b.line} 收盘不变，${kept}；${b.days} 天里收盘守在 ${at(b.level, a.close)}${b.direction === "上" ? "之上" : "之下"}，天天${WAY[b.direction]}`;
+  }).join("。") + "。";
+}
+
+/** 推演第 n 个交易日的日期（脚本给的工作日，不扣节假日）。 */
+const dayN = (a: Analysis, n: number) => `${a.projection.dates[n - 1]}（第 ${n} 个交易日）`;
+
+/** 问二：打法的条件最早哪天能齐。构造按最少还差几根，价位条件最早明天；小时线、横满几个月这种照实说。 */
+function earliestText(a: Analysis, l: L, key: string, plans: Record<Situation, Plan>): string {
+  const bars = (id: string) => l.lvl(id, "还差几根");
+  switch (key) {
+    case "稳定上涨": {
+      if (l.met("P14")) return "吃回撤四个条件今天就齐了。";
+      const wait: [number, string][] = [];
+      if (!l.met("P11")) wait.push([1, "回撤到 60 线组"]);
+      if (!l.met("P12")) wait.push([bars("P12") ?? 1, bars("P12") ? `底部构造最少还差 ${bars("P12")} 根` : "这次回撤后出现底部构造"]);
+      const hourly = l.met("P13") ? "" : "小时线多头排列看小时图，日线推不出日子。";
+      if (!wait.length) return `日线的条件都齐了，只差小时线：${hourly}`;
+      const n = Math.max(...wait.map(([d]) => d));
+      return `最早 ${dayN(a, n)}：${wait.map(([, t]) => t).join("，")}。${hourly}`;
+    }
+    case "多头结构回撤中": {
+      const t = plans.flat.trigger;
+      return t ? `最早明天 ${dayN(a, 1)}：收盘${t.label} ${at(t.price, a.close)}。`
+        : "已经在 EMA20 和 MA20 抵扣价上方：守住几天、MA20 拐头向上，回调就结束了。";
+    }
+    case "加速下跌": {
+      const n = l.met("J21") ? null : bars("J21");
+      return `这套打法空仓不买。${n ? `底部构造最早 ${dayN(a, n)}完成，` : ""}之后还要 20 线组拐头向上（关键性波动）。`;
+    }
+    case "横盘": {
+      const r = a.regime.range;
+      const need = r ? a.thresholds.RANGE_MIN_DAYS.value - r.days : null;
+      const months = l.met("J12") || need === null || need <= 0 ? "横满 6 个月已经够了"
+        : need <= FORECAST_DAYS ? `横满 6 个月最早 ${dayN(a, need)}` : `横满 6 个月还要 ${need} 个交易日，${FORECAST_DAYS} 天内齐不了`;
+      return `${months}；均线相差 < ${l.dense}%、向上张嘴要看走势，推不出日子。`;
+    }
+    default: {
+      const s = l.solve30("理顺向上");
+      return `这套打法空仓不买。${s ? `${FORECAST_DAYS} 天内要理顺向上，收盘得持平在 ${at(s.level!, a.close)}${s.side}。` : "排列理顺之前不看进场。"}`;
+    }
+  }
+}
+
+/** 求解的事件在价位哪一边发生：求"不发生"的，发生在另一边。 */
+const happensAt = (s: Solve) => (s.happen ? s.side : s.side === "以上" ? "以下" : "以上");
+
+/** 问三：什么价位推翻这个判断。稳定类看 MA120 的安全边际；加速、打架看 20/60 的 30 天求解；横盘、过渡没有单一价位，用计划里的失效。 */
+function invalidOf(a: Analysis, l: L, key: string, plans: Record<Situation, Plan>): Forecast["invalid"] {
+  const fallback = { text: plans.flat.items.find((i) => i.label === "失效")!.text, level: null };
+  const b120 = a.lean.basis.find((b) => b.line === "MA120");
+  const viaSolve = (prefix: string, happen: boolean, what: string) => {
+    const s = l.solve30(prefix, happen);
+    if (!s) return fallback;
+    return { text: `收盘停在 ${at(s.level!, a.close)}${happensAt(s)}，${FORECAST_DAYS} 天内 ${what}。`, level: lv("判断失效", s.level) };
+  };
+  switch (key) {
+    case "稳定上涨":
+    case "稳定下跌": {
+      const up = key === "稳定上涨";
+      if (!b120 || b120.direction !== (up ? "上" : "下")) return fallback;
+      return { text: `${b120.days} 天里收盘${up ? "跌破" : "升过"} ${at(b120.level, a.close)}，MA120 就可能拐头${up ? "向下" : "向上"}：60/120 不再平行${up ? "向上" : "向下"}，不再是${key}。`,
+        level: lv("判断失效：MA120 守不住", b120.level) };
+    }
+    case "加速上涨": return viaSolve("20 线组双双跌破 60 线组", false, "20/60 会双死叉：上涨结束");
+    case "多头结构回撤中": return viaSolve("20 线组双双跌破 60 线组", false, "20/60 会双死叉：结构坏了，不再有撑");
+    case "加速下跌": return viaSolve("20 线组双双站上 60 线组", true, "20/60 会双金叉：下跌判断失效");
+    case "空头结构反弹中": return viaSolve("理顺向上", true, "20 线组理顺到 60 线组上方、60 线组向上：不再受压，反弹是真的");
+    default: return fallback;
+  }
+}
+
+/** 和这套打法相关的 30 天求解（最多 3 个）；其余的页面折叠起来。 */
+const SOLVES_FOR: Record<string, string[]> = {
+  稳定上涨: ["MA60 拐头", "MA120 拐头", "20 线组双双"], 稳定下跌: ["MA60 拐头", "MA120 拐头", "20 线组双双"],
+  加速上涨: ["MA20 拐头", "20 线组双双"], 加速下跌: ["MA20 拐头", "20 线组双双"], 多头结构回撤中: ["MA20 拐头", "20 线组双双"],
+  空头结构反弹中: ["理顺向上", "20 线组双双", "MA60 拐头"], 过渡: ["理顺向上", "20 线组双双", "MA60 拐头"],
+  横盘: ["20 线组双双", "60 线组双双"], 横盘破位: ["20 线组双双", "60 线组双双"],
+};
+
+export function buildForecast(a: Analysis, plans = buildPlans(a)): Forecast {
+  const l = levels(a);
+  const key = playKey(a);
+  const solves = a.projection.solves.filter((s) => s.days === FORECAST_DAYS && SOLVES_FOR[key].some((p) => s.event.startsWith(p)));
+  return { days: FORECAST_DAYS, hold: holdText(a), earliest: earliestText(a, l, key, plans), invalid: invalidOf(a, l, key, plans), solves: solves.slice(0, 3) };
+}
+
+// ---------- 回放验证用 ----------
 
 /** 抵扣价路径里第一次高于现价是第几天（1 起）。偏多时，从那天起回调容易让 MA 拐头。 */
 const firstHigh = (path: { close: number }[], close: number) => {
@@ -354,15 +534,15 @@ const firstHigh = (path: { close: number }[], close: number) => {
 };
 
 /**
- * 看方向结论里对 MA20 的推演（价格不变时）：朝哪边、还会持续几天。和 sideOutlook 的 verdict 一一对应；
- * 中间档、或明天起就变（"逆风可能快过去""顺风在减弱"）时不下这个结论，返回 null。回放验证用它判对错。
+ * 价格不变时 MA20 朝哪边、还会持续几天（按 20 天抵扣价和模糊判断的档位 LEAN_SOME）。
+ * 中间档、或明天起就变时不下结论，返回 null。只给回放验证（scripts/replay.ts）判对错，页面不显示。
  */
 export function ma20Claim(a: Analysis): { dir: 1 | -1; days: number } | null {
   const d20 = a.drops.find((d) => d.period === 20)!;
   const some = a.thresholds.LEAN_SOME.value;
   if (a.lean.score <= -some) {
     const turn = d20.first_low;
-    // first_low 是 dma_analyze 在 20 天内找的（和结论"20 天内 MA20 都会向下"一致），不是 path 的长度
+    // first_low 是 dma_analyze 在 20 天内找的，不是 path 的长度
     return turn === null ? { dir: -1, days: 20 } : turn <= 1 ? null : { dir: -1, days: turn - 1 };
   }
   if (a.lean.score >= some) {
@@ -370,102 +550,4 @@ export function ma20Claim(a: Analysis): { dir: 1 | -1; days: number } | null {
     return high === null ? { dir: 1, days: d20.path.length } : high <= 1 ? null : { dir: 1, days: high - 1 };
   }
   return null;
-}
-
-export function buildOutlook(a: Analysis): Outlook {
-  const o = sideOutlook(a);
-  const kind = conflictOf(a);
-  if (kind) return { ...o, effect: conflictEffect(a, kind) };
-  if (playKey(a) === "横盘破位") {
-    const out: Effect = { tag: "不变", text: "底线已经破了，看方向改变不了：按止损离场，条件重新满足再进。" };
-    return { ...o, effect: { ...o.effect, holding: out, profit: out, loss: out } };
-  }
-  return o;
-}
-
-/** 打架时，看方向的影响要服从结构（不说"顺风、买点窗口"配"不买"这种话）。 */
-function conflictEffect(a: Analysis, kind: "空头结构反弹中" | "多头结构回撤中"): Record<Situation, Effect> {
-  const l = levels(a);
-  const base = basePlans(a);
-  const act = (k: Situation) => `「${base[k].action.replace(/。$/, "")}」`;
-  if (kind === "空头结构反弹中") {
-    const where = l.close >= l.ma60 ? `现在就在 MA60 ${f2(l.ma60)} 上方，正好` : `反弹到 MA60 ${f2(l.ma60)} 附近再`;
-    const sell = (k: Situation, tail: string): Effect =>
-      ({ tag: "支持", text: `支持${act(k)}：短期反弹还有劲，${where}${tail}。` });
-    return {
-      flat: { tag: "不变", text: `短期在反弹，但 20 线组还压在 60 线组下方：${act("flat")}不变，等排列理顺。` },
-      holding: sell("holding", "减"), profit: sell("profit", "锁住一部分利润"), loss: sell("loss", "减，不要等涨回成本"),
-    };
-  }
-  const hold = (k: Situation): Effect => ({ tag: "支持", text: `支持${act(k)}：短期在回调，但结构还是多头；20/60 双死叉之前不走。` });
-  return {
-    flat: { tag: "调整时机", text: l.close >= l.ema20
-      ? `调整时机：已经回到 EMA20 ${f2(l.ema20)} 上方，等 MA20 重新拐头向上再买。`
-      : `调整时机：短期还在回调，等收盘站上 EMA20 ${f2(l.ema20)}、MA20 重新拐头向上再买。` },
-    holding: hold("holding"), profit: hold("profit"), loss: hold("loss"),
-  };
-}
-
-/** 不打架时：按偏空 / 偏多 / 不明给方向结论和对策略的影响。 */
-function sideOutlook(a: Analysis): Outlook {
-  const l = levels(a);
-  const base = basePlans(a);
-  const act = (k: Situation) => `「${base[k].action.replace(/。$/, "")}」`;
-  /** 持仓三种处境（没填成本 / 浮盈 / 浮亏）共用同一句，只在需要时改说法。 */
-  const held = (text: (k: Situation) => string, tag: EffectTag) =>
-    ({ holding: { tag, text: text("holding") }, profit: { tag, text: text("profit") }, loss: { tag, text: text("loss") } });
-  const d20 = a.drops.find((d) => d.period === 20)!;
-  const after = `价格不变 ${a.lean.after.days} 天后，模糊判断是${a.lean.after.label}。`;
-  if (a.lean.score <= -l.some) {
-    const turn = d20.first_low; // MA20 第几天起扣低值（20 天内）
-    const rebound = l.close >= l.ema20 ? `现在已经在 EMA20 ${f2(l.ema20)} 上方，` : `反弹到 EMA20 ${f2(l.ema20)} 附近`;
-    return {
-      verdict: turn === null ? `逆风：价格不涨的话，20 天内 MA20 都会向下。${after}`
-        : turn <= 1 ? `逆风可能快过去：明天起 MA20 就扣到低值。${after}`
-        : `逆风：价格不涨的话，MA20 还要向下 ${turn - 1} 天。${after}`,
-      change: turn === null ? `想提前转向，${BUY_TURN(l)}`
-        : `第 ${turn} 天起 MA20 扣低值，价格不跌就会拐头向上。${l.close >= l.ema20 ? `价格已经在 EMA20 ${l.p(l.ema20)} 上方，EMA20 会先拐。` : `更早的信号是收盘站上 EMA20 ${l.p(l.ema20)}。`}`,
-      effect: {
-        flat: { tag: "支持", text: turn === null
-          ? `支持${act("flat")}：20 天内进场条件都不会出现，不用盯盘；${l.close >= l.ema20 ? `已经在 EMA20 ${f2(l.ema20)} 上方，等它拐头向上` : `收盘站上 ${f2(l.ema20)}`}，再来看。`
-          : `支持${act("flat")}：第 ${turn} 天前不会转向，不用急；之后看 MA20 能不能拐头向上。` },
-        // 横盘的持仓打法是"拿着"，没有反弹要执行的动作：逆风对它是调整时机，其余类型的持仓打法本来就是反弹减
-        ...(playKey(a) === "横盘"
-          ? held((k) => `调整时机：逆风还会持续，守住止损；${rebound}可以先减一些${
-            k === "profit" ? "，锁住一部分利润" : ""}。`, "调整时机")
-          : held((k) => `支持${act(k)}：逆风还会持续，${rebound}就执行${
-            k === "loss" ? "，不要等涨回成本" : k === "profit" ? "，先锁住一部分利润" : ""}。`, "支持")),
-      },
-    };
-  }
-  if (a.lean.score >= l.some) {
-    const high = firstHigh(d20.path, a.close);
-    // 横盘、过渡的空仓打法是"不做"：短期顺风不等于买点，等的是排列条件
-    const waitOnly = ["横盘", "横盘破位", "过渡"].includes(playKey(a));
-    const waitFlat: Effect = { tag: "不变", text: `短期顺风，但排列条件还没满足：${act("flat")}不变，等排列理顺再说。` };
-    return {
-      verdict: high === null ? `顺风：未来 ${d20.path.length} 天 MA20 都扣低值，价格不跌就继续向上。${after}`
-        : high <= 1 ? `顺风在减弱：明天起 MA20 就扣到高值。${after}`
-        : `顺风：未来 ${high - 1} 天 MA20 扣低值，价格不跌就继续向上。${after}`,
-      change: high === null ? `要转向，收盘得先跌破 EMA20 ${l.p(l.ema20)}，再跌破 MA20 抵扣价 ${l.p(l.drop20)}。`
-        : `第 ${high} 天起 MA20 扣高值，那时一回调就容易拐头向下。先盯 EMA20 ${l.p(l.ema20)}。`,
-      effect: high === null ? {
-        flat: waitOnly ? waitFlat : { tag: "支持", text: `支持${act("flat")}：未来 ${d20.path.length} 天回调都有 MA20 托着，回踩 ${f2(l.ma20)} 附近就是机会。` },
-        ...held((k) => `支持${act(k)}：顺风还在，收盘跌破 EMA20 ${f2(l.ema20)} 才需要警惕。`, "支持"),
-      } : {
-        flat: waitOnly ? waitFlat : { tag: "调整时机", text: high <= 1
-          ? `调整时机：明天起 MA20 就扣高值，回调容易让它拐头向下，现在不是回踩买点的好窗口。`
-          : `调整时机：第 ${high} 天前回调有 MA20 托着，是买点窗口；之后再买要更小心。` },
-        ...held(() => `调整时机：${high <= 1 ? "明天起" : `第 ${high} 天后`} MA20 扣高值，回调更容易破位；${l.close >= l.ema20 ? `${high <= 1 ? "现在" : "那时"}把离场价收紧到 EMA20 ${f2(l.ema20)}` : `现在已经在 EMA20 ${f2(l.ema20)} 下方，EMA20 再拐头向下就按止损走`}。`, "调整时机"),
-      },
-    };
-  }
-  return {
-    verdict: `没有明确方向：几条线方向不一致。${after}`,
-    change: a.lean.flips[0] ? `${a.lean.flips[0].text}，方向才会清楚。` : "等均线理顺，方向才会清楚。",
-    effect: {
-      flat: { tag: "不变", text: `方向不明，${act("flat")}不变，等方向出来。` },
-      ...held((k) => `方向不明，${act(k)}不变。`, "不变"),
-    },
-  };
 }

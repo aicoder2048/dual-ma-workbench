@@ -82,7 +82,6 @@ export function leanCard(l, close, trend, tie) {
         <div class="lean-trend">趋势类型 <b>${esc(trend)}</b></div></div>
       ${leanScale(l)}
     </div>
-    <p class="lean-play"></p>
     <div class="lean-evidence">
       <div class="ev"><div class="ev-k">方向：6 条成本线往哪走 <span>${l.up} 上 · ${l.flat} 平 · ${l.down} 下</span></div>${leanArrows(l)}</div>
       <div class="ev"><div class="ev-k">排布：短期线组在上还是在下 <span>相差 &lt; ${tie}% 算贴近</span></div>${leanPairs(l)}</div>
@@ -257,11 +256,10 @@ export function scenarioFlow(v) {
 }
 
 /** 求解：K 天内让某件事发生（或不发生）要持平在什么价位。 */
-export function solveList(v) {
+export function solveList(solves) {
   const text = (s) => s.status !== "有临界价位" ? s.status
     : `持平在 <b class="num">${f2(s.level)}</b>（${pct(s.pct)}）${s.side}`;
-  const items = v.solves.map((s) => `<li><span>${s.days} 天内${s.happen ? "" : "避免"}${esc(s.event)}</span><span>${text(s)}</span></li>`).join("");
-  return `<details class="ref"><summary>要多高（多低）才会变：${v.solves.length} 个求解</summary><ul class="solves">${items}</ul></details>`;
+  return `<ul class="solves">${solves.map((s) => `<li><span>${s.days} 天内${s.happen ? " " : "避免 "}${esc(s.event)}</span><span>${text(s)}</span></li>`).join("")}</ul>`;
 }
 
 /** 规则清单：打法用到的规则在前，每条的状态、依据；让位的写谁优先。全部规则折叠在下面。 */
@@ -270,27 +268,13 @@ function ruleRow(r) {
   return `<li class="rule ${r.yields_to ? "yielded" : ""}" data-rule="${esc(r.id)}">${ruleBtn(r.id)}<b>${esc(r.name)}</b>
       <span class="rs ${STATUS_CLS[r.status]}">${esc(r.status)}</span>${yields}<span class="rb">${esc(r.basis)}</span></li>`;
 }
-export function rulesList(v) {
-  const byId = new Map(v.rules.map((r) => [r.id, r]));
-  const used = v.playRules.map((id) => byId.get(id)).filter(Boolean);
-  const yielded = v.rules.filter((r) => r.yields_to && !v.playRules.includes(r.id));
+/** 全部规则，按动作、判定、公理分组，折叠着（打法用到的那几条在找打法的清单里）。 */
+export function allRules(v) {
   const groups = ["动作", "判定", "公理"].map((k) => {
     const rs = v.rules.filter((r) => r.kind === k);
     return `<h4>${k}（${rs.length}）</h4><ul class="rule-list all">${rs.map(ruleRow).join("")}</ul>`;
   }).join("");
-  return `<p class="evidence-title">打法用到的规则。点编号看 rules.md 原文（IF / THEN / 字幕出处）。</p>
-    <ul class="rule-list used">${used.map(ruleRow).join("")}${yielded.map(ruleRow).join("")}</ul>
-    <details class="ref"><summary>全部 ${v.rules.length} 条规则</summary>${groups}</details>`;
-}
-
-/** 第 4 步的结论：打法用到几条规则、各是什么状态。 */
-export function rulesAnswer(v) {
-  const byId = new Map(v.rules.map((r) => [r.id, r]));
-  const used = v.playRules.map((id) => byId.get(id)).filter(Boolean);
-  const count = (st) => used.filter((r) => r.status === st).length;
-  const chart = v.rules.filter((r) => r.status === "需看图").length;
-  return `<div class="answer"><span class="ak">结论</span><b class="big">打法用到 ${used.length} 条规则</b>
-    <span>满足 ${count("满足")} · 不满足 ${count("不满足")} · 需看图 ${count("需看图")}。全部规则里 ${chart} 条脚本算不了，要看图。</span></div>`;
+  return `<details class="ref all-rules"><summary>全部 ${v.rules.length} 条规则（点编号看 rules.md 原文）</summary>${groups}</details>`;
 }
 
 // ---------- 悬停提示 ----------
@@ -362,37 +346,112 @@ export function planBody(plans, p, close) {
   const fill = (t) => esc(t).replaceAll("{cost}", k === "profit" || k === "loss" ? f2(parseCost(p.cost)) : "成本");
   const plan = plans[k];
   return `<b class="big">${fill(plan.action)}</b>
-      <ul class="plan-items">${plan.items.map((i) => `<li${i.label === "时机" ? ' class="timing"' : ""}><span class="pl">${i.label === "时机" ? "时机 · 来自看方向" : esc(i.label)}</span>${fill(i.text)}${
+      <ul class="plan-items">${plan.items.map((i) => `<li><span class="pl">${esc(i.label)}</span>${fill(i.text)}${
         i.rules?.length ? `<span class="plan-rules">${i.rules.map(ruleBtn).join("")}</span>` : ""}</li>`).join("")}</ul>`;
 }
 
-/** 第 2 步：空仓 / 持仓切换（持仓可填成本价），一句做法 + 带价位的条件。 */
-export function planAnswer(plans, p, close) {
+// ---------- 结论：空仓、持仓各一行，带触发价、止损、风险；回测记录 ----------
+
+/** 一个价位标签：是什么、价位、离现价多远。 */
+function priceChip(key, lv, close, cls) {
+  if (!lv) return "";
+  return `<span class="pchip ${cls}" ${tip(`${key}：${lv.label} ${f2(lv.price)}`)}><span class="ck">${key}</span>${esc(lv.label)}
+    <b class="num">${f2(lv.price)}</b><span class="num muted">${pct((lv.price / close - 1) * 100)}</span></span>`;
+}
+
+/** 一行结论。buys：这套打法空仓会不会买（回测记录里有它），不买时空仓的价位叫「先看」，不叫触发。 */
+function conclusionRow(name, plan, close, flat, buys, cost) {
+  const fill = (t) => esc(t).replaceAll("{cost}", cost === null ? "成本" : f2(cost));
+  const risk = plan.risk === null ? ""
+    : plan.risk < 0.05 ? `<span class="pchip risk">止损就在${flat ? "进场价" : "现价"}：再破就走</span>`
+    : `<span class="pchip risk"><span class="ck">${flat ? "风险" : "距止损"}</span><b class="num">${plan.risk.toFixed(1)}%</b></span>`;
+  return `<div class="concl-row" data-situation="${flat ? "flat" : "holding"}">
+      <span class="who">${name}</span>
+      <div class="what"><b>${fill(plan.action)}</b>
+        <div class="chips-row">${priceChip(flat ? (buys ? "触发" : "先看") : "盯住", plan.trigger, close, "trigger")}
+          ${priceChip(flat ? "进场后止损" : "止损", plan.stop, close, "stop")}${risk}</div></div></div>`;
+}
+
+/** 结论卡片的持仓那一行：按成本价分浮盈 / 浮亏（没填就是持仓）。输入成本时只重画这一行。 */
+export function holdingRow(r, close, p) {
+  const k = situationOf({ pos: "holding", cost: p.cost }, close);
+  const cost = k === "profit" || k === "loss" ? parseCost(p.cost) : null;
+  return conclusionRow(SITUATION_LABEL[k], r.plans[k], close, false, true, cost);
+}
+
+export function conclusionCard(r, close, p) {
+  const buys = r.record.setup !== null;
+  return `<div class="concl-head"><span class="eyebrow">结论</span><b class="concl-trend">${esc(r.trend.type)}</b>
+      <span class="concl-lean">接下来几周 <span class="lean-label ${stanceOf(r.visual.lean)}">${esc(r.visual.lean.label)}</span></span>
+      <button type="button" class="ask-card" data-ask-card="verdict" aria-haspopup="menu">问鸿雁</button></div>
+    ${conclusionRow("空仓", r.plans.flat, close, true, buys, null)}
+    <div class="holding-row">${holdingRow(r, close, p)}</div>
+    <div class="pos-cost"><label for="pos-cost">持仓成本</label><input id="pos-cost" inputmode="decimal" placeholder="可不填" value="${esc(p.cost ?? "")}"><span class="pnl">${pnlText(p.cost, close)}</span></div>
+    <p class="record"><span class="pl">回测</span>${esc(r.record.text)}</p>`;
+}
+
+/** K 线图上的虚线：当前处境（找打法里选的空仓 / 持仓）的触发价和止损，加上推翻判断的价位。 */
+export function chartLevels(r, p, close) {
+  const k = situationOf(p, close);
+  const plan = r.plans[k];
+  const flat = k === "flat";
+  const inv = r.forecast.invalid.level;
+  const lines = [
+    plan.trigger && { kind: "trigger", price: plan.trigger.price, title: flat ? (r.record.setup ? "触发" : "先看") : "盯住" },
+    plan.stop && { kind: "stop", price: plan.stop.price, title: flat ? "进场后止损" : "止损" },
+  ].filter(Boolean);
+  // 同一个价位只画一条（例如空头结构反弹中：先看的就是推翻判断的理顺价位）
+  const same = inv && lines.find((l) => Math.abs(l.price - inv.price) < 0.005);
+  if (same) same.title += " · 判断失效";
+  else if (inv) lines.push({ kind: "invalid", price: inv.price, title: "判断失效" });
+  return lines;
+}
+
+// ---------- 找打法：哪套打法、条件清单、还差什么 ----------
+const MARK = { 满足: ["✓", "met"], 不满足: ["✗", "unmet"], 需看图: ["需看图", "chart"] };
+
+/** 打法用到的规则逐条：✓ 满足、✗ 不满足、需看图；没满足的写还差什么。 */
+export function checklist(checks) {
+  return `<ul class="checklist">${checks.map((c) => {
+    const [mark, cls] = MARK[c.status];
+    return `<li class="${cls}" data-rule="${esc(c.id)}"><span class="mark ${cls}" aria-label="${esc(c.status)}">${mark}</span>${ruleBtn(c.id)}<b>${esc(c.name)}</b>
+      <span class="rb">${esc(c.basis)}</span>${c.need ? `<span class="need">还差：${esc(c.need)}</span>` : ""}${
+      c.yieldsTo ? `<span class="yield">让位：${ruleBtn(c.yieldsTo)} 优先，不按它做</span>` : ""}</li>`;
+  }).join("")}</ul>`;
+}
+
+/** 还差什么（一句）：会买的打法列没满足的条件；不买的打法照实说，给先看的价位。 */
+function missing(r, close) {
+  const t = r.plans.flat.trigger;
+  if (r.record.setup === null) return `这套打法空仓不买。${t ? `先看：${esc(t.label)} ${f2(t.price)}（${pct((t.price / close - 1) * 100)}）。` : ""}`;
+  const left = r.checklist.filter((c) => c.status !== "满足" && c.need && c.id !== "P14");
+  if (!left.length) return "条件都齐了。";
+  return left.map((c) => `${ruleBtn(c.id)} ${esc(c.need)}`).join("；") + "。";
+}
+
+/** 第 2 步：打法 + 还差什么 + 条件清单；下面是按处境的具体做法（空仓 / 持仓切换）。 */
+export function playAnswer(r, p, close) {
   const seg = Object.entries(POS).map(([k, label]) =>
     `<button type="button" data-pos="${k}" aria-pressed="${k === p.pos}">${label}</button>`).join("");
-  const cost = p.pos === "holding"
-    ? `<div class="pos-cost"><label for="pos-cost">成本价</label><input id="pos-cost" inputmode="decimal" placeholder="可不填" value="${esc(p.cost ?? "")}"><span class="pnl">${pnlText(p.cost, close)}</span></div>`
-    : "";
-  return `<div class="answer plan">
-      <div class="pos-row"><span class="ak">你现在</span><div class="pos-seg" role="group" aria-label="有没有仓位">${seg}</div></div>
-      ${cost}
-      <div class="plan-body">${planBody(plans, p, close)}</div>
+  return `<div class="answer play">
+      <span class="ak">打法</span><b class="big">${esc(r.visual.trend)}：按「${esc(r.playKey)}」的打法</b>
+      <p class="play-text"></p>
+      <p class="missing"><span class="pl">还差什么</span>${missing(r, close)}</p>
+      ${checklist(r.checklist)}
+      <div class="pos-row"><span class="ak">具体做法</span><div class="pos-seg" role="group" aria-label="有没有仓位">${seg}</div></div>
+      <div class="plan-body">${planBody(r.plans, p, close)}</div>
     </div>`;
 }
 
-/** 看方向对策略的影响（一行），跟着处境变。 */
-export function effectLine(o, p, close) {
-  const k = situationOf(p, close);
-  // 正文已经以"支持 / 调整时机 / 方向不明…"开头，标签里不再重复 tag
-  return `<span class="pl">对上面的策略（${SITUATION_LABEL[k]}）</span>${esc(o.effect[k].text)}`;
-}
-
-/** 第 3 步：方向结论 + 最早何时会变 + 对你意味着什么。 */
-export function outlookAnswer(o, p, close) {
-  return `<div class="answer">
-      <span class="ak">结论</span><b class="big">${esc(o.verdict)}</b>
-      <p><span class="pl">会变吗</span>${esc(o.change)}</p>
-      <p class="effect">${effectLine(o, p, close)}</p>
+// ---------- 做推演：三问，跨度 30 天 ----------
+export function forecastAnswer(f) {
+  return `<div class="answer forecast"><span class="ak">只看 ${f.days} 天</span>
+      <ol class="q3">
+        <li><span class="pl">类型线能撑多久</span>${esc(f.hold)}</li>
+        <li><span class="pl">条件最早哪天齐</span>${esc(f.earliest)}</li>
+        <li class="invalid"><span class="pl">什么价位推翻判断</span>${esc(f.invalid.text)}</li>
+      </ol>
+      ${f.solves.length ? `<p class="evidence-title">和这套打法有关的求解（${f.days} 天）</p>${solveList(f.solves)}` : ""}
     </div>`;
 }
 
@@ -420,13 +479,17 @@ function bigPictureEvidence(v) {
     + `<details class="ref"><summary>趋势类型对照（现在是哪一种）</summary>${trendTable(v)}</details>`;
 }
 
-/** 每一步的证据（结论在 step-answer 里）。 */
-export function stepVisuals(key, v) {
+/** 每一步的证据（结论在 step-answer 里）。forecast 只给 30 天的门槛，其余推演折叠。 */
+export function stepVisuals(key, v, days = 30) {
   if (key === "big_picture") return bigPictureEvidence(v);
-  if (key === "direction") {
-    return `<p class="evidence-title">证据：未来 10 天每条 MA 要扣掉的价格。红点在现价上方 = 扣高值，均线往下拉；绿点在下方 = 扣低值，往上抬。</p>`
-      + dropMultiples(v) + hurdleTable(v) + scenarioFlow(v) + solveList(v);
+  if (key === "play") return allRules(v);
+  if (key === "forecast") {
+    const long = { ...v, hurdles: v.hurdles.filter((h) => h.days === days) };
+    return `<p class="evidence-title">证据：MA60、MA120 未来 ${days} 天要扣掉的价格里最高、最低是多少。</p>`
+      + hurdleTable(long)
+      + `<details class="ref more"><summary>更多推演：模糊判断、抵扣价、持平情景、全部求解</summary>`
+      + `<div class="lean-box">${leanCard(v.lean, v.close, v.trend, v.tie)}</div>`
+      + dropMultiples(v) + hurdleTable(v) + scenarioFlow(v) + solveList(v.solves) + `</details>`;
   }
-  if (key === "rules") return rulesList(v);
   return "";
 }

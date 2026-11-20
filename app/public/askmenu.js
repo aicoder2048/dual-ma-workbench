@@ -2,18 +2,18 @@
 // cardQuestions 是纯函数（bun test 直接测）；initAskMenu 在浏览器里接上菜单。
 
 export const CARD_NAMES = {
+  verdict: "结论",
   chart: "日线图",
   big_picture: "1. 看大局",
-  strategy: "2. 定策略",
-  direction: "3. 看方向",
-  rules: "4. 规则清单",
+  play: "2. 找打法",
+  forecast: "3. 做推演",
 };
 
 const fmt = (x, d = 1) => `${x >= 0 ? "+" : ""}${Number(x).toFixed(d)}`;
 
-/** analysis：脚本结果；visual：report.visual。返回 [{ text }]，最多 5 条，按和这只股票的相关程度排。 */
-export function cardQuestions(card, analysis, visual) {
-  const a = analysis, v = visual;
+/** analysis：脚本结果；report：规则版报告（visual 是它的图表数据）。返回 [{ text }]，最多 5 条，按和这只股票的相关程度排。 */
+export function cardQuestions(card, analysis, report) {
+  const a = analysis, r = report, v = report.visual;
   const qs = [];
   const add = (cond, text) => cond && qs.push({ text });
   const pctl = Math.round(a.bias_pctl * 100);
@@ -35,27 +35,33 @@ export function cardQuestions(card, analysis, visual) {
     add(a.arr_ma !== a.arr_ema, `MA ${a.arr_ma}、EMA ${a.arr_ema}，两种排列为什么不一样？`);
     add(true, `"${a.lines[0].clock}"这种钟表读法怎么用？`);
     add(true, "价位梯子怎么读？间距大小说明什么？");
-  } else if (card === "strategy") {
+  } else if (card === "verdict") {
+    const f = r.plans.flat, h = r.plans.holding;
+    add(true, `为什么空仓是「${f.action.replace(/。$/, "")}」？`);
+    add(Boolean(f.trigger), f.trigger && `${f.trigger.label} ${f.trigger.price.toFixed(2)} 是怎么来的？`);
+    add(Boolean(h.stop), h.stop && `止损为什么是「${h.stop.label}」，放在 ${h.stop.price.toFixed(2)}？`);
+    add(r.record.setup?.ci_crosses_zero === true, "回测的 90% 区间跨过 0，说明什么？");
+    add(r.record.setup === null, "这套打法为什么空仓不买？");
+    add(true, "空仓和持仓的做法为什么不一样？");
+  } else if (card === "play") {
     const t = a.regime.name;
-    add(true, `为什么「${t}」要这样做？`);
-    add(true, `出现什么变化，才会从「${t}」变成别的类型？`);
-    add(a.regime.type === null, `「${t}」和横盘有什么区别？`);
-    add(true, "仓位为什么要以心态稳得住为准？");
-  } else if (card === "direction") {
-    const worst = [...a.drops].sort((x, y) => x.ma_flat_change_pct - y.ma_flat_change_pct)[0];
-    const kind = worst.below === 0 ? "都扣高值" : worst.below === worst.count ? "都扣低值" : `扣低 ${worst.below} 天`;
-    add(true, `MA${worst.period} 未来 ${worst.count} 天${kind}，意味着什么？`);
-    add(a.arr_ma !== sc.end_arr_ma, `价格不变 ${sc.days} 天，MA 排列为什么会从${a.arr_ma}变成${sc.end_arr_ma}？`);
-    add(a.arr_ma === sc.end_arr_ma, `价格不变 ${sc.days} 天，MA 排列为什么还是${sc.end_arr_ma}？`);
-    add(true, "门槛路径的最高、最低抵扣价怎么读？");
-    add(true, "棒棒糖图怎么读？在现价上方和下方有什么区别？");
-    add(true, "EMA 没有抵扣价，推演公式是什么？");
-  } else if (card === "rules") {
-    const yielded = a.rules.find((r) => r.yields_to);
+    const left = r.checklist.find((c) => c.status === "不满足" && c.need && c.id !== "P14");
+    const yielded = a.rules.find((x) => x.yields_to);
+    add(true, `为什么「${t}」用「${r.playKey}」这套打法？`);
+    add(Boolean(left), left && `${left.id}「${left.name}」还差什么，怎么算出来的？`);
     add(Boolean(yielded), yielded && `${yielded.id} 满足，为什么还是按 ${yielded.yields_to} 做？`);
-    add(a.rules.some((r) => r.id === "P13" && r.status === "需看图"), "小时线那条为什么要看图？");
-    add(true, "规则里的公理、判定、动作有什么区别？");
-    add(true, `打法用到的 ${a.play.rules.join("、")} 各说了什么？`);
+    add(r.checklist.some((c) => c.status === "需看图"), "需看图的那条要怎么看图？");
+    add(true, `出现什么变化，才会从「${t}」变成别的类型？`);
+    add(true, "仓位为什么要以心态稳得住为准？");
+  } else if (card === "forecast") {
+    const f = r.forecast;
+    const b = a.lean.basis.find((x) => x.line === "MA120");
+    add(Boolean(b), b && `MA120 ${f.days} 天要守在 ${b.level.toFixed(2)}，这个价位怎么算出来的？`);
+    add(true, "条件最早哪天能齐，是怎么推出来的？");
+    add(Boolean(f.invalid.level), f.invalid.level && `为什么 ${f.invalid.level.price.toFixed(2)} 会推翻这个判断？`);
+    add(a.arr_ma !== sc.end_arr_ma, `价格不变 ${sc.days} 天，MA 排列为什么会从${a.arr_ma}变成${sc.end_arr_ma}？`);
+    add(true, "门槛路径的最高、最低抵扣价怎么读？");
+    add(true, "EMA 没有抵扣价，推演公式是什么？");
   }
   return qs.slice(0, 5);
 }
@@ -76,7 +82,7 @@ export function selectionLabel(sel) {
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
 /**
- * getState() → { analysis, visual, aiSuggestions: [{text}] }
+ * getState() → { analysis, report, aiSuggestions: [{text}] }
  * ask(question, selection) → 发给鸿雁
  */
 export function initAskMenu({ getState, ask }) {
@@ -93,7 +99,7 @@ export function initAskMenu({ getState, ask }) {
     const s = getState();
     if (!s?.analysis) return;
     const card = btn.dataset.askCard;
-    const qs = cardQuestions(card, s.analysis, s.visual);
+    const qs = cardQuestions(card, s.analysis, s.report);
     const ai = (s.aiSuggestions ?? []).filter((x) => !qs.some((q) => q.text === x.text)).slice(0, 2);
     menu.innerHTML = `<div class="am-head"><b>问鸿雁</b> · 关于「${esc(CARD_NAMES[card])}」（${esc(s.analysis.label)}）</div>
       ${qs.map((q) => `<button type="button" class="q" role="menuitem">${esc(q.text)}</button>`).join("")}
