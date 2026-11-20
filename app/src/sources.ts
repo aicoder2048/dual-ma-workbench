@@ -186,7 +186,10 @@ export class SourceLibrary {
     return [...real, ...aliases];
   }
 
-  /** 关键词检索：英文按词、中文按二字组，标题命中权重更高。每个词在正文里最多算 3 次，免得长段落靠重复刷分。 */
+  /**
+   * 关键词检索：英文按词、中文按二字组。先比命中了几个不同的词，再比分数（标题命中权重更高，
+   * 每个词在正文里最多算 3 次）。只靠分数时，标题里有半个问题的片段会压过整个问题都答到的片段。
+   */
   search(query: string, limit = 6): { chunk: Chunk; score: number }[] {
     const terms = queryTerms(query);
     if (!terms.length) return [];
@@ -194,12 +197,13 @@ export class SourceLibrary {
       .map((chunk) => {
         const head = chunk.heading.toLowerCase();
         const body = chunk.body.toLowerCase();
-        const score = terms.reduce((s, t) => s + (head.includes(t) ? 3 : 0) + Math.min(countOf(body, t), BODY_HITS_CAP), 0);
-        return { chunk, score };
+        const hits = terms.map((t) => (head.includes(t) ? 3 : 0) + Math.min(countOf(body, t), BODY_HITS_CAP));
+        return { chunk, score: hits.reduce((s, h) => s + h, 0), covered: hits.filter((h) => h > 0).length };
       })
       .filter((r) => r.score > 0)
-      .sort((a, b) => b.score - a.score)
-      .slice(0, limit);
+      .sort((a, b) => b.covered - a.covered || b.score - a.score)
+      .slice(0, limit)
+      .map(({ chunk, score }) => ({ chunk, score }));
   }
 }
 

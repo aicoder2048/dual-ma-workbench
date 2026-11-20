@@ -39,6 +39,14 @@ describe("SourceLibrary.search", () => {
     ].join("\n")));
     expect(lib.search("抵扣价的公式")[0].chunk.heading).toBe("定义与公式");
   });
+
+  test("标题对上一半词的片段，排不过所有词都命中的片段", () => {
+    const lib = new SourceLibrary(chunkMarkdown(DOC, [
+      "## 抵扣价", "抵扣价是 N 天前的收盘价。抵扣价高于现价，均线下行。抵扣价低于现价，均线上行。",
+      "## 定义与公式", "MA 每天的变化 = (今天收盘价 − 抵扣价) / N。",
+    ].join("\n")));
+    expect(lib.search("抵扣价 公式")[0].chunk.heading).toBe("定义与公式");
+  });
 });
 
 const HAS_PRIVATE = existsSync(resolve(PROJECT_ROOT, "chat/1118_what-I-want.md"));
