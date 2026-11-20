@@ -782,19 +782,25 @@ describe("十字线日期", () => {
   }, 30_000);
 });
 
-describe("看大局的证据：按判断顺序的四问", () => {
-  // 四问改成脚本的判断顺序（rules.md J1–J7）：类型看 60/120 线组和钟表，加速看钟表或乖离，阶段看 20 线组
-  test("四问依次是：60/120 排好没有、60 线几点钟、是不是加速、20 线组走到哪一步；每问先给判断；最后接回结论", async () => {
+describe("看大局的证据：按判断顺序的五问", () => {
+  // 按脚本的判断顺序（rules.md J1–J7）：类型看 60/120 线组和钟表，加速看钟表或乖离，阶段看 20 线组；最后看大一级、小一级
+  test("五问依次是：60/120 排好没有、60 线几点钟、是不是加速、20 线组走到哪一步、周线和小时线；每问先给判断；最后接回结论", async () => {
     const { page, errors } = await open();
     const step = page.locator('[data-step="big_picture"]');
     const qs = await step.locator(".check h3").allTextContents();
-    expect(qs.map((q) => q.replace(/\s+/g, ""))).toEqual(["①60/120线组排好了吗？", "②60线几点钟？", "③是不是加速？", "④20线组走到哪一步？"]);
+    expect(qs.map((q) => q.replace(/\s+/g, ""))).toEqual(["①60/120线组排好了吗？", "②60线几点钟？", "③是不是加速？", "④20线组走到哪一步？", "⑤周线、小时线怎么排？"]);
     for (const q of await step.locator(".check h3").all()) expect(await q.isVisible()).toBe(true);
     const verdicts = await step.locator(".check .judge").allTextContents();
     expect(verdicts[0]).toContain("有类型");
     expect(verdicts[1]).toContain("点");
     expect(verdicts[2]).toContain("加速起点");
     expect(verdicts[3]).toContain("延伸");
+    expect(verdicts[4]).toContain("周线 MA 多头");
+    expect(verdicts[4]).toContain("小时线 MA 空头");
+    // 五步进度：60/120 这一轮向下走到第一个交叉，日期写出来
+    const row = step.locator("table.steps5 tbody tr").nth(1);
+    expect(await row.textContent()).toContain("11-13");
+    expect(await row.textContent()).toContain("4/5");
     expect(await step.locator(".check-sum").textContent()).toContain("加速下跌·延伸");
     expect(await step.locator("table.vt th:text('MA 方向')").count()).toBe(0); // 和总结卡片重复的均线表去掉了
     expect(errors).toEqual([]);
@@ -1137,6 +1143,70 @@ describe("K 线回放", () => {
     await page.click(".chart-help-toggle");
     const text = (await page.textContent(".chart-help"))!;
     for (const k of ["回放", "Shift+↓", "Shift+→", "Shift+←"]) expect(text).toContain(k);
+    await page.close();
+  }, 30_000);
+});
+
+describe("规则清单：每条规则的结论能点到 rules.md", () => {
+  /** 像用户一样把这一块滚进中栏视野，再看它的标题有没有被别的东西挡住。 */
+  const scrollIntoCenter = (page: Page, sel: string) => page.evaluate(async (sel) => {
+    const s = document.getElementById("center-scroll")!;
+    const el = document.querySelector<HTMLElement>(sel)!;
+    s.scrollTop += el.getBoundingClientRect().top - s.getBoundingClientRect().top - 40;
+    await new Promise((ok) => requestAnimationFrame(() => requestAnimationFrame(ok)));
+  }, sel);
+  const notCovered = (page: Page, sel: string) => page.evaluate((sel) => {
+    const el = document.querySelector<HTMLElement>(sel)!;
+    const r = el.getBoundingClientRect();
+    const hit = document.elementFromPoint(r.x + Math.min(20, r.width / 2), r.y + r.height / 2);
+    return r.height > 0 && !!hit && el.contains(hit);
+  }, sel);
+
+  test("默认视图往下读：规则清单卡片看得见、没被挡；改名后的类型在页面上", async () => {
+    const { page, errors } = await open();
+    const card = '[data-step="rules"]';
+    expect(await page.locator(`${card} h2`).textContent()).toBe("规则清单");
+    await scrollIntoCenter(page, card);
+    expect(await notCovered(page, `${card} .step-head h2`)).toBe(true);
+    expect(await notCovered(page, `${card} .rule-list.used li`)).toBe(true);
+    expect(await page.locator(`${card} .answer`).textContent()).toContain("打法用到 5 条规则");
+    const used = await page.locator(`${card} .rule-list.used li`).evaluateAll((els) => els.map((e) => (e as HTMLElement).dataset.rule));
+    expect(used).toEqual(["P7", "P8", "P9", "J19", "J21"]);
+    const body = (await page.textContent("#center-scroll"))!;
+    expect(body).toContain("加速下跌");
+    expect(body).not.toMatch(/极度超卖|极度超买|健康上涨|健康下跌/);
+    expect(errors).toEqual([]);
+    await page.close();
+  }, 30_000);
+
+  test("点规则编号：弹出 rules.md 那一条的 IF / THEN 和出处", async () => {
+    const { page, errors } = await open();
+    await scrollIntoCenter(page, '[data-step="rules"]');
+    await page.click('[data-step="rules"] .rule-list.used li[data-rule="P7"] .rule-ref');
+    await page.waitForSelector("#popover .pop-body");
+    expect(await page.textContent("#popover .pop-head")).toContain("P7（动作）");
+    expect(await page.textContent("#popover .pop-body")).toContain("THEN");
+    expect(await page.textContent("#popover .pop-path")).toContain("rules.md");
+    expect(errors).toEqual([]);
+    await page.close();
+  }, 30_000);
+
+  test("定策略的条件也带规则编号，点开是同一个弹窗", async () => {
+    const { page } = await open();
+    const chip = page.locator('[data-step="strategy"] .plan-rules .rule-ref').first();
+    expect(await chip.textContent()).toBe("P7");
+    await chip.click();
+    await page.waitForSelector("#popover .pop-body");
+    expect(await page.textContent("#popover .pop-head")).toContain("P7");
+    await page.close();
+  }, 30_000);
+
+  test("看方向有门槛路径和持平情景（脚本的 projection）", async () => {
+    const { page } = await open();
+    const dir = page.locator('[data-step="direction"]');
+    expect(await dir.locator("table.hurdles tbody tr").count()).toBe(3);
+    expect(await dir.locator("table.hurdles").textContent()).toContain("239.24"); // MA60 30 天抵扣价最高
+    expect(await dir.locator(".flow").textContent()).toContain("30 个交易日");
     await page.close();
   }, 30_000);
 });

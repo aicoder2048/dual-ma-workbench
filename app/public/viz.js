@@ -16,8 +16,11 @@ export function clockGlyph(clock) {
 
 // ---------- 模糊判断：接下来几周对谁有利 ----------
 const LEAN_SCALE = ["明显偏空", "偏空", "不明", "偏多", "明显偏多"];
-/** 和服务端 report.ts 的 stanceOf 同一规则。 */
-export const stanceOf = (l) => (l.score >= 0.25 ? "bullish" : l.score <= -0.25 ? "bearish" : "neutral");
+/** 和服务端 report.ts 的 stanceOf 同一规则：跟脚本给的档位走。 */
+export const stanceOf = (l) => (l.label.includes("偏多") ? "bullish" : l.label.includes("偏空") ? "bearish" : "neutral");
+/** 规则编号按钮：点开 rules.md 里那一条（和回答里的 [[S:rules#P17]] 同一个弹窗）。 */
+export const ruleBtn = (id) => `<button type="button" class="cite src rule-ref" data-kind="S" data-ref="rules#${esc(id)}" title="rules.md ${esc(id)}">${esc(id)}</button>`;
+const STATUS_CLS = { 满足: "met", 不满足: "unmet", 需看图: "chart" };
 export const leanName = (l) => l.label;
 const ARROW = { 1: ["↗", "bullish", "向上"], 0: ["→", "neutral", "走平"], [-1]: ["↘", "bearish", "向下"] };
 const REL = { 1: "在上", 0: "贴近", [-1]: "在下" };
@@ -72,7 +75,7 @@ function leanFlips(l, close) {
   return `<ul class="lean-flips">${rows}</ul>`;
 }
 
-export function leanCard(l, close, trend) {
+export function leanCard(l, close, trend, tie) {
   return `<div class="lean-top">
       <div class="lean-verdict"><span class="eyebrow">接下来几周 · 对谁有利</span>
         <div class="lean-label ${stanceOf(l)}">${esc(l.label)}</div>
@@ -82,7 +85,7 @@ export function leanCard(l, close, trend) {
     <p class="lean-play"></p>
     <div class="lean-evidence">
       <div class="ev"><div class="ev-k">方向：6 条成本线往哪走 <span>${l.up} 上 · ${l.flat} 平 · ${l.down} 下</span></div>${leanArrows(l)}</div>
-      <div class="ev"><div class="ev-k">排布：短期线组在上还是在下 <span>相差 &lt; 0.5% 算贴近</span></div>${leanPairs(l)}</div>
+      <div class="ev"><div class="ev-k">排布：短期线组在上还是在下 <span>相差 &lt; ${tie}% 算贴近</span></div>${leanPairs(l)}</div>
       <div class="ev"><div class="ev-k">什么会改变判断 <span>距现价</span></div>${leanFlips(l, close)}</div>
     </div>
     <p class="lean-foot">模糊判断：看类型线 MA60、MA120 往哪走、收盘不变能保持几天（${l.basis.map((b) => `${b.line} ${b.direction} ${b.hold_days}/${b.days} 天`).join("，")}），不预测明天涨跌。价位过了门槛，才值得反应。</p>`;
@@ -127,14 +130,37 @@ export function ladder(v) {
     <figcaption>价位梯子：实心点是 MA，空心圈是 EMA，竖线是收盘价。左低右高。</figcaption></figure>`;
 }
 
-/** 乖离分位条：0–100%，两端 5% 是"大幅乖离"区。 */
+/** 乖离分位条：0–100%，两端（脚本的 EXTREME_PCTL）是"大幅乖离"区。 */
 export function biasMeter(v) {
   const p = Math.max(0, Math.min(1, v.bias.pctl));
+  const edge = Math.round((1 - v.bias.extreme) * 100);
   return `<figure class="viz meter" ${tip(`离 20 线 ${pct(v.bias.value)}，历史 ${Math.round(p * 100)}% 分位`)}>
       <div class="meter-track"><span class="zone lo"></span><span class="zone hi"></span>
         <span class="needle" style="left:${(p * 100).toFixed(1)}%"><b>${Math.round(p * 100)}%</b></span></div>
-      <div class="meter-axis"><span>0% 最负</span><span>大幅乖离区：两端各 5%</span><span>100% 最正</span></div>
+      <div class="meter-axis"><span>0% 最负</span><span>大幅乖离区：两端各 ${edge}%</span><span>100% 最正</span></div>
     <figcaption>离 20 线 ${pct(v.bias.value)}：在自身历史里排 ${Math.round(p * 100)}% 分位。</figcaption></figure>`;
+}
+
+/** 五步进度（rules.md J15）：每对线组这一轮转折走到哪一步，每步带日期。 */
+const STEP_NAMES = ["破线", "EMA 拐头", "MA 拐头", "第一个交叉", "双交叉"];
+export function fiveSteps(v) {
+  const rows = v.steps.map((p) => {
+    const t = p.current;
+    const cells = STEP_NAMES.map((n) => {
+      const d = t?.steps.find((x) => x.step === n)?.date;
+      return d ? `<td class="done" ${tip(`${p.pair} ${n} ${d}`)}>✓ <span class="num">${d.slice(5)}</span></td>` : `<td class="todo">—</td>`;
+    }).join("");
+    const last = p.completed?.steps.at(-1)?.date;
+    return `<tr><th>${p.pair}<span class="sub">${esc(p.side ?? "未定")}${t ? ` → ${t.direction}` : ""}</span></th>${cells}
+      <td class="num">${t?.progress ?? 0}/5${last ? `<span class="sub">上一轮 ${last}</span>` : ""}</td></tr>`;
+  }).join("");
+  return `<table class="vt steps5"><thead><tr><th>线组</th>${STEP_NAMES.map((n) => `<th>${n}</th>`).join("")}<th>进度</th></tr></thead><tbody>${rows}</tbody></table>
+    <p class="legend-note">每对线组现在站在哪边、这一轮往反方向走到第几步 ${ruleBtn("J15")}。双交叉要同一对周期的 MA、EMA 都交叉 ${ruleBtn("J16")}。</p>`;
+}
+
+/** 周线、小时线的排列：大一级定方向（J11），小一级找进场点（P13）。 */
+function frameText(name, f) {
+  return f.available ? `${name} MA <b>${esc(f.arr_ma)}</b>、EMA <b>${esc(f.arr_ema)}</b>` : `${name}取不到（${esc(f.reason)}）`;
 }
 
 export function crossTable(v) {
@@ -147,8 +173,9 @@ export function crossTable(v) {
 // ---------- 2. 定策略 ----------
 export function trendTable(v) {
   const rows = v.trendTable.map((r) => `<tr class="${r.current ? "cur" : ""}">
-      <th>${r.current ? "▶ " : ""}${esc(r.type)}</th><td>${esc(r.look)}</td><td>${esc(r.play)}</td></tr>`).join("");
-  return `<table class="vt trend"><thead><tr><th>趋势类型</th><th>均线长什么样</th><th>打法</th></tr></thead><tbody>${rows}</tbody></table>`;
+      <th>${r.current ? "▶ " : ""}${esc(r.type)}</th><td>${esc(r.look)}</td><td>${esc(r.play)}</td><td class="num">${esc(r.rules)}</td></tr>`).join("");
+  return `<table class="vt trend"><thead><tr><th>趋势类型</th><th>均线长什么样</th><th>打法</th><th>规则</th></tr></thead><tbody>${rows}</tbody></table>
+    <p class="legend-note">这张表在 SKILL.md 第 1 步，是唯一的一份。</p>`;
 }
 
 // ---------- 3. 看方向 ----------
@@ -193,20 +220,77 @@ export function dropMultiples(v, opts = {}) {
     <p class="legend-note"><span class="key hi"></span>在现价上方 = 扣高值，MA 往下拉　<span class="key lo"></span>在下方 = 扣低值，MA 往上抬　三张图纵轴相同</p>`;
 }
 
-/** 推演链：价格不变 N 天 → 每条均线怎么动 → 排列变成什么。 */
-export function projectionFlow(v) {
-  const p = v.projection;
-  const arrow = (a, b) => (Math.abs(b - a) / a < 0.001 ? "→" : b > a ? "↗" : "↘");
-  const rows = (obj) => Object.entries(obj).map(([k, x]) =>
-    `<li ${tip(`${k}：${f2(x.now)} → ${f2(x.after)}`)}><span class="k">${k}</span><span class="num">${f2(x.now)}</span><span class="ar ${x.after >= x.now ? "bullish" : "bearish"}">${arrow(x.now, x.after)}</span><span class="num">${f2(x.after)}</span></li>`).join("");
-  const arr = (a, b) => `<span class="arr">${a}</span> → <span class="arr ${b === "多头" ? "bullish" : b === "空头" ? "bearish" : "neutral"}">${b}</span>`;
+/** 门槛路径（rules.md A2）：每条 MA 未来 K 天要扣的价格里最高、最低是多少，第几天。 */
+export function hurdleTable(v) {
+  const rows = v.hurdles.map((h) => {
+    const where = v.close > h.max_price ? ["bullish", "现价在最高之上：收盘不变，天天上行"]
+      : v.close < h.min_price ? ["bearish", "现价在最低之下：收盘不变，天天下行"] : ["neutral", "现价在两者之间：有涨有跌"];
+    return `<tr><th><i class="sw" style="--c: var(--ma${h.period})"></i>MA${h.period}</th><td class="num">${h.days} 天</td>
+      <td class="num">${f2(h.max_price)} <span class="sub">${pct((h.max_price / v.close - 1) * 100)} · 第 ${h.max_day} 天</span></td>
+      <td class="num">${f2(h.min_price)} <span class="sub">${pct((h.min_price / v.close - 1) * 100)} · 第 ${h.min_day} 天</span></td>
+      <td class="${where[0]}">${where[1]}</td></tr>`;
+  }).join("");
+  return `<table class="vt hurdles"><thead><tr><th>门槛路径</th><th>看几天</th><th>抵扣价最高</th><th>抵扣价最低</th><th>读法</th></tr></thead><tbody>${rows}</tbody></table>
+    <p class="legend-note">收盘守在最高值之上，这几天 MA 天天上行；在最低值之下，天天下行 ${ruleBtn("A2")}。</p>`;
+}
+
+/** 推演链：价格停在现价 N 天 → 每条线第几天转向、每对线第几天交叉 → 期末排列。来自脚本的持平情景。 */
+export function scenarioFlow(v) {
+  const sc = v.scenario;
+  const WAY = { 上: ["↗", "bullish"], 下: ["↘", "bearish"], 平: ["→", "neutral"] };
+  const turns = sc.turns.map((t) => `<li ${tip(`${t.line} 现在${t.now}${t.turn_day ? `，第 ${t.turn_day} 天转向` : `，${sc.days} 天内不转`}`)}>
+      <span class="k">${t.line}</span><span class="ar ${WAY[t.now][1]}">${WAY[t.now][0]}</span>
+      <span class="num">${t.turn_day ? `第 ${t.turn_day} 天转向` : "不转"}</span></li>`).join("");
+  const crosses = sc.crosses.filter((c) => c.cross).map((c) =>
+    `<li><span class="k">${c.kind} ${c.pair}</span><span class="${c.cross === "金叉" ? "bullish" : "bearish"}">${c.cross}</span><span class="num">第 ${c.cross_day} 天</span></li>`).join("")
+    || "<li>期间没有交叉</li>";
+  const arr = (b) => `<span class="arr ${b === "多头" ? "bullish" : b === "空头" ? "bearish" : "neutral"}">${b}</span>`;
   return `<div class="flow">
-      <div class="node"><div class="nk">① 假设</div><div class="nv">价格停在 <b class="num">${f2(v.close)}</b><br>${p.days} 个交易日</div></div>
+      <div class="node"><div class="nk">① 假设</div><div class="nv">价格停在 <b class="num">${f2(sc.level)}</b><br>${sc.days} 个交易日</div></div>
       <div class="edge">→</div>
-      <div class="node"><div class="nk">② 抵扣价决定方向</div><ul class="proj">${rows(p.ma)}</ul><ul class="proj ema">${rows(p.ema)}</ul></div>
+      <div class="node"><div class="nk">② 每条线</div><ul class="proj">${turns}</ul></div>
       <div class="edge">→</div>
-      <div class="node"><div class="nk">③ 排列</div><div class="nv">MA：${arr(p.arrNow.ma, p.arrAfter.ma)}<br>EMA：${arr(p.arrNow.ema, p.arrAfter.ema)}</div></div>
+      <div class="node"><div class="nk">③ 交叉</div><ul class="proj">${crosses}</ul></div>
+      <div class="edge">→</div>
+      <div class="node"><div class="nk">④ 期末排列</div><div class="nv">MA：${arr(sc.end_arr_ma)}<br>EMA：${arr(sc.end_arr_ema)}</div></div>
     </div>`;
+}
+
+/** 求解：K 天内让某件事发生（或不发生）要持平在什么价位。 */
+export function solveList(v) {
+  const text = (s) => s.status !== "有临界价位" ? s.status
+    : `持平在 <b class="num">${f2(s.level)}</b>（${pct(s.pct)}）${s.side}`;
+  const items = v.solves.map((s) => `<li><span>${s.days} 天内${s.happen ? "" : "避免"}${esc(s.event)}</span><span>${text(s)}</span></li>`).join("");
+  return `<details class="ref"><summary>要多高（多低）才会变：${v.solves.length} 个求解</summary><ul class="solves">${items}</ul></details>`;
+}
+
+/** 规则清单：打法用到的规则在前，每条的状态、依据；让位的写谁优先。全部规则折叠在下面。 */
+function ruleRow(r) {
+  const yields = r.yields_to ? `<span class="yield">，${ruleBtn(r.yields_to)} 优先</span>` : "";
+  return `<li class="rule ${r.yields_to ? "yielded" : ""}" data-rule="${esc(r.id)}">${ruleBtn(r.id)}<b>${esc(r.name)}</b>
+      <span class="rs ${STATUS_CLS[r.status]}">${esc(r.status)}</span>${yields}<span class="rb">${esc(r.basis)}</span></li>`;
+}
+export function rulesList(v) {
+  const byId = new Map(v.rules.map((r) => [r.id, r]));
+  const used = v.playRules.map((id) => byId.get(id)).filter(Boolean);
+  const yielded = v.rules.filter((r) => r.yields_to && !v.playRules.includes(r.id));
+  const groups = ["动作", "判定", "公理"].map((k) => {
+    const rs = v.rules.filter((r) => r.kind === k);
+    return `<h4>${k}（${rs.length}）</h4><ul class="rule-list all">${rs.map(ruleRow).join("")}</ul>`;
+  }).join("");
+  return `<p class="evidence-title">打法用到的规则。点编号看 rules.md 原文（IF / THEN / 字幕出处）。</p>
+    <ul class="rule-list used">${used.map(ruleRow).join("")}${yielded.map(ruleRow).join("")}</ul>
+    <details class="ref"><summary>全部 ${v.rules.length} 条规则</summary>${groups}</details>`;
+}
+
+/** 第 4 步的结论：打法用到几条规则、各是什么状态。 */
+export function rulesAnswer(v) {
+  const byId = new Map(v.rules.map((r) => [r.id, r]));
+  const used = v.playRules.map((id) => byId.get(id)).filter(Boolean);
+  const count = (st) => used.filter((r) => r.status === st).length;
+  const chart = v.rules.filter((r) => r.status === "需看图").length;
+  return `<div class="answer"><span class="ak">结论</span><b class="big">打法用到 ${used.length} 条规则</b>
+    <span>满足 ${count("满足")} · 不满足 ${count("不满足")} · 需看图 ${count("需看图")}。全部规则里 ${chart} 条脚本算不了，要看图。</span></div>`;
 }
 
 // ---------- 悬停提示 ----------
@@ -278,7 +362,8 @@ export function planBody(plans, p, close) {
   const fill = (t) => esc(t).replaceAll("{cost}", k === "profit" || k === "loss" ? f2(parseCost(p.cost)) : "成本");
   const plan = plans[k];
   return `<b class="big">${fill(plan.action)}</b>
-      <ul class="plan-items">${plan.items.map((i) => `<li${i.label === "时机" ? ' class="timing"' : ""}><span class="pl">${i.label === "时机" ? "时机 · 来自看方向" : esc(i.label)}</span>${fill(i.text)}</li>`).join("")}</ul>`;
+      <ul class="plan-items">${plan.items.map((i) => `<li${i.label === "时机" ? ' class="timing"' : ""}><span class="pl">${i.label === "时机" ? "时机 · 来自看方向" : esc(i.label)}</span>${fill(i.text)}${
+        i.rules?.length ? `<span class="plan-rules">${i.rules.map(ruleBtn).join("")}</span>` : ""}</li>`).join("")}</ul>`;
 }
 
 /** 第 2 步：空仓 / 持仓切换（持仓可填成本价），一句做法 + 带价位的条件。 */
@@ -326,10 +411,11 @@ function bigPictureEvidence(v) {
     + check("①", "60/120 线组排好了吗？", `次序${SIDE[r.order]}，60 线组${WAY[r.dir60]}、120 线组${WAY[r.dir120]} → <b>${r.type ? "有类型" : "定不出类型，按 20/60 的结构命名"}</b>`,
       ladder(v))
     + check("②", "60 线几点钟？", `MA60 ${r.clock60.angle >= 0 ? "+" : ""}${r.clock60.angle.toFixed(0)}°，${esc(r.clock60.hour)}（2 点半到 3 点半算走平，1 点钟以上算加速）；6 条线相差 ${v.spread.toFixed(1)}% → <b>${r.type === "横盘" ? "横盘" : r.type ? "有斜率" : "不看"}</b>`)
-    + check("③", "是不是加速？", `离 20 线 ${pct(v.bias.value)}，在自身历史排 ${pctl}% 分位（两端各 5% 算大幅乖离）→ <b>${r.accel ? `加速${esc(r.accel.phase)}` : "不是加速"}</b>`,
+    + check("③", "是不是加速？", `离 20 线 ${pct(v.bias.value)}，在自身历史排 ${pctl}% 分位（两端各 ${Math.round((1 - v.bias.extreme) * 100)}% 算大幅乖离）→ <b>${r.accel ? `加速${esc(r.accel.phase)}` : "不是加速"}</b>`,
       biasMeter(v))
-    + check("④", "20 线组走到哪一步？", `${r.stage ? `${esc(r.stage)}${r.depth ? `（${esc(r.depth)}）` : ""}` : esc(r.name)}：破线、拐头算回撤，交叉了算转折。双交叉要同一对周期的 MA、EMA 都交叉。`,
-      crossTable(v))
+    + check("④", "20 线组走到哪一步？", `${r.stage ? `${esc(r.stage)}${r.depth ? `（${esc(r.depth)}）` : ""}` : esc(r.name)}：破线、拐头算回撤，交叉了算转折。`,
+      fiveSteps(v) + crossTable(v))
+    + check("⑤", "周线、小时线怎么排？", `${frameText("周线", v.weekly)} ${ruleBtn("J11")}；${frameText("小时线", v.hourly)} ${ruleBtn("P13")}`)
     + `<p class="check-sum">所以是 <b>${esc(v.trend)}</b>。</p>`
     + `<details class="ref"><summary>趋势类型对照（现在是哪一种）</summary>${trendTable(v)}</details>`;
 }
@@ -339,7 +425,8 @@ export function stepVisuals(key, v) {
   if (key === "big_picture") return bigPictureEvidence(v);
   if (key === "direction") {
     return `<p class="evidence-title">证据：未来 10 天每条 MA 要扣掉的价格。红点在现价上方 = 扣高值，均线往下拉；绿点在下方 = 扣低值，往上抬。</p>`
-      + dropMultiples(v) + projectionFlow(v);
+      + dropMultiples(v) + hurdleTable(v) + scenarioFlow(v) + solveList(v);
   }
+  if (key === "rules") return rulesList(v);
   return "";
 }

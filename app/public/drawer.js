@@ -1,4 +1,4 @@
-// 抽屉：中栏的五块（总结、K 线图、三步）滚出视野后，中栏顶部的提示条上出现这一块的按钮；
+// 抽屉：中栏的六块（总结、K 线图、三步、规则清单）滚出视野后，中栏顶部的提示条上出现这一块的按钮；
 // 点一下把那一块拉到抽屉里看，收起放回原处。
 // 抽屉里放的是原来那个元素本身（图表的范围、画的线、空仓/持仓的选择都保持），原处留一个同样高的占位，滚动位置不变。
 const $ = (id) => document.getElementById(id);
@@ -10,6 +10,7 @@ const SECTIONS = [
   { key: "big_picture", label: "看大局", el: () => document.querySelector('#steps [data-step="big_picture"]') },
   { key: "strategy", label: "定策略", el: () => document.querySelector('#steps [data-step="strategy"]') },
   { key: "direction", label: "看方向", el: () => document.querySelector('#steps [data-step="direction"]') },
+  { key: "rules", label: "规则清单", el: () => document.querySelector('#steps [data-step="rules"]') },
 ];
 
 let closeDrawer = () => {};
