@@ -116,3 +116,10 @@ def test_tsla_2021_04_14_bounce_is_three_steps_into_an_up_turn():
     p20 = next(p for p in steps if p["pair"] == "20/60")
     assert p20["side"] == "空头"
     assert (p20["current"]["direction"], p20["current"]["progress"]) == ("向上", 3)
+
+
+def test_range_play_says_weekly_direction_is_not_backed_by_the_evaluation():
+    # J11 带了"回测不支持"标签（评估 H5），打法文字也要照说，不能只在标签上标
+    a = dma.analyze(load_fixture("AAPL", "2021-04-14"), "AAPL", "fixture")
+    text = a["play"]["text"]
+    assert "跟周线走" in text and "回测不支持" in text

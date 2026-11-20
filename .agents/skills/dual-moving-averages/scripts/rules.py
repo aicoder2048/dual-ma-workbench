@@ -723,7 +723,7 @@ def build_play(regime: Regime, results: list[dict]) -> dict:
             ids = ["P2", "P3", "J12", "J13", "J14"]
         else:
             text = (f"横盘中段不做。末期条件：①时间 {st['J12']['basis']}，②{st['J13']['basis']}，③{st['J14']['basis']}。"
-                    f"方向跟周线走（{st['J11']['basis']}）。")
+                    f"视频说方向跟周线走（{st['J11']['basis']}），回测不支持（评估 H5），只当参考。")
             ids = ["P1", "J12", "J13", "J14", "J11"]
     elif key in ("稳定上涨", "稳定下跌"):
         up = key == "稳定上涨"
