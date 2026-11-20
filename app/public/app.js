@@ -12,7 +12,6 @@ import { effectLine, installTips, leanCard, leanName, outlookAnswer, planAnswer,
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-const SHORT_TREND = (t) => t.replace("（排列或方向不一致）", "");
 
 export const state = { ticker: null, asof: null, data: null };
 const listeners = new Set();
@@ -83,7 +82,7 @@ function paintSummary(li, s) {
   chg.className = `chg ${s.change_pct >= 0 ? "bullish" : "bearish"}`;
   const trendEl = li.querySelector(".trend");
   trendEl.innerHTML = `<span class="badge ${stanceOf(s.lean)}">${leanName(s.lean)}</span>`;
-  trendEl.title = `模糊判断 ${leanName(s.lean)}；趋势类型 ${SHORT_TREND(s.trend)}`;
+  trendEl.title = `模糊判断 ${leanName(s.lean)}；趋势类型 ${s.trend}`;
 }
 
 $("watchlist").addEventListener("click", async (e) => {
@@ -106,7 +105,7 @@ function renderKpis(a) {
   const sign = (x, d = 2) => `${x >= 0 ? "+" : ""}${x.toFixed(d)}`;
   const tiles = [
     { k: "收盘", v: a.close.toFixed(2), s: `<span class="${a.change_pct >= 0 ? "bullish" : "bearish"}">${sign(a.change_pct)}%</span>` },
-    { k: "趋势类型", v: `<span class="${stanceOf(a.lean)}">${SHORT_TREND(a.trend)}</span>`, s: `MA ${a.arr_ma} · EMA ${a.arr_ema}` },
+    { k: "趋势类型", v: `<span class="${stanceOf(a.lean)}">${a.regime.name}</span>`, s: `MA ${a.arr_ma} · EMA ${a.arr_ema}` },
     { k: "离 20 线", v: `${sign(a.bias20, 1)}%`, s: `历史 ${Math.round(a.bias_pctl * 100)}% 分位` },
   ];
   if (a.volume) tiles.push({ k: "量比", v: `${a.volume.ratio.toFixed(1)}×`, s: `近 20 日大量 ${a.volume.spikes.length} 天` });
@@ -200,7 +199,7 @@ export function showAnalysis(data, asof = null) {
   asofUi?.sync();
   paintStar();
   renderKpis(a);
-  updatePeek(a, leanName(data.report.visual.lean), SHORT_TREND(a.trend));
+  updatePeek(a, leanName(data.report.visual.lean), a.regime.name);
   const status = $("data-status");
   status.classList.toggle("partial", Boolean(a.warning));
   $("data-status-v").textContent = `${a.source.replace("（复权日线）", "")} · ${a.warning ? "盘中" : a.date}`;
@@ -215,8 +214,8 @@ export function showAnalysis(data, asof = null) {
   const v = $("verdict");
   v.hidden = false;
   v.style.setProperty("--stance", `var(--${r.stance === "bullish" ? "up" : r.stance === "bearish" ? "down" : "neutral"})`);
-  v.innerHTML = leanCard(r.visual.lean, a.close, SHORT_TREND(a.trend));
-  renderInline(v.querySelector(".lean-play"), `${r.visual.lean.play} [[D:模糊判断]] [[S:skill#模糊判断]]`, data.facts);
+  v.innerHTML = leanCard(r.visual.lean, a.close, a.regime.name);
+  renderInline(v.querySelector(".lean-play"), `${a.play.text} [[D:打法]] [[S:skill#模糊判断]]`, data.facts);
 
   chartApi?.setData(data.chart, a.label);
   chartApi?.setLevels(r.visual.lean);

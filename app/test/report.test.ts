@@ -70,7 +70,7 @@ describe("推演", () => {
 describe("可视化数据", () => {
   test("趋势判定表只高亮当前类型", () => {
     const cur = report.visual.trendTable.filter((r) => r.current).map((r) => r.type);
-    expect(cur).toEqual(["极度超卖"]);
+    expect(cur).toEqual(["加速下跌"]); // 改名：极度超卖 → 加速下跌；表的键是脚本的 play.key
   });
   test("抵扣价路径每条 10 天", () => {
     expect(report.visual.drops.map((d) => d.path.length)).toEqual([10, 10, 10]);
@@ -78,10 +78,10 @@ describe("可视化数据", () => {
 });
 
 describe("模糊判断在前", () => {
-  test("标题先说对谁有利，再说趋势类型", () => expect(report.headline).toBe("NVDA · 明显偏空 · 极度超卖"));
+  test("标题先说对谁有利，再说趋势类型", () => expect(report.headline).toBe("NVDA · 明显偏空 · 加速下跌·延伸"));
   test("立场跟模糊判断走", () => expect(report.stance).toBe("bearish"));
   test("看大局第一句就是结论：趋势类型，并带数据引用", () => {
-    expect(report.steps[0].items[0]).toStartWith("趋势类型：极度超卖 [[D:趋势初判]]");
+    expect(report.steps[0].items[0]).toStartWith("趋势类型：加速下跌·延伸 [[D:趋势初判]]");
   });
   test("看大局不再把「规则初判」放在最后一句", () => {
     expect(report.steps[0].items.at(-1)).not.toContain("规则初判");
@@ -98,8 +98,10 @@ describe("模糊判断在前", () => {
 });
 
 describe("立场", () => {
-  test("方向和排布打架时是中性", () => {
-    expect(stanceOf({ score: 0.4, conflict: "反弹受压" })).toBe("neutral");
-    expect(stanceOf({ score: 0.4, conflict: null })).toBe("bullish");
+  // 打架（反弹受压 / 回调有撑）移到了类型 × 阶段（空头结构反弹中 / 多头结构回撤中），立场只跟模糊判断的分数走
+  test("立场按分数分三档", () => {
+    expect(stanceOf({ score: 0.4 })).toBe("bullish");
+    expect(stanceOf({ score: 0 })).toBe("neutral");
+    expect(stanceOf({ score: -0.4 })).toBe("bearish");
   });
 });

@@ -19,7 +19,7 @@ import { PROJECT_ROOT } from "../src/sources.ts";
 
 const pexec = promisify(execFile);
 /** 空仓进场条件是"站上 EMA20 + MA20 抵扣价"的打法（plan.ts 的 BUY_TURN）。 */
-const BUY_TURN_PLAYS = ["健康下跌", "极度超卖"];
+const BUY_TURN_PLAYS = ["稳定下跌", "加速下跌"];
 const OUT = resolve(PROJECT_ROOT, "reports/replay");
 const DATA = resolve(OUT, "data");
 const CUT = resolve(OUT, "cut");

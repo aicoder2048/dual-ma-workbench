@@ -513,13 +513,12 @@ export function createChart(box, legendEl) {
     /** 停止回放、回到完整数据（取数失败、中栏收起图表时用）。 */
     stopReplay() { dispatch({ type: "exit" }); },
     /**
-     * 门槛线：lean.flips 里 20 线组还没越过的价位（第 1 个动作 EMA20、第 2 个动作 MA20 抵扣价）。
-     * 偏空时是"站上"，偏多时是"跌破"。60 线组的价位留在模糊判断卡片里，图上不画，免得挤。
+     * 门槛线：lean.flips 里 20 线组的价位（第 1 个动作 EMA20、第 2 个动作 MA20 抵扣价）。
+     * 在现价上方是"站上"（转多），下方是"跌破"（转空）。60 线组的价位留在模糊判断卡片里，图上不画，免得挤。
      */
     setLevels(lean) {
-      const verb = lean.score < 0 ? "站上" : "跌破";
-      levels = lean.flips.filter((f) => !f.crossed && f.line.endsWith("20") && !f.line.endsWith("120"))
-        .map((f) => ({ line: f.line, price: f.price, title: `${verb} ${f.line.startsWith("EMA") ? f.line : `${f.line} 抵扣价`}` }));
+      levels = lean.flips.filter((f) => f.line.endsWith("20") && !f.line.endsWith("120"))
+        .map((f) => ({ line: f.line, price: f.price, title: `${f.toward === "多" ? "站上" : "跌破"} ${f.line.startsWith("EMA") ? f.line : `${f.line} 抵扣价`}` }));
       paintLevels();
     },
     /** 当前画在图上的门槛线（测试和问鸿雁用）。 */

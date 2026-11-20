@@ -27,8 +27,9 @@ export interface Projection {
 export interface ReportVisual {
   close: number;
   lean: Lean;
-  /** 趋势类型（短名）和三条 MA 最大最小差占价格的百分比：看大局的"是不是横盘"用。 */
+  /** 类型 × 阶段的名字和它的依据、6 条线最大最小差占价格的百分比：看大局的四问用。 */
   trend: string;
+  regime: Analysis["regime"];
   spread: number;
   lines: Analysis["lines"];
   bias: { value: number; pctl: number };
@@ -58,21 +59,21 @@ export interface Report {
   visual: ReportVisual;
 }
 
-/** 立场跟模糊判断走：偏多以上 bullish，偏空以下 bearish；方向和排布打架时 neutral。 */
-export const stanceOf = (lean: Pick<Lean, "score" | "conflict">): Stance =>
-  lean.conflict ? "neutral" : lean.score >= 0.25 ? "bullish" : lean.score <= -0.25 ? "bearish" : "neutral";
+/** 立场跟模糊判断走：偏多以上 bullish，偏空以下 bearish。 */
+export const stanceOf = (lean: Pick<Lean, "score">): Stance =>
+  lean.score >= 0.25 ? "bullish" : lean.score <= -0.25 ? "bearish" : "neutral";
 
-/** 趋势类型判定表（SKILL.md 第 1 步 / 学习文章第 4 节的简写）。 */
+/** 趋势类型判定表，键和脚本的 play.key 一致（rules.md J1–J7 的简写）。 */
 export const TREND_TABLE: { type: string; look: string; play: string[] }[] = [
-  { type: "横盘震荡", look: "均线走平、缠绕；量能低", play: ["基本不做。", "等大量、缺口或假跌破。", "突破前已多头排列，才小仓位埋伏。", "多头排列被破坏，就离场。"] },
-  { type: "健康上涨", look: "多头排列，都向上，间距适中", play: ["持有。", "回调到均线获支撑时，加仓。", "加仓前，切到 1 小时图看结构。", "不追高。"] },
-  { type: "极度超买", look: "多头排列，价格远离均线", play: ["不追，只看不做。", "有仓位就分批止盈，或上移止损。"] },
-  { type: "健康下跌", look: "空头排列，都向下", play: ["不抄底。", "反弹到均线附近，减仓或离场。"] },
-  { type: "极度超卖", look: "空头排列，价格远离均线", play: ["不抢反弹。", "均线理顺成多头排列前，不买。"] },
-  { type: "过渡态", look: "排列混乱，或方向不一致", play: ["条件不满足，就不做。", "看抵扣价：均线多久能理顺。", "中长期线压着反弹时，反弹多半是假动作。"] },
+  { type: "横盘", look: "60 线 2 点半到 3 点半，6 条线靠拢", play: ["中段不做。", "满 6 个月、均线相差 < 2%、开始张嘴，突破前小仓位埋伏。", "20 线组与 60 线组交叉或不可避免要交叉，就止损。"] },
+  { type: "稳定上涨", look: "60/120 多头次序，平行向上，1 点到 2 点半", play: ["持有，不追高。", "回撤到 60/120 线组、MA 不拐头、出现底部构造、小时线多头排列，再加仓。"] },
+  { type: "加速上涨", look: "60 线 1 点钟以上，或乖离到历史高端", play: ["没仓位不追。", "有仓位：没顶部构造不下车；见了构造，等 20 线组拐头再走。"] },
+  { type: "稳定下跌", look: "60/120 空头次序，平行向下，4 点钟左右", play: ["不抄底。", "反弹到线组附近、出现顶部构造、小时线空头排列，就减仓或离场。"] },
+  { type: "加速下跌", look: "60 线 5 点钟以下，或乖离到历史低端", play: ["不抢反弹。", "等底部构造和 20 线组拐头向上。"] },
+  { type: "空头结构反弹中", look: "60/120 定不出类型，20/60 已双死叉，价格反弹", play: ["不买。", "反弹解除不了双死叉，是离场机会。"] },
+  { type: "多头结构回撤中", look: "60/120 定不出类型，20/60 还是多头，价格回撤", play: ["持有观察。", "20/60 双死叉才算结构坏。"] },
+  { type: "过渡", look: "顶部 / 底部转折中、失序：还没理顺", play: ["条件不满足，就不做。", "看抵扣价：均线多久能理顺。"] },
 ];
-
-export const shortTrend = (t: string) => t.replace("（排列或方向不一致）", "");
 
 export function parseCross(text: string): CrossInfo {
   const m = text.match(/^(金叉|死叉) (\d{4}-\d{2}-\d{2})（(\d+) 根前）/);
@@ -145,12 +146,11 @@ export function buildReport(a: Analysis): Report {
     const ema = parseCross(c.ema);
     return { pair: c.pair, ma, ema, verdict: crossVerdict(ma, ema) };
   });
-  const trend = shortTrend(a.trend);
-  const row = TREND_TABLE.find((r) => r.type === trend) ?? TREND_TABLE[TREND_TABLE.length - 1];
+  const trend = a.regime.name;
+  const row = TREND_TABLE.find((r) => r.type === a.play.key) ?? TREND_TABLE[TREND_TABLE.length - 1];
 
   const ln = a.lean;
-  const nameOf = (l: { label: string; conflict: string | null }) => l.label + (l.conflict ? `·${l.conflict}` : "");
-  const leanName = nameOf(ln);
+  const leanName = ln.label;
   // ---------- 1. 看大局：先结论（趋势类型），下面都是证据 ----------
   const big: string[] = [
     `趋势类型：${trend} [[D:趋势初判]]。${row.look} [[S:article#4]]。`,
@@ -173,7 +173,7 @@ export function buildReport(a: Analysis): Report {
   // ---------- 2. 定策略 ----------
   // ---------- 2. 定策略：结论在 plans（按有没有仓位），这里是依据 ----------
   const strategy = [
-    `打法按「${trend}」定 [[D:趋势初判]] [[S:article#4]]。`,
+    `打法按「${trend}」定 [[D:趋势初判]] [[S:article#4]]：${a.play.text} [[D:打法]]`,
     "有没有仓位，做法不同 [[S:skill#第2步]]。",
     "价位来自 EMA20 和 MA20 抵扣价 [[D:改变判断.EMA20]] [[D:改变判断.MA20]]。",
     "先认趋势类型，再看信号 [[S:skill#原则]]。",
@@ -190,7 +190,7 @@ export function buildReport(a: Analysis): Report {
   const p = projection;
   direction.push(
     `价格不变 ${p.days} 天后：MA 排列 ${p.arrAfter.ma} [[D:推演.排列.MA]]，EMA 排列 ${p.arrAfter.ema} [[D:推演.排列.EMA]]。`,
-    `价格不变 ${p.days} 天后，模糊判断是${nameOf(ln.after)} [[D:模糊判断.10天后]]。`,
+    `价格不变 ${p.days} 天后，模糊判断是${ln.after.label} [[D:模糊判断.10天后]]。`,
     "收盘价高于抵扣价，MA 就上升 [[S:article#2.3]]。推演链：抵扣价 → 方向 → 排列 [[S:skill#第3步]]。",
   );
 
@@ -209,6 +209,7 @@ export function buildReport(a: Analysis): Report {
       close: a.close,
       lean: ln,
       trend,
+      regime: a.regime,
       spread: a.spread_pct,
       lines: a.lines,
       bias: { value: a.bias20, pctl: a.bias_pctl },

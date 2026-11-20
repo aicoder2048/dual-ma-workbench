@@ -17,6 +17,7 @@ SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 
 import dma_analyze as dma  # noqa: E402
+import rules  # noqa: E402
 
 
 def make_df(closes: list[float], volume: bool = True) -> pd.DataFrame:
@@ -83,8 +84,10 @@ def test_json_has_analysis_and_chart(json_out):
 
 
 def test_json_analysis_matches_markdown_numbers(json_out, tmp_path):
+    # trend / strategy 换成了 regime（类型 × 阶段）和唯一的 play
     a = json_out["analysis"]
-    assert a["trend"] in dma.STRATEGY
+    assert a["play"]["key"] in rules.PLAY_KEYS
+    assert a["regime"]["name"]
     assert isinstance(a["lines"][0]["above"], bool)
     assert [d["period"] for d in a["drops"]] == list(dma.PERIODS)
 
@@ -121,12 +124,14 @@ def test_falling_series_leans_clearly_bearish():
 def test_small_misorder_does_not_hide_a_clear_downtrend():
     # 长期上涨后急跌：6 条线都向下、价格在所有线下方，但 MA60 仍略高于 MA120。
     # 精确规则会判"排列混乱"，模糊判断应当是明显偏空，趋势类型落在下跌一侧。
+    # 改名：健康下跌 / 极度超卖 → 稳定下跌 / 加速下跌。这里 60/120 还没排好，是加速下跌的起点（J3、J8）。
     closes = [100 + i * 0.5 for i in range(200)] + [200 - i * 3 for i in range(30)]
     a = dma.analyze(make_df(closes), "TEST", "synthetic")
     row = a["lean"]
     assert a["lines"][1]["ma"] > a["lines"][2]["ma"]  # MA60 > MA120：确实"错位"
     assert row["label"] == "明显偏空"
-    assert a["trend"] in ("健康下跌", "极度超卖")
+    assert a["regime"]["type"] == "加速下跌"
+    assert a["regime"]["accel"]["phase"] == "起点"
 
 
 def test_flat_series_has_no_lean():
@@ -150,27 +155,32 @@ def test_lean_after_projects_price_flat(rising):
 
 
 def test_bounce_under_the_60_group_is_flagged_not_bought():
-    # TSLA 2021-04-14 的形状：长涨 → 急跌 → 强反弹。多数线已向上，但 20 线组仍在 60 线组下方。
+    # 长涨 → 急跌 → 强反弹，20 线组仍在 60 线组下方。原来靠 lean.conflict（反弹受压）标出来；
+    # 现在打架的状态归到 regime：60/120 定不出类型（这条合成序列 MA60、EMA60 方向不一致，是失序），
+    # 打法是唯一的 play，不说买。真实的空头结构反弹中见 test_regime 的 TSLA 2021-04-14。
     closes = [100 + i * 0.5 for i in range(250)] + [225 - i * 2 for i in range(30)] + [165 + i * 2 for i in range(18)]
     a = dma.analyze(make_df(closes), "TEST", "synthetic")
-    lean = a["lean"]
-    assert lean["up"] > lean["down"]
-    assert lean["conflict"] == "反弹受压"
-    assert "不买" in lean["play"]
+    assert a["lean"]["up"] > a["lean"]["down"]
+    assert a["lines"][0]["ma"] < a["lines"][1]["ma"] and a["lines"][0]["ema"] < a["lines"][1]["ema"]
+    assert a["regime"]["type"] is None
+    assert "不做" in a["play"]["text"] or "不买" in a["play"]["text"]
 
 
-def test_aligned_trend_has_no_conflict(rising):
-    assert dma.analyze(rising, "TEST", "synthetic")["lean"]["conflict"] is None
+def test_aligned_trend_is_not_a_transition(rising):
+    # lean.conflict 去掉了；顺畅的上涨应当有类型、没有过渡状态
+    r = dma.analyze(rising, "TEST", "synthetic")["regime"]
+    assert (r["type"], r["transition"]) == ("稳定上涨", None)
 
 
-def test_flip_levels_mark_thresholds_price_already_crossed():
-    # 上涨后回落一点：偏多，但价格已在 EMA20 下方 → EMA20 那个门槛标为已越过
+def test_flips_list_both_directions():
+    # 原来只列一个方向、已越过的门槛标 crossed；现在两个方向都列：价位在现价上方是"站上转多"，下方是"跌破转空"
     closes = [100 + i * 0.5 for i in range(250)] + [225 - i * 1.5 for i in range(6)]
     a = dma.analyze(make_df(closes), "TEST", "synthetic")
-    assert a["lean"]["score"] > 0
-    ema20 = next(f for f in a["lean"]["flips"] if f["line"] == "EMA20")
-    assert ema20["crossed"] == (a["close"] < a["lines"][0]["ema"])
-    assert ema20["crossed"]
+    flips = {f["line"]: f for f in a["lean"]["flips"]}
+    assert a["close"] < a["lines"][0]["ema"]
+    assert flips["EMA20"]["toward"] == "多" and "站上" in flips["EMA20"]["text"]
+    assert flips["EMA60"]["toward"] == "空" and "跌破" in flips["EMA60"]["text"]
+    assert all((f["price"] > a["close"]) == (f["toward"] == "多") for f in flips.values())
 
 
 # ---------- K 线着色（tone）----------

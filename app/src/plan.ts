@@ -1,12 +1,12 @@
 /**
  * 定策略、看方向的输出（规则生成，不经过模型）。
  *
- * - buildPlans：按"趋势类型 × 你的处境"给一句做法 + 两三条带价位的条件。规则取自
+ * - buildPlans：按"脚本的打法键（analysis.play.key）× 你的处境"给一句做法 + 两三条带价位的条件。规则取自
  *   skill 的 references/playbooks.md，价位取自模糊判断的门槛（EMA20、MA20 抵扣价）和均线值。
  *   处境分四种：空仓、持仓（没填成本）、持仓浮盈、持仓浮亏。成本只在浏览器里，文字里写 {cost}，由页面填上。
- * - buildOutlook：看方向的结论（只按模糊判断分三档：≤ -0.25、中间、≥ 0.25）。classify 只在分数 ≥ 0.6 时
- *   给上涨一侧、≤ -0.6 时给下跌一侧，所以只有横盘和过渡态会配上任意一档。抵扣价推演出 20 线组还会朝原方向走多久、
- *   最早什么时候会变，再翻译成"对空仓 / 持仓意味着什么"。方向和排布打架（反弹受压、回调有撑）时，影响服从结构。
+ * - buildOutlook：看方向的结论（只按模糊判断分三档：≤ -0.25、中间、≥ 0.25）。类型和模糊判断分开算
+ *   （类型看 60/120 线组，模糊判断看 MA60、MA120 能保持几天），任何打法都可能配上任意一档。抵扣价推演出 20 线组还会朝原方向走多久、
+ *   最早什么时候会变，再翻译成"对空仓 / 持仓意味着什么"。空头结构反弹中、多头结构回撤中这两种打架的状态，影响服从结构。
  */
 import type { Analysis } from "./citations.ts";
 
@@ -35,21 +35,20 @@ function at(price: number, close: number) {
  * 当下的均线状态（和 dma_analyze.py 的判据一致）：止损、失效的条件可能现在就已经成立，那时要照实说"已经"。
  * - death / gold：MA20/MA60 和 EMA20/EMA60 两对都在下方 / 上方（相差不到价格 0.5% 算贴着，不算）。
  * - ema20Down：EMA20 在向下（20 线组里先拐的那条）。
- * - maLo / maHi / spread：三条 MA 的最低、最高和相差（占价格 %），classify 用 < 4% 判缠绕。
+ * - lo / hi / spread / rangeMax：6 条线的最低、最高、相差（占价格 %）和脚本判横盘用的上限（thresholds.RANGE_SPREAD_PCT）。
  */
 function stateOf(a: Analysis) {
   const rel = (pair: string) => a.lean.pairs.find((x) => x.pair === pair)?.rel ?? 0;
-  const mas = a.lines.map((l) => l.ma);
-  const maLo = Math.min(...mas), maHi = Math.max(...mas);
   return {
     death: rel("MA20/MA60") < 0 && rel("EMA20/EMA60") < 0,
     /** 已经死叉或即将死叉：两对都不在上方，至少一对已在下方（playbooks 横盘的硬止损）。 */
     nearDeath: rel("MA20/MA60") <= 0 && rel("EMA20/EMA60") <= 0 && rel("MA20/MA60") + rel("EMA20/EMA60") < 0,
     gold: rel("MA20/MA60") > 0 && rel("EMA20/EMA60") > 0,
     ema20Down: (a.lean.dirs.EMA20 ?? 0) < 0,
-    maLo, maHi, spread: ((maHi - maLo) / a.close) * 100,
+    lo: Math.min(...a.lines.flatMap((x) => [x.ma, x.ema])), hi: Math.max(...a.lines.flatMap((x) => [x.ma, x.ema])),
+    spread: a.spread_pct, rangeMax: a.thresholds.RANGE_SPREAD_PCT.value,
     score: a.lean.score,
-    flip: a.lean.flips.find((f) => !f.crossed)?.text ?? null,
+    flip: a.lean.flips.find((f) => f.toward === (a.lean.score >= 0 ? "空" : "多"))?.text ?? null,
   };
 }
 
@@ -83,28 +82,28 @@ function ema20Stop(l: L, act: string): string {
   if (l.close < l.ema20) return `已经在 EMA20 ${l.p(l.ema20)} 下方；EMA20 再拐头向下，就${act}。`;
   return `收盘跌破 EMA20 ${l.p(l.ema20)}、EMA20 拐头向下，就${act}。`;
 }
-/** 横盘的失效：均线散开（classify 的判据，横盘时按定义还没发生）。 */
+/** 横盘的失效：均线散开（脚本判横盘的判据，横盘时按定义还没发生）。 */
 const TANGLE_END = (l: L, up: string, down: string) =>
-  `三条 MA 现在相差 ${l.spread.toFixed(1)}%（${f2(l.maLo)} ~ ${f2(l.maHi)}）；超过 4%、或 MA60 不再走平，就不是横盘了：向上散开${up}，向下散开${down}。`;
-/** 过渡态的失效：模糊判断到 ±0.6（classify 的判据，过渡态时按定义还没到）。 */
+  `6 条线现在相差 ${l.spread.toFixed(1)}%（${f2(l.lo)} ~ ${f2(l.hi)}）；超过 ${l.rangeMax}%、或 MA60 不再走平，就不是横盘了：向上散开${up}，向下散开${down}。`;
+/** 过渡的失效：模糊判断到 ±0.6，方向才算明显。 */
 const TRANSITION_END = (l: L, up: string, down: string) =>
-  `过渡态说的是"还没理顺"。模糊判断现在 ${(Math.abs(l.score) < 0.005 ? 0 : l.score).toFixed(2)}，升到 0.6 以上${up}，降到 -0.6 以下${down}；` +
+  `过渡说的是"还没理顺"。模糊判断现在 ${(Math.abs(l.score) < 0.005 ? 0 : l.score).toFixed(2)}，升到 0.6 以上${up}，降到 -0.6 以下${down}；` +
   (l.flip ? `最近的变化门槛：${l.flip}。` : `价位上先看 EMA20 ${f2(l.ema20)} 和 MA20 抵扣价 ${f2(l.drop20)}：两条线最先拐。`);
 /**
  * 空仓计划进场之后的止损：重新跌回 EMA20 下方、EMA20 再拐头向下就走。下跌类的进场条件是站上 EMA20（反过来就是止损）；
- * 过渡态、两种打架的进场条件是排列理顺，理顺时价格必然在 EMA20 上方，同一条也适用。
+ * 过渡、两种打架的进场条件是排列理顺，理顺时价格必然在 EMA20 上方，同一条也适用。
  */
 const ENTRY_STOP = (l: L): PlanItem =>
   ({ label: "止损", text: `按条件进场后，收盘重新跌回 EMA20 下方（EMA20 现在 ${f2(l.ema20)}）、EMA20 再拐头向下，就走。` });
 
 /**
- * 打法键 → 空仓 / 持仓的打法。键是六种趋势类型，加上过渡态里方向和排布打架的两种（反弹受压、回调有撑）。
+ * 打法键 → 空仓 / 持仓的打法。键是脚本的 play.key（五种类型、空头结构反弹中、多头结构回撤中、过渡），横盘破位在这里另判。
  * 每份计划都有「止损」（空仓时指按计划进场之后）和「失效」（判断错了的标志，以及接下来改用哪套打法）。
  * 来源：playbooks.md 各节（硬止损、软离场、假突破、关键性波动）；打架的两种来自 SKILL.md 模糊判断一节、
- * 原则 8「排列不合理不做」、TSLA 2021-04-14 案例，回调有撑的离场底线来自 playbooks「20/60 双死叉」。
+ * 原则 8「排列不合理不做」、TSLA 2021-04-14 案例，多头结构回撤中的离场底线来自 playbooks「20/60 双死叉」。
  */
 const PLAYS: Record<string, Record<Position, (l: L) => Plan>> = {
-  横盘震荡: {
+  横盘: {
     flat: (l) => ({ action: "基本不做，等埋伏信号。", items: [
       { label: "等什么", text: "均线收拢（最高最低相差 < 2%）后向上张嘴，形成多头排列。" },
       { label: "加分", text: "此前出现大量、缺口，或跌破后很快收回。" },
@@ -132,7 +131,7 @@ const PLAYS: Record<string, Record<Position, (l: L) => Plan>> = {
       SIZE,
     ] }),
   },
-  健康上涨: {
+  稳定上涨: {
     flat: (l) => ({ action: "等回调再买，不追高。", items: [
       { label: "等什么", text: l.close >= l.drop20 ? `回踩 MA20 ${l.p(l.ma20)} 附近，价格仍在 MA20 抵扣价 ${f2(l.drop20)} 上方。`
         : `价格已经在 MA20 抵扣价 ${l.p(l.drop20)} 下方，MA20 要拐头向下：等重新站上、回踩企稳再说。` },
@@ -141,35 +140,35 @@ const PLAYS: Record<string, Record<Position, (l: L) => Plan>> = {
       { label: "止损", text: l.close >= l.drop20
         ? `买进后 1 小时图的多头排列被破坏就走；日线价格低于 MA20 抵扣价（现在 ${f2(l.drop20)}）、MA20 拐头向下，也走。`
         : `现在价格已经在 MA20 抵扣价 ${f2(l.drop20)} 下方，MA20 要拐头向下：先别买。买进后的止损是 1 小时图多头排列被破坏，或日线 MA20 拐头向下。` },
-      { label: "失效", text: `${DEATH(l)}，或 60 线组拐头向下：不再是健康上涨，不再等回调买。` },
+      { label: "失效", text: `${DEATH(l)}，或 60 线组拐头向下：不再是稳定上涨，不再等回调买。` },
     ] }),
     holding: (l) => ({ action: "持有，回调可以加仓。", items: [
       { label: "加仓", text: `回踩 MA20 ${l.p(l.ma20)} 附近获支撑，小级别确认后加。` },
       { label: "止损", text: `60 线组拐头向下，或 20/60 双死叉才走。只是碰到 MA60 ${f2(l.ma60)} 不算。` },
-      { label: "失效", text: `出现上面的止损信号（60 线组拐头向下，或 MA20、EMA20 落到 MA60 ${f2(l.ma60)}、EMA60 ${f2(l.ema60)} 下方），就不是健康上涨了：不再回调加仓，改按过渡态 / 下跌的打法。` },
+      { label: "失效", text: `出现上面的止损信号（60 线组拐头向下，或 MA20、EMA20 落到 MA60 ${f2(l.ma60)}、EMA60 ${f2(l.ema60)} 下方），就不是稳定上涨了：不再回调加仓，改按过渡 / 下跌的打法。` },
       SIZE,
     ] }),
   },
-  极度超买: {
+  加速上涨: {
     flat: (l) => ({ action: "不追，只看不做。", items: [
       { label: "等什么", text: `等价格回落、靠近 MA20 ${l.p(l.ma20)}，均线重新组织后再看。` },
       { label: "为什么", text: "价格离成本太远，必然回归：要么急跌，要么横盘等均线。" },
-      { label: "止损", text: `没仓位，不用止损。回落后按健康上涨的买法进，止损跟着那套走：MA20 拐头向下（价格低于 MA20 抵扣价，现在 ${f2(l.drop20)}）就走。` },
-      { label: "失效", text: `回落很浅、20 线组一直向上：回归是靠横盘等均线完成的，按健康上涨的打法等回踩 MA20 ${f2(l.ma20)}；${DEATH(l)}：上涨结束。` },
+      { label: "止损", text: `没仓位，不用止损。回落后按稳定上涨的买法进，止损跟着那套走：MA20 拐头向下（价格低于 MA20 抵扣价，现在 ${f2(l.drop20)}）就走。` },
+      { label: "失效", text: `回落很浅、20 线组一直向上：回归是靠横盘等均线完成的，按稳定上涨的打法等回踩 MA20 ${f2(l.ma20)}；${DEATH(l)}：上涨结束。` },
     ] }),
     holding: (l) => ({ action: "拿着，分批止盈或上移止损。", items: [
       { label: "警惕", text: "出现顶部构造（如放量滞涨）就提高警惕，先止盈一部分。" },
       { label: "止损", text: ema20Stop(l, "走").replace(/。$/, "（关键性波动）。") },
-      { label: "失效", text: `跌到 EMA20 下方后很快收回、20 线组继续向上：回归已经完成，按健康上涨拿着；${DEATH(l)}：上涨结束。` },
+      { label: "失效", text: `跌到 EMA20 下方后很快收回、20 线组继续向上：回归已经完成，按稳定上涨拿着；${DEATH(l)}：上涨结束。` },
       SIZE,
     ] }),
   },
-  健康下跌: {
+  稳定下跌: {
     flat: (l) => ({ action: "不抄底，空仓等。", items: [
       { label: "等什么", text: BUY_TURN(l) },
       { label: "再等", text: "排列理顺成多头，才算底部确认。" },
       ENTRY_STOP(l),
-      { label: "失效", text: `${above(l, "MA20 抵扣价", l.drop20)}，${GOLD(l)}：下跌判断失效，按过渡态 / 上涨的打法看。` },
+      { label: "失效", text: `${above(l, "MA20 抵扣价", l.drop20)}，${GOLD(l)}：下跌判断失效，按过渡 / 上涨的打法看。` },
     ] }),
     holding: (l) => ({ action: "反弹到均线附近，减仓或离场。", items: [
       { label: "减仓位", text: l.close >= l.ema20 ? `已经在 EMA20 ${l.p(l.ema20)} 上方，现在就是减仓位（MA20 ${f2(l.ma20)} 附近也是）。`
@@ -180,12 +179,12 @@ const PLAYS: Record<string, Record<Position, (l: L) => Plan>> = {
       SIZE,
     ] }),
   },
-  极度超卖: {
+  加速下跌: {
     flat: (l) => ({ action: "不抢反弹，等均线拐头。", items: [
       { label: "等什么", text: BUY_TURN(l) },
       { label: "再等", text: "排列理顺成多头之前，不买。" },
       ENTRY_STOP(l),
-      { label: "失效", text: `${GOLD(l)}：下跌判断失效，按过渡态 / 上涨的打法看。` },
+      { label: "失效", text: `${GOLD(l)}：下跌判断失效，按过渡 / 上涨的打法看。` },
     ] }),
     holding: (l) => ({ action: "不在急跌里割最低点，反弹再减仓。", items: [
       { label: "减仓位", text: l.close >= l.ema20 ? `已经在 EMA20 ${l.p(l.ema20)} 上方，现在就是减仓机会。` : `反弹到 EMA20 ${l.p(l.ema20)} 附近，是减仓机会。` },
@@ -195,7 +194,7 @@ const PLAYS: Record<string, Record<Position, (l: L) => Plan>> = {
       SIZE,
     ] }),
   },
-  过渡态: {
+  过渡: {
     flat: (l) => ({ action: "条件不满足，不做。", items: [
       { label: "等什么", text: l.gold ? `20 线组已经在 60 线组上方（MA60 ${f2(l.ma60)}）；还差多数线一起向上，模糊判断到明显偏多。`
         : `排列理顺：20 线组升到 60 线组上方（MA60 ${f2(l.ma60)}），多数线一起向上。` },
@@ -209,7 +208,7 @@ const PLAYS: Record<string, Record<Position, (l: L) => Plan>> = {
       SIZE,
     ] }),
   },
-  反弹受压: {
+  空头结构反弹中: {
     flat: (l) => ({ action: "不买：中长期线压着的反弹，多半是假动作。", items: [
       { label: "等什么", text: `20 线组升到 60 线组上方（MA20 过 MA60 ${f2(l.ma60)}、EMA20 过 EMA60 ${f2(l.ema60)}），排列理顺再看。` },
       { label: "推演", text: "用抵扣价算 20 线组多久能站上 60 线组；要很多天、价格得一直很强，就别等。" },
@@ -226,7 +225,7 @@ const PLAYS: Record<string, Record<Position, (l: L) => Plan>> = {
       SIZE,
     ] }),
   },
-  回调有撑: {
+  多头结构回撤中: {
     flat: (l) => ({ action: "等回调结束再买，不在下跌途中接。", items: [
       { label: "等什么", text: l.close < l.ema20 ? `20 线组重新拐头向上：收盘站上 EMA20 ${l.p(l.ema20)}。`
         : l.close < l.drop20 ? `已经在 EMA20 ${l.p(l.ema20)} 上方；再等 MA20 拐头向上：收盘高于 MA20 抵扣价 ${l.p(l.drop20)}。`
@@ -235,26 +234,25 @@ const PLAYS: Record<string, Record<Position, (l: L) => Plan>> = {
         ? `回踩到 MA60 ${l.p(l.ma60)} 附近止跌，更好。`
         : `已经跌到 MA60 ${l.p(l.ma60)} 下方：很快收回来才算有撑，收不回来就等 20/60 怎么交叉。` },
       ENTRY_STOP(l),
-      { label: "失效", text: `${DEATH(l)}：结构坏了，不再有撑，按过渡态 / 下跌的打法看。` },
+      { label: "失效", text: `${DEATH(l)}：结构坏了，不再有撑，按过渡 / 下跌的打法看。` },
     ] }),
     holding: (l) => ({ action: "持有观察，不在急跌里卖。", items: [
       { label: "止损", text: `${DEATH(l)}才算结构坏，那时再走。` },
-      { label: "失效", text: `出现上面的止损信号就不再有撑：结构转空，剩下没走的仓位按过渡态 / 下跌的打法处理（MA60 ${f2(l.ma60)}、EMA60 ${f2(l.ema60)} 是分界）。` },
+      { label: "失效", text: `出现上面的止损信号就不再有撑：结构转空，剩下没走的仓位按过渡 / 下跌的打法处理（MA60 ${f2(l.ma60)}、EMA60 ${f2(l.ema60)} 是分界）。` },
       SIZE,
     ] }),
   },
 };
 
-const short = (t: string) => t.replace("（排列或方向不一致）", "");
 
 /**
  * 浮盈 / 浮亏时持仓计划怎么改：多一行「盈亏」，必要时换掉做法、去掉不再成立的条目。
  * 每种趋势类型各写一条，和同一张计划里的其他条目说同一件事（偏多浮亏不说"再加"配"不加仓"这种话）。
- * 来源：资金原则（文章 7.3）、"有仓位分批止盈或上移止损"（playbooks 极度超买）、各类型的离场条件。
+ * 来源：资金原则（文章 7.3）、"有仓位分批止盈或上移止损"（playbooks 加速上涨）、各类型的离场条件。
  */
 interface PnlTweak { line: string; action?: string; omit?: string[] }
 const PNL: Record<string, Record<"profit" | "loss", PnlTweak>> = {
-  横盘震荡: {
+  横盘: {
     profit: { line: `还有浮盈：把止损提到成本 ${COST} 附近保本；磨蹭不涨就先走。` },
     loss: { line: "已经浮亏：守住止损（20/60 死叉），不在箱体里加仓摊低，也不死等回本。" },
   },
@@ -262,11 +260,11 @@ const PNL: Record<string, Record<"profit" | "loss", PnlTweak>> = {
     profit: { line: `还有浮盈：底线已经破了，带着利润走（成本 ${COST}），别让它变成亏损。` },
     loss: { line: "已经浮亏：底线破了就认，不加仓摊低，不等回本。" },
   },
-  健康上涨: {
+  稳定上涨: {
     profit: { line: `还有浮盈：成本 ${COST} 在下方是安全垫，按趋势规则拿着，不因小回调卖掉。` },
     loss: { line: "暂时浮亏：趋势还向上，不急着割；不在浮亏时急着加仓摊低，等回踩获支撑、小级别确认后再加。" },
   },
-  极度超买: {
+  加速上涨: {
     profit: { line: `浮盈不少：先分批止盈一部分，剩下的把止损上移到成本 ${COST} 以上。` },
     loss: {
       action: "追在高位、暂时浮亏：不加仓，跌破 EMA20 就走。",
@@ -274,41 +272,40 @@ const PNL: Record<string, Record<"profit" | "loss", PnlTweak>> = {
       omit: ["警惕"], // 亏着钱谈不上"先止盈一部分"
     },
   },
-  健康下跌: {
+  稳定下跌: {
     profit: { line: `还有浮盈：先把止损提到成本 ${COST} 附近保本，反弹到减仓位先减一部分，别让盈利变成亏损。` },
     loss: { line: "已经浮亏：不等回本。反弹到减仓位就执行，减到浮亏不影响心情为止。" },
   },
-  极度超卖: {
+  加速下跌: {
     profit: { line: `还有浮盈：先把止损提到成本 ${COST} 附近保本，反弹到减仓位先减一部分，别让盈利变成亏损。` },
     loss: { line: "已经浮亏：不等回本。反弹到减仓位就执行，减到浮亏不影响心情为止。" },
   },
-  过渡态: {
+  过渡: {
     profit: { line: `还有浮盈：把止损提到成本 ${COST} 附近保本；排列理顺前不加仓。` },
     loss: { line: "已经浮亏：不加仓摊低；按止损减，不等回本。" },
   },
-  反弹受压: {
+  空头结构反弹中: {
     profit: { line: `还有浮盈：把止损提到成本 ${COST} 附近保本，到减仓位先锁住一部分利润。` },
     loss: { line: "已经浮亏：不等回本。到减仓位就减，这种反弹多半撑不住。" },
   },
-  回调有撑: {
+  多头结构回撤中: {
     profit: { line: `还有浮盈：成本 ${COST} 在下方是安全垫，结构还是多头，不在回调里卖。` },
     loss: { line: "暂时浮亏：结构还是多头，不急着割；但不加仓摊低，20/60 双死叉就走。" },
   },
 };
 
 /**
- * 这份分析该用哪套打法：按趋势类型，认不出来按过渡态；过渡态里方向和排布打架时用打架的打法。
- * 横盘（以及分数正好 ±0.6 的上涨 / 下跌）也可能带冲突，那时听趋势类型：页面顶部显示的就是它。
+ * 这份分析该用哪套打法：脚本给的 play.key；横盘里 20/60 已经死叉或即将死叉时改用横盘破位。
  */
 export function playKey(a: Analysis): string {
-  const t = PLAYS[short(a.trend)] ? short(a.trend) : "过渡态";
-  if (t === "横盘震荡" && stateOf(a).nearDeath) return "横盘破位";
-  return t === "过渡态" && a.lean.conflict ? a.lean.conflict : t;
+  const t = a.play.key;
+  if (t === "横盘" && stateOf(a).nearDeath) return "横盘破位";
+  return t;
 }
 /** 用了打架的打法时是哪一种。 */
 const conflictOf = (a: Analysis) => {
   const k = playKey(a);
-  return k === "反弹受压" || k === "回调有撑" ? k : null;
+  return k === "空头结构反弹中" || k === "多头结构回撤中" ? k : null;
 };
 
 /** 只按趋势类型定的打法（还没加看方向给的时机）。浮盈 / 浮亏在持仓打法的做法之后加一行。 */
@@ -371,11 +368,11 @@ export function buildOutlook(a: Analysis): Outlook {
 }
 
 /** 打架时，看方向的影响要服从结构（不说"顺风、买点窗口"配"不买"这种话）。 */
-function conflictEffect(a: Analysis, kind: "反弹受压" | "回调有撑"): Record<Situation, Effect> {
+function conflictEffect(a: Analysis, kind: "空头结构反弹中" | "多头结构回撤中"): Record<Situation, Effect> {
   const l = levels(a);
   const base = basePlans(a);
   const act = (k: Situation) => `「${base[k].action.replace(/。$/, "")}」`;
-  if (kind === "反弹受压") {
+  if (kind === "空头结构反弹中") {
     const where = l.close >= l.ma60 ? `现在就在 MA60 ${f2(l.ma60)} 上方，正好` : `反弹到 MA60 ${f2(l.ma60)} 附近再`;
     const sell = (k: Situation, tail: string): Effect =>
       ({ tag: "支持", text: `支持${act(k)}：短期反弹还有劲，${where}${tail}。` });
@@ -417,7 +414,7 @@ function sideOutlook(a: Analysis): Outlook {
           ? `支持${act("flat")}：20 天内进场条件都不会出现，不用盯盘；${l.close >= l.ema20 ? `已经在 EMA20 ${f2(l.ema20)} 上方，等它拐头向上` : `收盘站上 ${f2(l.ema20)}`}，再来看。`
           : `支持${act("flat")}：第 ${turn} 天前不会转向，不用急；之后看 MA20 能不能拐头向上。` },
         // 横盘的持仓打法是"拿着"，没有反弹要执行的动作：逆风对它是调整时机，其余类型的持仓打法本来就是反弹减
-        ...(playKey(a) === "横盘震荡"
+        ...(playKey(a) === "横盘"
           ? held((k) => `调整时机：逆风还会持续，守住止损；${rebound}可以先减一些${
             k === "profit" ? "，锁住一部分利润" : ""}。`, "调整时机")
           : held((k) => `支持${act(k)}：逆风还会持续，${rebound}就执行${
@@ -427,8 +424,8 @@ function sideOutlook(a: Analysis): Outlook {
   }
   if (a.lean.score >= 0.25) {
     const high = firstHigh(d20.path, a.close);
-    // 横盘、过渡态的空仓打法是"不做"：短期顺风不等于买点，等的是排列条件
-    const waitOnly = ["横盘震荡", "横盘破位", "过渡态"].includes(playKey(a));
+    // 横盘、过渡的空仓打法是"不做"：短期顺风不等于买点，等的是排列条件
+    const waitOnly = ["横盘", "横盘破位", "过渡"].includes(playKey(a));
     const waitFlat: Effect = { tag: "不变", text: `短期顺风，但排列条件还没满足：${act("flat")}不变，等排列理顺再说。` };
     return {
       verdict: high === null ? `顺风：未来 ${d20.path.length} 天 MA20 都扣低值，价格不跌就继续向上。${after}`

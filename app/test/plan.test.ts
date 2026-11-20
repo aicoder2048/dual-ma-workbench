@@ -3,19 +3,19 @@ import type { Analysis } from "../src/citations.ts";
 import { buildOutlook, buildPlans, ma20Claim, playKey } from "../src/plan.ts";
 import nvda from "./fixtures/nvda-analysis.json";
 
-const bear = nvda as Analysis; // 明显偏空 · 极度超卖，三条 MA 未来都扣高值
+const bear = nvda as Analysis; // 明显偏空 · 加速下跌，三条 MA 未来都扣高值
 
-/** 偏多的例子：把 NVDA 改成健康上涨，价格 230，MA20 前 4 天扣低值、之后扣高值。 */
+/** 偏多的例子：把 NVDA 改成稳定上涨，价格 230，MA20 前 4 天扣低值、之后扣高值。 */
 function bullish(): Analysis {
   const a = structuredClone(bear);
   a.close = 230;
-  a.trend = "健康上涨";
-  a.lean = { ...a.lean, score: 0.8, label: "明显偏多", conflict: null,
+  a.play = { ...a.play, key: "稳定上涨" };
+  a.lean = { ...a.lean, score: 0.8, label: "明显偏多",
     flips: [
-      { line: "EMA20", price: 221.5, crossed: false, text: "收盘跌破 EMA20（221.50），EMA20 拐头向下" },
-      { line: "MA20", price: 224.0, crossed: false, text: "收盘跌破 MA20 的抵扣价（224.00），MA20 拐头向下" },
+      { line: "EMA20", price: 221.5, toward: "空", text: "收盘跌破 EMA20（221.50），EMA20 拐头向下" },
+      { line: "MA20", price: 224.0, toward: "空", text: "收盘跌破 MA20 的抵扣价（224.00），MA20 拐头向下" },
     ],
-    after: { ...a.lean.after, label: "明显偏多", conflict: null, score: 0.8 } };
+    after: { ...a.lean.after, label: "明显偏多", score: 0.8 } };
   a.lines = a.lines.map((l) => ({ ...l, ma: l.period === 20 ? 220 : 205, ema: l.period === 20 ? 221.5 : 207, above: true }));
   const prices = [210, 212, 215, 218, 232, 235, 236, 238, 240, 241];
   a.drops = a.drops.map((d) => ({ ...d, tomorrow: d.period === 20 ? 224 : 200, below: d.period === 20 ? 4 : 10,
@@ -102,20 +102,20 @@ describe("成本价参与策略：浮盈、浮亏分开说", () => {
 });
 
 describe("每种趋势类型的浮盈 / 浮亏都不自相矛盾", () => {
-  const TRENDS = ["横盘震荡", "健康上涨", "极度超买", "健康下跌", "极度超卖", "过渡态（排列或方向不一致）"];
-  const withTrend = (t: string, score: number, conflict: "反弹受压" | "回调有撑" | null = null) => {
+  const TRENDS = ["横盘", "稳定上涨", "加速上涨", "稳定下跌", "加速下跌", "过渡"];
+  const withTrend = (t: string, score: number, conflict: "空头结构反弹中" | "多头结构回撤中" | null = null) => {
     const a = structuredClone(bear);
-    a.trend = t;
-    a.lean = { ...a.lean, score, conflict };
+    a.play = { ...a.play, key: conflict ?? t };
+    a.lean = { ...a.lean, score };
     return a;
   };
   const txt = (p: { action: string; items: { text: string }[] }) => [p.action, ...p.items.map((i) => i.text)].join("｜");
-  // 只遍历真实数据里会出现的组合：classify 只在分数 ≥ 0.6 时给上涨一侧、≤ -0.6 时给下跌一侧，
-  // 横盘和过渡态可以配任何分数（看方向分三档：≤ -0.25、中间、≥ 0.25）。打架的打法只用在过渡态。
-  const SCORES: Record<string, number[]> = { 健康上涨: [0.8], 极度超买: [0.8], 健康下跌: [-0.8], 极度超卖: [-0.8] };
-  const CASES: [string, number, "反弹受压" | "回调有撑" | null][] = [
+  // 遍历打法和典型分数的组合：上涨类配偏多、下跌类配偏空，横盘和过渡配三档（≤ -0.25、中间、≥ 0.25），
+  // 加上 60/120 定不出类型时的两种打架（空头结构反弹中、多头结构回撤中）。
+  const SCORES: Record<string, number[]> = { 稳定上涨: [0.8], 加速上涨: [0.8], 稳定下跌: [-0.8], 加速下跌: [-0.8] };
+  const CASES: [string, number, "空头结构反弹中" | "多头结构回撤中" | null][] = [
     ...TRENDS.flatMap((t) => (SCORES[t] ?? [-0.4, 0, 0.4]).map((s): [string, number, null] => [t, s, null])),
-    [TRENDS[5], 0.4, "反弹受压"], [TRENDS[5], -0.4, "回调有撑"],
+    [TRENDS[5], 0.4, "空头结构反弹中"], [TRENDS[5], -0.4, "多头结构回撤中"],
   ];
   for (const [t, score, conflict] of CASES) {
     test(`${t}${conflict ? `·${conflict}` : ""}，lean ${score}`, () => {
@@ -132,7 +132,7 @@ describe("每种趋势类型的浮盈 / 浮亏都不自相矛盾", () => {
         expect(timing).not.toMatch(/「([^」]+)」不变：\1/); // 时机行不把做法原话再说一遍
         if (/^(拿着|持有)/.test(p[k].action)) expect(timing).not.toMatch(/^支持.*就执行/); // 拿着的计划没有"执行"可支持
       }
-      if (t !== "健康上涨") expect(txt(p.loss)).not.toContain("趋势还向上"); // 只有健康上涨才能这么说
+      if (t !== "稳定上涨") expect(txt(p.loss)).not.toContain("趋势还向上"); // 只有稳定上涨才能这么说
       for (const k of ["profit", "loss"] as const) {
         // 盈亏行提到的「减仓位」「离场条件」，同一张计划里要真的有这一条
         if (/减仓位/.test(p[k].items.find((i) => i.label === "盈亏")!.text)) expect(p[k].items.some((i) => i.label === "减仓位")).toBe(true);
@@ -141,20 +141,20 @@ describe("每种趋势类型的浮盈 / 浮亏都不自相矛盾", () => {
   }
 });
 
-/** 过渡态里方向和排布打架：反弹受压（多数线向上、20 组在 60 组下方）/ 回调有撑（反过来）。 */
-function conflict(kind: "反弹受压" | "回调有撑"): Analysis {
+/** 过渡里方向和排布打架：空头结构反弹中（多数线向上、20 组在 60 组下方）/ 多头结构回撤中（反过来）。 */
+function conflict(kind: "空头结构反弹中" | "多头结构回撤中"): Analysis {
   const a = structuredClone(bear);
-  a.trend = "过渡态（排列或方向不一致）";
-  const score = kind === "反弹受压" ? 0.4 : -0.4;
-  a.lean = { ...a.lean, score, label: kind === "反弹受压" ? "偏多" : "偏空", conflict: kind,
-    after: { ...a.lean.after, score, conflict: kind } };
+  a.play = { ...a.play, key: kind };
+  const score = kind === "空头结构反弹中" ? 0.4 : -0.4;
+  a.lean = { ...a.lean, score, label: kind === "空头结构反弹中" ? "偏多" : "偏空",
+    after: { ...a.lean.after, score } };
   return a;
 }
 const all = (p: { action: string; items: { text: string }[] }) => [p.action, ...p.items.map((i) => i.text)].join("");
 
-describe("反弹受压 / 回调有撑进入策略", () => {
-  test("反弹受压：空仓不买，持仓逢高减仓；看方向不说「买点窗口」", () => {
-    const a = conflict("反弹受压");
+describe("空头结构反弹中 / 多头结构回撤中进入策略", () => {
+  test("空头结构反弹中：空仓不买，持仓逢高减仓；看方向不说「买点窗口」", () => {
+    const a = conflict("空头结构反弹中");
     const p = buildPlans(a);
     expect(p.flat.action).toContain("不买");
     expect(all(p.flat)).toContain("212.35"); // 等 20 线组站上 60 线组：MA60
@@ -163,26 +163,26 @@ describe("反弹受压 / 回调有撑进入策略", () => {
     expect(o.effect.flat.text).not.toMatch(/买点|窗口/);
     expect(o.effect.flat.text).toContain("不买");
   });
-  test("回调有撑：空仓等回调结束再买，持仓持有观察，20/60 双死叉才走", () => {
-    const p = buildPlans(conflict("回调有撑"));
+  test("多头结构回撤中：空仓等回调结束再买，持仓持有观察，20/60 双死叉才走", () => {
+    const p = buildPlans(conflict("多头结构回撤中"));
     expect(p.flat.action).toMatch(/回调结束|再买/);
     expect(p.holding.action).toContain("持有");
     expect(all(p.holding)).toContain("双死叉");
-    expect(buildOutlook(conflict("回调有撑")).effect.holding.text).toContain("持有");
+    expect(buildOutlook(conflict("多头结构回撤中")).effect.holding.text).toContain("持有");
   });
-  test("反弹受压：浮盈先锁利保本，浮亏不等回本、反弹到减仓位就减", () => {
-    const p = buildPlans(conflict("反弹受压"));
+  test("空头结构反弹中：浮盈先锁利保本，浮亏不等回本、反弹到减仓位就减", () => {
+    const p = buildPlans(conflict("空头结构反弹中"));
     expect(all(p.profit)).toContain("保本");
     expect(all(p.loss)).toContain("不等回本");
   });
-  test("回调有撑：浮盈有安全垫、不在回调里卖；浮亏不加仓摊低", () => {
-    const p = buildPlans(conflict("回调有撑"));
+  test("多头结构回撤中：浮盈有安全垫、不在回调里卖；浮亏不加仓摊低", () => {
+    const p = buildPlans(conflict("多头结构回撤中"));
     expect(all(p.profit)).toContain("安全垫");
     expect(all(p.loss)).toContain("不加仓摊低");
     expect(all(p.loss)).toContain("双死叉");
   });
-  test("反弹受压、价格已经在 MA60 上方：减仓位说「现在」，不说「反弹到」", () => {
-    const a = conflict("反弹受压");
+  test("空头结构反弹中、价格已经在 MA60 上方：减仓位说「现在」，不说「反弹到」", () => {
+    const a = conflict("空头结构反弹中");
     a.close = 220; // MA60 212.35 在下方
     const p = buildPlans(a);
     const sell = p.holding.items.find((i) => i.label === "减仓位")!.text;
@@ -191,14 +191,14 @@ describe("反弹受压 / 回调有撑进入策略", () => {
     expect(p.holding.items[0].text).toContain("现在");
   });
   test("横盘带冲突：还按横盘打（页面上的趋势类型也是横盘）", () => {
-    const a = conflict("回调有撑");
-    a.trend = "横盘震荡";
+    const a = conflict("多头结构回撤中");
+    a.play = { ...a.play, key: "横盘" };
     expect(buildPlans(a).flat.action).toBe("基本不做，等埋伏信号。");
     expect(buildOutlook(a).effect.flat.text).not.toContain("回调");
   });
   test("价位相对现价说对：「站上 / 反弹到 X」的 X 在现价上方，「回踩到 / 跌破 X」的 X 在现价下方", () => {
     // MA60 212.35、EMA60 203.13、EMA20 183.08：现价分别在 EMA20 下方、EMA20 和 MA60 之间、MA60 上方
-    for (const kind of ["反弹受压", "回调有撑"] as const) for (const close of [150.96, 195, 230]) {
+    for (const kind of ["空头结构反弹中", "多头结构回撤中"] as const) for (const close of [150.96, 195, 230]) {
       const a = conflict(kind);
       a.close = close;
       a.drops = a.drops.map((d) => (d.period === 20 ? { ...d, tomorrow: 190 } : d)); // MA20 抵扣价在 EMA20 和 MA60 之间
@@ -215,32 +215,32 @@ describe("反弹受压 / 回调有撑进入策略", () => {
       }
     }
   });
-  test("没有冲突的过渡态，打法不变", () => {
-    const a = conflict("反弹受压");
-    a.lean = { ...a.lean, conflict: null };
+  test("没有冲突的过渡，打法不变", () => {
+    const a = conflict("空头结构反弹中");
+    a.play = { ...a.play, key: "过渡" };
     expect(buildPlans(a).flat.action).toBe("条件不满足，不做。");
   });
 });
 
-/** 所有打法（六种类型按真实会出现的分数 + 过渡态的两种打架）× 现价在 EMA20 下方 / EMA20 和 MA60 之间 / MA60 上方。 */
+/** 所有打法（六种类型按真实会出现的分数 + 过渡的两种打架）× 现价在 EMA20 下方 / EMA20 和 MA60 之间 / MA60 上方。 */
 function everyPlay(): { name: string; a: Analysis }[] {
-  const CASES: [string, number, "反弹受压" | "回调有撑" | null][] = [
-    ["横盘震荡", -0.4, null], ["横盘震荡", 0, null], ["横盘震荡", 0.4, null],
-    ["健康上涨", 0.8, null], ["极度超买", 0.8, null], ["健康下跌", -0.8, null], ["极度超卖", -0.8, null],
-    ["过渡态（排列或方向不一致）", -0.4, null], ["过渡态（排列或方向不一致）", 0, null], ["过渡态（排列或方向不一致）", 0.4, null],
-    ["过渡态（排列或方向不一致）", 0.4, "反弹受压"], ["过渡态（排列或方向不一致）", -0.4, "回调有撑"],
+  const CASES: [string, number, "空头结构反弹中" | "多头结构回撤中" | null][] = [
+    ["横盘", -0.4, null], ["横盘", 0, null], ["横盘", 0.4, null],
+    ["稳定上涨", 0.8, null], ["加速上涨", 0.8, null], ["稳定下跌", -0.8, null], ["加速下跌", -0.8, null],
+    ["过渡", -0.4, null], ["过渡", 0, null], ["过渡", 0.4, null],
+    ["过渡", 0.4, "空头结构反弹中"], ["过渡", -0.4, "多头结构回撤中"],
   ];
   return CASES.flatMap(([trend, score, conflict]) => [150.96, 195, 230].map((close) => {
     const a = structuredClone(bear);
-    a.trend = trend;
+    a.play = { ...a.play, key: conflict ?? trend };
     a.close = close;
-    a.lean = { ...a.lean, score, conflict };
+    a.lean = { ...a.lean, score };
     a.drops = a.drops.map((d) => (d.period === 20 ? { ...d, tomorrow: 190 } : d)); // MA20 抵扣价在 EMA20 和 MA60 之间
     a.lean.flips = a.lean.flips.filter((f) => f.price > close); // 夹具的门槛按原现价算，越过的不留
     return { name: `${trend}${conflict ? `·${conflict}` : ""} ${score} @${close}`, a };
   })).concat(
-    // 夹具是 20/60 双死叉、线都向下；再加上 20/60 金叉、EMA20 向上的排布（横盘没破位、过渡态偏多那一边）
-    ["横盘震荡", "过渡态（排列或方向不一致）"].flatMap((trend) => [-0.4, 0, 0.4].flatMap((score) => [150.96, 195, 230].map((close) => {
+    // 夹具是 20/60 双死叉、线都向下；再加上 20/60 金叉、EMA20 向上的排布（横盘没破位、过渡偏多那一边）
+    ["横盘", "过渡"].flatMap((trend) => [-0.4, 0, 0.4].flatMap((score) => [150.96, 195, 230].map((close) => {
       const a = shaped(trend, score, { r2060: 1, ema20Dir: 1, close });
       a.drops = a.drops.map((d) => (d.period === 20 ? { ...d, tomorrow: 190 } : d));
       a.lean.flips = a.lean.flips.filter((f) => f.price > close);
@@ -292,23 +292,23 @@ describe("所有打法：价位相对现价说对", () => {
 describe("止损和失效的内容来自 playbooks", () => {
   const at = (trend: string, score: number) => {
     const a = structuredClone(bear);
-    a.trend = trend;
-    a.lean = { ...a.lean, score, conflict: null };
+    a.play = { ...a.play, key: trend };
+    a.lean = { ...a.lean, score };
     return buildPlans(a);
   };
   const item = (p: ReturnType<typeof buildPlans>[keyof ReturnType<typeof buildPlans>], l: string) => p.items.find((i) => i.label === l)!.text;
   test("横盘：止损是 20/60 死叉；空仓埋伏还要防假突破", () => {
-    const p = buildPlans(shaped("横盘震荡", 0, { r2060: 1, ema20Dir: 1 })); // 夹具本身已死叉，那是「横盘破位」
+    const p = buildPlans(shaped("横盘", 0, { r2060: 1, ema20Dir: 1 })); // 夹具本身已死叉，那是「横盘破位」
     expect(item(p.holding, "止损")).toContain("死叉");
     expect(item(p.flat, "止损")).toContain("假突破");
   });
-  test("健康上涨：碰到 MA60 不算，60 线组拐头或 20/60 双死叉才走", () => {
-    const s = item(at("健康上涨", 0.8).holding, "止损");
+  test("稳定上涨：碰到 MA60 不算，60 线组拐头或 20/60 双死叉才走", () => {
+    const s = item(at("稳定上涨", 0.8).holding, "止损");
     expect(s).toContain("双死叉");
     expect(s).toContain("不算");
   });
-  test("健康下跌：站上 MA20 抵扣价 + 20/60 双金叉，下跌判断失效；空仓进场后跌回 EMA20 下方就走", () => {
-    const p = at("健康下跌", -0.8);
+  test("稳定下跌：站上 MA20 抵扣价 + 20/60 双金叉，下跌判断失效；空仓进场后跌回 EMA20 下方就走", () => {
+    const p = at("稳定下跌", -0.8);
     expect(item(p.flat, "失效")).toContain("212.21");
     expect(item(p.flat, "失效")).toContain("双金叉");
     expect(item(p.flat, "止损")).toMatch(/跌回 EMA20/);
@@ -318,9 +318,9 @@ describe("止损和失效的内容来自 playbooks", () => {
 /** 改均线排布和方向：20/60 两对的上下（1 在上、-1 在下）、EMA20 方向。 */
 function shaped(trend: string, score: number, o: { r2060: -1 | 0 | 1; ema20Dir: -1 | 0 | 1; close?: number; emaRel?: -1 | 0 | 1 }): Analysis {
   const a = structuredClone(bear);
-  a.trend = trend;
+  a.play = { ...a.play, key: trend };
   a.close = o.close ?? a.close;
-  a.lean = { ...a.lean, score, conflict: null,
+  a.lean = { ...a.lean, score,
     pairs: a.lean.pairs.map((x) => (x.pair === "MA20/MA60" ? { ...x, rel: o.r2060 } : x.pair === "EMA20/EMA60" ? { ...x, rel: o.emaRel ?? o.r2060 } : x)),
     dirs: { ...a.lean.dirs, EMA20: o.ema20Dir } };
   return a;
@@ -329,7 +329,7 @@ const label = (p: { items: { label: string; text: string }[] }, l: string) => p.
 
 describe("止损、失效看当下：已经成立的照实说", () => {
   test("横盘、20/60 已经死叉：持仓按硬止损离场，空仓不埋伏；看方向不说「拿着」", () => {
-    const a = shaped("横盘震荡", 0, { r2060: -1, ema20Dir: -1 });
+    const a = shaped("横盘", 0, { r2060: -1, ema20Dir: -1 });
     const p = buildPlans(a);
     expect(p.holding.action).toContain("离场");
     expect(label(p.holding, "止损")).toContain("已经");
@@ -339,50 +339,50 @@ describe("止损、失效看当下：已经成立的照实说", () => {
     expect(all(p.profit)).not.toContain("把止损提到成本");
   });
   test("横盘、20/60 没死叉：照旧拿着", () => {
-    const p = buildPlans(shaped("横盘震荡", 0, { r2060: 1, ema20Dir: 1 }));
+    const p = buildPlans(shaped("横盘", 0, { r2060: 1, ema20Dir: 1 }));
     expect(p.holding.action).toBe("拿着，但守住底线。");
     expect(label(p.holding, "止损")).not.toContain("已经");
   });
-  test("横盘的失效用 classify 的判据（三条 MA 相差超过 4%），横盘时按定义还没发生", () => {
-    expect(label(buildPlans(shaped("横盘震荡", 0, { r2060: 1, ema20Dir: 1 })).flat, "失效")).toContain("4%");
+  test("横盘的失效用脚本判横盘的判据（6 条线相差超过 thresholds.RANGE_SPREAD_PCT），横盘时按定义还没发生", () => {
+    expect(label(buildPlans(shaped("横盘", 0, { r2060: 1, ema20Dir: 1 })).flat, "失效")).toContain("超过 5%");
   });
-  test("过渡态的失效用分数门槛 ±0.6（过渡态时按定义还没到），不用 20/60 排布（常常已经成立）", () => {
+  test("过渡的失效用分数门槛 ±0.6（过渡时按定义还没到），不用 20/60 排布（常常已经成立）", () => {
     for (const r2060 of [-1, 1] as const) {
-      const p = buildPlans(shaped("过渡态（排列或方向不一致）", 0.4, { r2060, ema20Dir: 1 }));
+      const p = buildPlans(shaped("过渡", 0.4, { r2060, ema20Dir: 1 }));
       for (const k of ["flat", "holding"] as const) {
         expect(label(p[k], "失效")).toContain("0.6");
         expect(label(p[k], "失效")).not.toMatch(/20 线组(升到|落到)/);
       }
     }
   });
-  test("过渡态持仓：已经在 EMA20 下方、EMA20 也向下，止损已经满足，反弹到 EMA20 附近减掉", () => {
-    const s = label(buildPlans(shaped("过渡态（排列或方向不一致）", -0.4, { r2060: -1, ema20Dir: -1 })).holding, "止损");
+  test("过渡持仓：已经在 EMA20 下方、EMA20 也向下，止损已经满足，反弹到 EMA20 附近减掉", () => {
+    const s = label(buildPlans(shaped("过渡", -0.4, { r2060: -1, ema20Dir: -1 })).holding, "止损");
     expect(s).toContain("已经满足");
     expect(s).toContain("183.08");
   });
   test("下跌类持仓：现价上方的 EMA20 不叫止损位，照实说下方没有均线托底", () => {
-    for (const t of ["健康下跌", "极度超卖"]) {
+    for (const t of ["稳定下跌", "加速下跌"]) {
       const s = label(buildPlans(shaped(t, -0.8, { r2060: -1, ema20Dir: -1 })).holding, "止损");
       expect(s).not.toContain("就是止损位");
       expect(s).toContain("离场点");
     }
   });
-  test("回调有撑持仓：失效不另编规则（没有 0.5%、不说别等双死叉）", () => {
-    const a = shaped("过渡态（排列或方向不一致）", -0.4, { r2060: 1, ema20Dir: -1 });
-    a.lean = { ...a.lean, conflict: "回调有撑" };
+  test("多头结构回撤中持仓：失效不另编规则（没有 0.5%、不说别等双死叉）", () => {
+    const a = shaped("过渡", -0.4, { r2060: 1, ema20Dir: -1 });
+    a.play = { ...a.play, key: "多头结构回撤中" };
     const w = label(buildPlans(a).holding, "失效");
     expect(w).not.toContain("0.5%");
     expect(w).not.toContain("别等双死叉");
   });
   test("看方向：已经在 EMA20 上方，不再说「更早的信号是收盘站上 EMA20」", () => {
-    const a = shaped("健康下跌", -0.8, { r2060: -1, ema20Dir: -1, close: 190 });
+    const a = shaped("稳定下跌", -0.8, { r2060: -1, ema20Dir: -1, close: 190 });
     a.drops = a.drops.map((d) => (d.period === 20 ? { ...d, first_low: 5 } : d));
     expect(buildOutlook(a).change).not.toMatch(/站上 EMA20 183/);
   });
 });
 
 describe("空仓「不做」的计划，看方向不说「机会 / 买点」", () => {
-  for (const t of ["横盘震荡", "过渡态（排列或方向不一致）"]) for (const r2060 of [-1, 1] as const) {
+  for (const t of ["横盘", "过渡"]) for (const r2060 of [-1, 1] as const) {
     test(`${t} 20/60 ${r2060 > 0 ? "金叉" : "死叉"}，偏多`, () => {
       const a = shaped(t, 0.4, { r2060, ema20Dir: 1 });
       expect(buildOutlook(a).effect.flat.text).not.toMatch(/机会|买点/);
@@ -394,32 +394,32 @@ describe("空仓「不做」的计划，看方向不说「机会 / 买点」", (
 
 describe("只成立一半的条件也照实说（第二轮审查）", () => {
   test("横盘：MA20 已在 MA60 下方、EMA20 贴着 EMA60（即将死叉）→ 也按横盘破位离场", () => {
-    const p = buildPlans(shaped("横盘震荡", 0, { r2060: -1, emaRel: 0, ema20Dir: -1 }));
+    const p = buildPlans(shaped("横盘", 0, { r2060: -1, emaRel: 0, ema20Dir: -1 }));
     expect(p.holding.action).toContain("离场");
   });
   test("横盘：两对都在上方 → 照旧拿着", () => {
-    expect(buildPlans(shaped("横盘震荡", 0, { r2060: 1, ema20Dir: 1 })).holding.action).toBe("拿着，但守住底线。");
+    expect(buildPlans(shaped("横盘", 0, { r2060: 1, ema20Dir: 1 })).holding.action).toBe("拿着，但守住底线。");
   });
-  test("过渡态分数接近 0：失效也带价位，分数不显示 -0.00", () => {
-    const a = shaped("过渡态（排列或方向不一致）", -1e-17, { r2060: 1, ema20Dir: 1 });
+  test("过渡分数接近 0：失效也带价位，分数不显示 -0.00", () => {
+    const a = shaped("过渡", -1e-17, { r2060: 1, ema20Dir: 1 });
     a.lean.flips = [];
     const w = label(buildPlans(a).flat, "失效");
     expect(w).toMatch(/\d+\.\d{2}/);
     expect(w).not.toContain("-0.00");
   });
-  test("反弹受压、已在 MA60 上方：止损不再说「没到减仓位」", () => {
-    const a = shaped("过渡态（排列或方向不一致）", 0.4, { r2060: -1, ema20Dir: 1, close: 230 });
-    a.lean = { ...a.lean, conflict: "反弹受压" };
+  test("空头结构反弹中、已在 MA60 上方：止损不再说「没到减仓位」", () => {
+    const a = shaped("过渡", 0.4, { r2060: -1, ema20Dir: 1, close: 230 });
+    a.play = { ...a.play, key: "空头结构反弹中" };
     expect(label(buildPlans(a).holding, "止损")).not.toContain("没到减仓位");
   });
-  test("健康上涨空仓、价格已在 MA20 抵扣价下方：不说「仍在抵扣价上方」，止损先说别买", () => {
-    const a = shaped("健康上涨", 0.8, { r2060: 1, ema20Dir: 1, close: 200 }); // 夹具 MA20 抵扣价 212.21
+  test("稳定上涨空仓、价格已在 MA20 抵扣价下方：不说「仍在抵扣价上方」，止损先说别买", () => {
+    const a = shaped("稳定上涨", 0.8, { r2060: 1, ema20Dir: 1, close: 200 }); // 夹具 MA20 抵扣价 212.21
     const p = buildPlans(a);
     expect(label(p.flat, "等什么")).not.toContain("仍在");
     expect(label(p.flat, "止损")).toContain("先别买");
   });
-  test("过渡态空仓、20/60 已经金叉：等什么不再说「升到 60 线组上方」", () => {
-    const p = buildPlans(shaped("过渡态（排列或方向不一致）", 0.4, { r2060: 1, ema20Dir: 1 }));
+  test("过渡空仓、20/60 已经金叉：等什么不再说「升到 60 线组上方」", () => {
+    const p = buildPlans(shaped("过渡", 0.4, { r2060: 1, ema20Dir: 1 }));
     expect(label(p.flat, "等什么")).not.toContain("升到");
   });
 });
@@ -444,14 +444,13 @@ test("下跌类空仓的进场条件：已经站上的那条照实说，读起�
   }
 });
 
-test("playKey：横盘已死叉是横盘破位，过渡态打架用打架的键", () => {
-  expect(playKey(bear)).toBe("极度超卖");
+test("playKey：横盘已死叉是横盘破位，过渡打架用打架的键", () => {
+  expect(playKey(bear)).toBe("加速下跌");
   const a = structuredClone(bear);
-  a.trend = "横盘震荡";
+  a.play = { ...a.play, key: "横盘" };
   expect(playKey(a)).toBe("横盘破位");
-  a.trend = "过渡态（排列或方向不一致）";
-  a.lean = { ...a.lean, conflict: "反弹受压" };
-  expect(playKey(a)).toBe("反弹受压");
+  a.play = { ...a.play, key: "空头结构反弹中" };
+  expect(playKey(a)).toBe("空头结构反弹中");
 });
 
 test("ma20Claim 和看方向的结论说的是同一件事", () => {
