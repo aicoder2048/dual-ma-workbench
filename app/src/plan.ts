@@ -87,6 +87,10 @@ const BUY_TURN = (l: L) =>
 const SIZE: PlanItem = { label: "仓位", text: "盈亏影响心情，就是仓位太大，减到睡得着为止。" };
 const DEATH = (l: L) => l.death ? `20/60 已经双死叉（MA20、EMA20 都在 MA60 ${f2(l.ma60)}、EMA60 ${f2(l.ema60)} 下方）`
   : `20/60 双死叉（MA20 落到 MA60 ${f2(l.ma60)} 下方、EMA20 落到 EMA60 ${f2(l.ema60)} 下方）`;
+/** 稳定上涨（下跌）的失效看 60/120（rules.md J7）：20/60 交叉只是深回撤（反弹）。 */
+const TYPE_END = (l: L, up: boolean) => up
+  ? `60/120 不再平行向上（60 线组拐头向下，MA60 ${f2(l.ma60)}、EMA60 ${f2(l.ema60)}；或 MA120 拐头向下）`
+  : `60/120 不再平行向下（60 线组拐头向上，MA60 ${f2(l.ma60)}、EMA60 ${f2(l.ema60)}；或 MA120 拐头向上）`;
 const GOLD = (l: L) => l.gold ? `20/60 已经双金叉（MA20、EMA20 都在 MA60 ${f2(l.ma60)}、EMA60 ${f2(l.ema60)} 上方）`
   : `20/60 双金叉（MA20 升过 MA60 ${f2(l.ma60)}、EMA20 升过 EMA60 ${f2(l.ema60)}）`;
 /** 持仓的 EMA20 止损：收盘跌破 EMA20、EMA20 拐头向下就 {act}。两半都已成立时说"已经满足"，反弹到 EMA20 附近执行。 */
@@ -150,12 +154,12 @@ const PLAYS: Record<string, Record<Position, (l: L) => Plan>> = {
       { label: "止损", text: l.close >= l.drop20
         ? `买进后小时线的多头排列被破坏就走；日线价格低于 MA20 抵扣价（现在 ${f2(l.drop20)}）、MA20 拐头向下，也走。`
         : `现在价格已经在 MA20 抵扣价 ${f2(l.drop20)} 下方，MA20 要拐头向下：先别买。买进后的止损是小时线多头排列被破坏，或日线 MA20 拐头向下。` },
-      { label: "失效", text: `${DEATH(l)}，或 60 线组拐头向下：不再是稳定上涨，不再等回调买。`, rules: ["J16"] },
+      { label: "失效", text: `${TYPE_END(l, true)}：不再是稳定上涨，不再等回调买。20/60 交叉不算，60/120 还平行向上就是深回撤。`, rules: ["J7"] },
     ] }),
     holding: (l) => ({ action: "持有，回调可以加仓。", items: [
       { label: "加仓", text: `回撤到 60 线组、MA120 方向不变、出现底部构造、小时线多头排列，四条齐了加（现在 ${l.st("P14")}）。`, rules: ["P14"] },
       { label: "止损", text: `60 线组拐头向下，或 20/60 双死叉才走。只是碰到 MA60 ${f2(l.ma60)} 不算：价格击穿均线、MA 方向不变，就是吃回撤区。`, rules: ["A1", "J16"] },
-      { label: "失效", text: `出现上面的止损信号（60 线组拐头向下，或 MA20、EMA20 落到 MA60 ${f2(l.ma60)}、EMA60 ${f2(l.ema60)} 下方），就不是稳定上涨了：不再回调加仓，改按过渡 / 下跌的打法。` },
+      { label: "失效", text: `${TYPE_END(l, true)}，就不是稳定上涨了：不再回调加仓，改按过渡 / 下跌的打法。`, rules: ["J7"] },
       SIZE,
     ] }),
   },
@@ -180,7 +184,7 @@ const PLAYS: Record<string, Record<Position, (l: L) => Plan>> = {
       { label: "等什么", text: BUY_TURN(l), rules: ["P19", "P20"] },
       { label: "再等", text: "排列理顺成多头，才算底部确认。" },
       ENTRY_STOP(l),
-      { label: "失效", text: `${above(l, "MA20 抵扣价", l.drop20)}，${GOLD(l)}：下跌判断失效，按过渡 / 上涨的打法看。`, rules: ["J16"] },
+      { label: "失效", text: `${TYPE_END(l, false)}：下跌判断失效，按过渡 / 上涨的打法看。20/60 金叉不算，60/120 还平行向下就是反弹。`, rules: ["J7"] },
     ] }),
     holding: (l) => ({ action: "反弹到均线附近，减仓或离场。", items: [
       { label: "减仓位", text: (l.close >= l.ema20 ? `已经在 EMA20 ${l.p(l.ema20)} 上方，现在就是减仓位（MA20 ${f2(l.ma20)} 附近也是）。`
@@ -188,7 +192,7 @@ const PLAYS: Record<string, Record<Position, (l: L) => Plan>> = {
         + `反弹卖出的四个触发：平行向下 ${l.st("P10")}，反弹到 60 线组 ${l.st("P11")}，顶部构造 ${l.st("P12")}，小时线空头排列 ${l.st("P13")}。`, rules: ["P10", "P11", "P12", "P13", "P14"] },
       { label: "别指望", text: "连涨几天改变不了双死叉，跌下去的价格要很久才回来。", rules: ["P16"] },
       { label: "止损", text: `下跌趋势里下方没有均线托底，止损不靠均线：${l.close >= l.ema20 ? `现在已经在 EMA20 ${f2(l.ema20)} 上方，就是离场点` : `反弹到 EMA20 ${f2(l.ema20)} 一带就是离场点`}；没等到反弹，也别把"心理价"一路往下挪。` },
-      { label: "失效", text: `${above(l, "MA20 抵扣价", l.drop20)}，${GOLD(l)}：下跌判断失效，剩下的仓位可以按上涨拿着。` },
+      { label: "失效", text: `${TYPE_END(l, false)}：下跌判断失效，剩下的仓位可以按上涨拿着。`, rules: ["J7"] },
       SIZE,
     ] }),
   },

@@ -310,11 +310,17 @@ describe("止损和失效的内容来自 playbooks", () => {
     expect(s).toContain("双死叉");
     expect(s).toContain("不算");
   });
-  test("稳定下跌：站上 MA20 抵扣价 + 20/60 双金叉，下跌判断失效；空仓进场后跌回 EMA20 下方就走", () => {
-    const p = at("稳定下跌", -0.8);
-    expect(item(p.flat, "失效")).toContain("212.21");
-    expect(item(p.flat, "失效")).toContain("双金叉");
-    expect(item(p.flat, "止损")).toMatch(/跌回 EMA20/);
+  test("稳定上涨、稳定下跌的失效看 60/120：20/60 交叉只是深回撤（反弹），不是失效（rules.md J7）", () => {
+    for (const [trend, score] of [["稳定上涨", 0.8], ["稳定下跌", -0.8]] as const) {
+      const p = at(trend, score);
+      for (const k of ["flat", "holding"] as const) {
+        expect(item(p[k], "失效")).toContain("60/120 不再平行");
+        expect(item(p[k], "失效")).not.toMatch(/已经双(死|金)叉/);
+      }
+    }
+  });
+  test("稳定下跌：空仓进场后跌回 EMA20 下方就走", () => {
+    expect(item(at("稳定下跌", -0.8).flat, "止损")).toMatch(/跌回 EMA20/);
   });
 });
 
