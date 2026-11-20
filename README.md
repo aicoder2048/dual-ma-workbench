@@ -15,6 +15,7 @@
 | 部分 | 位置 | 作用 |
 |---|---|---|
 | Skill | `.agents/skills/dual-moving-averages/` | 方法论（SKILL.md + references）和分析脚本 `dma_analyze.py`。Pi 直接识别 `.agents/skills/` |
+| 入库 skill | `.agents/skills/dma-video-ingest/` | 把一期新视频整理进上面的 skill：每条概念、规则附字幕原话和时间戳，脚本 `verify_quotes.py` 逐条核对 |
 | 工作台 | `app/` | 三栏网页：左「自选股」、中「分析师」、右「鸿雁」。AI 部分基于 Pi SDK |
 
 工作台的主要功能：
@@ -119,6 +120,7 @@ uv run .agents/skills/dual-moving-averages/scripts/dma_analyze.py NVDA --source 
 
 ```
 .agents/skills/dual-moving-averages/   skill：SKILL.md、references/、scripts/、tests/
+.agents/skills/dma-video-ingest/       新视频入库 skill：SKILL.md、scripts/verify_quotes.py、tests/
 app/                                   工作台（说明见 app/README.md）
 ```
 

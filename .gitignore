@@ -25,5 +25,5 @@ reports/
 data/
 # 给下一个会话的私人交接文档（本机路径、私有仓库、个人偏好）
 HANDOFF.md
-videoes/*.mp3
-videoes/*.mp4
+# 视频、字幕、转写稿、入库条目文件：都是转载内容
+videoes/
