@@ -2,11 +2,14 @@
 from __future__ import annotations
 
 import re
+from functools import lru_cache
 from pathlib import Path
 
+import pandas as pd
 import pytest
 
 from conftest import load_fixture
+from indicators import add_indicators
 import dma_analyze as dma
 import rules
 
@@ -134,3 +137,76 @@ def test_cases_md_baselines_spy_deep_pullback_and_googl_turn_level():
     googl = dma.analyze(load_fixture("GOOGL", "2025-04-08"), "GOOGL", "fixture")
     turn = next(s for s in googl["projection"]["solves"] if s["event"] == "MA20 拐头向上" and s["days"] == 10)
     assert turn["level"] == pytest.approx(160.67, abs=0.05)
+
+
+# ---------- 吃回撤的先后顺序（视频 B 13:20「满足这两个条件之后」，第三点才是底部构造） ----------
+
+def hourly(arr: str) -> dict:
+    return {"available": True, "source": "合成", "bars": 200, "last": "2021-08-31 15:00", "close": 1.0,
+            "lines": [{"period": n, "ma": 1.0, "ema": 1.0} for n in (20, 60, 120)], "arr_ma": arr, "arr_ema": arr}
+
+
+@lru_cache
+def pullback_days(down: int, drop: float, up: int, rise: float, mirror: bool = False) -> list[dict]:
+    """400 根每天 +0.3% 的稳定上涨，跌 down 根（每根 −drop），再涨 up 根（每根 +rise）。返回回撤开始后每天的分析。
+
+    mirror：价格取倒数，成了稳定下跌里的反弹，小时线给空头排列。"""
+    closes = [100 * 1.003 ** i for i in range(400)]
+    closes += [closes[-1] * (1 - drop) ** (i + 1) for i in range(down)]
+    closes += [closes[-1] * (1 + rise) ** (i + 1) for i in range(up)]
+    if mirror:
+        closes = [10000 / c for c in closes]
+    df = pd.DataFrame({"Open": closes, "High": [c * 1.005 for c in closes], "Low": [c * 0.995 for c in closes],
+                       "Close": closes, "Volume": 1e6}, index=pd.bdate_range("2020-01-02", periods=len(closes)))
+    df = add_indicators(df)
+    h = hourly("空头" if mirror else "多头")
+    return [dma.analyze(df.iloc[:k], "T", "synthetic", hourly=h) for k in range(401, len(df) + 1)]
+
+
+def entries(days: list[dict], key: str = "稳定上涨") -> list[dict]:
+    return [a for a in days if status(a, "P14") == "满足" and a["play"]["key"] == key]
+
+
+def test_bottom_construct_after_the_pullback_reached_the_60_group_is_an_entry():
+    # V 形：急跌穿过 60 线组，底部构造完成那天收盘已经回到 60 线组上方。② 是这次回撤里发生过的事，不要求还在线下
+    days = pullback_days(down=6, drop=0.02, up=8, rise=0.025)
+    construct = next(a for a in days if status(a, "P12") == "满足")
+    ma60 = next(x for x in construct["lines"] if x["period"] == 60)
+    assert construct["close"] > max(ma60["ma"], ma60["ema"])
+    assert status(construct, "P11") == "满足"
+    assert construct in entries(days)
+    assert "可以结构性加仓" in construct["play"]["text"]
+
+
+def test_20_60_cross_inside_an_intact_60_120_uptrend_is_still_a_pullback():
+    # 慢而深的回撤，20/60 已经交叉，60/120 还是稳定上涨（视频 A 谷歌：第一次结构性加仓跌破了所有均线）
+    days = pullback_days(down=16, drop=0.008, up=14, rise=0.004)
+    crossed = [a for a in entries(days)
+               if any(s["step"] == "第一个交叉" and s["date"] for s in (a["steps"][0]["current"] or {}).get("steps", []))]
+    assert crossed
+    assert all((a["regime"]["type"], a["regime"]["stage"]) == ("稳定上涨", "回撤中") for a in crossed)
+
+
+def test_mirror_bounce_through_the_60_group_then_top_construct_is_a_sell():
+    days = pullback_days(down=16, drop=0.008, up=14, rise=0.004, mirror=True)
+    sells = entries(days, "稳定下跌")
+    assert sells
+    assert all(a["regime"]["stage"] == "反弹中" for a in sells)
+    assert "减仓或离场" in sells[0]["play"]["text"]
+
+
+def test_no_pullback_entry_once_60_120_breaks():
+    days = pullback_days(down=16, drop=0.008, up=14, rise=0.004)
+    broken = [a for a in days if a["regime"]["type"] is None]
+    assert broken
+    assert all(status(a, "P14") == "不满足" and a["play"]["key"] == "过渡" for a in broken)
+
+
+def test_a_new_high_ends_the_pullback():
+    # 回撤到过 60 线组之后又创新高：这次回撤结束，② 从新高重新算
+    days = pullback_days(down=6, drop=0.02, up=55, rise=0.0025)
+    peak = days[0]["close"] / 0.98
+    i = next(i for i, a in enumerate(days) if a["close"] > peak)
+    before, high = days[i - 1], days[i]
+    assert (before["regime"]["type"], high["regime"]["type"]) == ("稳定上涨", "稳定上涨")
+    assert (status(before, "P11"), status(high, "P11")) == ("满足", "不满足")

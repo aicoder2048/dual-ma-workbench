@@ -258,12 +258,14 @@ def range_info(df: pd.DataFrame, structure: Structure | None) -> RangeInfo:
 
 # ---------- 类型 × 阶段 ----------
 
-def _stage(d: int, p20: PairProgress) -> Stage:
-    """J7：20 线组还在类型那一边、没走出反向的一步是延伸；走了破线或拐头是回撤（反弹）；有交叉了是转折。"""
+def _stage(d: int, p20: PairProgress, steady: bool) -> Stage:
+    """J7：20 线组还在类型那一边、没走出反向的一步是延伸；走了破线或拐头是回撤（反弹）。
+    20/60 交叉了：稳定趋势里类型还由 60/120 定，仍是回撤（反弹）；加速里是转折。"""
     on_side = {"多头": UP, "空头": DOWN}.get(p20.side or "", 0) == d
-    if not on_side or _has(p20.current, Step.FIRST_CROSS):
+    crossed = not on_side or _has(p20.current, Step.FIRST_CROSS)
+    if crossed and not steady:
         return Stage.TURNING
-    if p20.current and p20.current.progress:
+    if crossed or (p20.current and p20.current.progress):
         return Stage.PULLBACK if d == UP else Stage.BOUNCE
     return Stage.EXTEND
 
@@ -304,7 +306,7 @@ def classify(df: pd.DataFrame, structure: Structure | None, bias_pctl: float) ->
         if t == TrendType.RANGE:
             return Regime(type=t, stage=None, transition=None, name=t.value, direction=0, depth=None,
                           range=rng, accel=None, **common)
-        stage = _stage(d, p20)
+        stage = _stage(d, p20, t in (TrendType.STEADY_UP, TrendType.STEADY_DOWN))
         label = stage.value
         if stage == Stage.TURNING:
             label = Transition.TOPPING.value if d == UP else Transition.BOTTOMING.value
