@@ -31,6 +31,8 @@ export function step(s, action, total) {
       return s.playing ? at(s.index) : s;
     case "toggle":
       return step(s, { type: s.playing ? "pause" : "play" }, total);
+    case "back": // 回退一根：停下来看（边放边退没意义）；第一根上不动
+      return s.index > 0 ? at(s.index - 1) : s;
     case "forward":
       if (s.index >= last) return s.playing ? at(last) : s;
       return at(s.index + 1, s.playing && s.index + 1 < last);
