@@ -33,7 +33,7 @@ function at(price: number, close: number) {
   return `${f2(price)}（${d >= 0 ? "+" : ""}${d.toFixed(1)}%）`;
 }
 
-export function ruleOf(a: Analysis, id: string): RuleResult {
+function ruleOf(a: Analysis, id: string): RuleResult {
   const r = a.rules.find((x) => x.id === id);
   if (!r) throw new Error(`分析结果里没有规则 ${id}`);
   return r;
@@ -45,7 +45,6 @@ const st = (a: Analysis, id: string) => `${ruleOf(a, id).status}（${id}）`;
 /**
  * 当下的均线状态，全部读脚本结果：止损、失效的条件可能现在就已经成立，那时要照实说"已经"。
  * - death / gold：20/60 最近一次完整站在哪边（steps 的 side，双交叉之后才换边）。
- * - ambushStop：P3（埋伏的底线）满足，即 20/60 已交叉或不可避免要交叉。
  * - ema20Down：EMA20 在向下（20 线组里先拐的那条）。
  * - lo / hi / spread：6 条线的最低、最高、相差（占价格 %）；rangeMax、dense、clear、some 是脚本的阈值。
  */
@@ -55,7 +54,6 @@ function stateOf(a: Analysis) {
   return {
     death: side === "空头",
     gold: side === "多头",
-    ambushStop: met(a, "P3"),
     ema20Down: (a.lean.dirs.EMA20 ?? 0) < 0,
     lo: Math.min(...a.lines.flatMap((x) => [x.ma, x.ema])), hi: Math.max(...a.lines.flatMap((x) => [x.ma, x.ema])),
     spread: a.spread_pct, rangeMax: th("RANGE_SPREAD_PCT"), dense: th("DENSE_PCT"), clear: th("LEAN_CLEAR"), some: th("LEAN_SOME"),
