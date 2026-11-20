@@ -1,0 +1,97 @@
+# 评估双均线方法的六条主张（H1–H6）：品种、样本、门槛都写在这里，scripts/evaluate.py 不写死任何一个。
+# 改门槛就改这个文件，提交信息写明为什么改。报告里的"门槛变更记录"读这个文件的 git 历史。
+# 看过结果再改门槛容易自欺：改了之后只重跑开发集；验证集跑过不止一次，报告会醒目标出。
+
+[freeze]
+# 开测时 origin/main 的提交。评估期间 scripts/ 下除评估代码以外的文件都不许改（--verify 核对）
+commit = "ef307ccc71cc9c4490b91971bf608d91ed7c219a"
+eval_files = ["evaluate.py", "evalstats.py"]
+
+[sample]
+snapshot = "2026-11-20"        # 品种按这天筛；行情取到前一个交易日（只要收完盘的日线）
+data_from = "2009-12-01"
+first_decision = "2013-01-02"  # 每个决定点要往前 3 年的数据
+decision_every = 5             # H1、H2、H4、H6 每 5 个交易日一个决定点；H3、H5 逐日
+min_history_years = 3.25       # 历史不到 3 年 + 一个季度的，列为"历史不足"
+cost = 0.0005                  # 每边 0.05%（和 trades.COST 一样）
+halves = [["2013-01-01", "2019-12-31"], ["2020-01-01", "2026-12-31"]]
+
+[sample.slices]                # 按市况切片，只报告、不判定
+"2015–16 震荡" = ["2015-01-01", "2016-12-31"]
+"2018Q4 急跌" = ["2018-10-01", "2018-12-31"]
+"2020 崩盘和反弹" = ["2020-01-01", "2020-12-31"]
+"2022 熊市" = ["2022-01-01", "2022-12-31"]
+"2023–26 牛市" = ["2023-01-01", "2026-12-31"]
+
+[universe]
+A = ["SPY", "QQQ", "IWM", "DIA", "XLK", "XLF", "XLE", "XLV", "XLY", "XLP", "XLI", "XLB", "XLU", "XLRE", "XLC",
+     "SMH", "SOXX", "EFA", "EEM", "GLD", "TLT"]
+# B：方案里列的科技和 AI，加上市值够大、yfinance 行业属于下面两类的。GOOG 和 GOOGL 只取 GOOGL
+B_seed = ["GOOGL", "META", "TSLA", "NVDA", "MSFT", "AAPL", "AMZN", "AVGO", "AMD", "ORCL", "TSM", "PLTR", "NFLX",
+          "CRM", "ADBE"]
+B_sectors = ["Technology", "Communication Services"]
+# C：snapshot 当天市值 ≥ 2000 亿美元，美国交易所挂牌的普通股（含 ADR），去掉 B、D 已有的
+C_min_cap = 2.0e11
+exchanges = ["NYQ", "NMS", "NGM", "NCM", "ASE"]
+min_dollar_volume = 5.0e7      # 三个月日均成交额；挡掉市值数据出错的小票
+share_class_prefer = ["GOOGL", "BRK-B"]
+# D：曾经的巨头。候选里 2016 年起从最高点跌掉一半以上的才算（按拆股复权收盘价）
+D_candidates = ["INTC", "PYPL", "NKE", "BA", "DIS", "WBA", "VFC", "MMM", "PFE", "CVS", "BABA", "GE", "BIIB", "T"]
+D_since = "2016-01-01"
+D_min_drop = 0.5
+too_short = ["ANT", "SPCX"]    # 2026 年才上市，评估里列为"历史不足"
+
+[bootstrap]
+level = 0.90
+reps = 2000
+block_days = 60                # 按交易日历切成不重叠的 60 天区块，整块重抽
+seed = 7
+min_points = 30
+min_blocks = 8
+
+[verdict]
+holdout_min_ratio = 0.5        # 验证集点估计至少是开发集的一半
+
+[H1]                           # 模糊判断：偏多之后跑赢，偏空之后跑输
+horizon = 20
+bull = ["明显偏多", "偏多"]
+bear = ["明显偏空", "偏空"]
+min_meaningful = 0.01          # 每 20 天 1 个百分点
+aux_horizons = [5, 60]
+
+[H2]                           # 类型：稳定上涨之后跑赢稳定下跌
+horizon = 20
+up_types = ["稳定上涨"]
+down_types = ["稳定下跌"]
+min_meaningful = 0.01
+
+[H3]                           # 躲开大跌：照方向持有，对照同在场时间的随机持有
+hold_types = ["稳定上涨", "加速上涨"]
+random_reps = 1000
+mdd_pctl = 0.8                 # 最大回撤要优于随机持有的第 80 百分位
+ticker_share = 0.7             # 至少 70% 的品种做到
+naive_ma = [60, 200]
+min_tickers = 10              # 开发集不到 10 只票，写"样本不足"
+seed = 11
+
+[H4]                           # 推演："要涨（跌）超过 X% 才能避免"的事，K 天内真的发生了吗
+buckets = [3.0, 10.0]          # X < 3%、3–10%、> 10%（百分数）
+min_rate = 0.9                 # X > 10% 那一档发生率至少 90%
+min_gap = 0.3                  # 而且比 X < 3% 那一档高 30 个百分点以上
+min_meaningful = 0.1           # 两档差不到 10 个百分点、区间跨 0，算无用
+min_events = 30
+
+[H5]                           # 横盘之后的突破方向跟周线
+breakout_pct = 0.03            # 收盘离开箱体上下沿 3%
+max_wait = 60                  # 横盘结束后 60 个交易日内突破才算
+merge_gap = 5                  # 横盘中间断开不超过 5 天的算同一段
+min_diff = 0.2                 # 周线多头与空头的向上突破比例差 ≥ 20 个百分点
+min_episodes = 20              # 两组各至少 20 个独立区段（同一周突破的算一个）
+min_meaningful = 0.1
+
+[H6]                           # 假动作：排列不合理时的反弹撑不住
+horizon = 20
+transitions = ["空头结构反弹中"]
+down_types = ["稳定下跌", "加速下跌"]   # 这两类里阶段是"反弹中"的也算
+stage = "反弹中"
+min_meaningful = 0.01
