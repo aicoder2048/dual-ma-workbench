@@ -318,11 +318,11 @@ def classify(df: pd.DataFrame, structure: Structure | None, bias_pctl: float) ->
         if accel:
             return typed(TrendType.ACCEL_UP if order == UP else TrendType.ACCEL_DOWN, order, accel), p20
         return typed(TrendType.STEADY_UP if order == UP else TrendType.STEADY_DOWN, order), p20
-    # 加速起点：60/120 还没排好，20 线已经 1 点钟以上、乖离到了一端
+    # 加速起点：60/120 还没排好，乖离到了一端，且 20 线 1 点钟以上或 60 线组已经朝这边走
     d20 = _sign(c20.angle)
-    if d20 and abs(c20.angle) >= ACCEL_DEG and dir60 != -d20 and _stretched(d20, bias_pctl):
+    if d20 and dir60 != -d20 and _stretched(d20, bias_pctl) and (abs(c20.angle) >= ACCEL_DEG or dir60 == d20):
         return typed(TrendType.ACCEL_UP if d20 == UP else TrendType.ACCEL_DOWN, d20,
-                     Accel(phase="起点", by="20 线钟表和乖离")), p20
+                     Accel(phase="起点", by="乖离")), p20
     # J5：60 线走平、6 条线靠拢
     if abs(c60.angle) < FLAT_DEG and spread6(row) < RANGE_SPREAD_PCT:
         return typed(TrendType.RANGE, 0, rng=range_info(df, structure)), p20
