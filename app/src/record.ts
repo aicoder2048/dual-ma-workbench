@@ -38,7 +38,7 @@ const pc = (x: number) => `${x >= 0 ? "+" : ""}${(x * 100).toFixed(1)}%`;
 
 /** 2026-11-20 的评估（skill 的 evaluate.py，报告不进仓库）：六条主张都没通过。结论卡片的回测那句末尾照它说。 */
 export const EVALUATION_DATE = "2026-11-20";
-export const EVALUATION_NOTE = `${EVALUATION_DATE} 的评估（86 只票、2013–2026、事先定的标准、验证集）没找到可验证的交易优势，这套方法当学习和复盘工具用。`;
+export const EVALUATION_NOTE = `${EVALUATION_DATE} 的评估（86 只票、2013–2026、事先定的标准、验证集）没找到可验证的交易优势，下单前把它当作风险提示。`;
 
 const RULE_EVIDENCE_RE = /^\| ([AJP]\d+) \|.*\*\*(回测[^*]+)\*\*（([^）]+)）/;
 
