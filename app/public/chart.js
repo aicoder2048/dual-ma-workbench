@@ -166,7 +166,7 @@ export function createChart(box, legendEl) {
     <p><b>看量</b>：底部的量柱，黄色是超过 50 日均量 2 倍的大量。看两种情况：横盘末期突然放量，是要变盘的信号；
       急涨或急跌的末端连续放量，说明多空分歧在化解，行情往往快要转向，并不代表强势。看到放量先提高警惕，动手还是要等均线拐头。</p>
     <p><b>回放</b>：点「回放」，再点图上的一天（或在「选起点」里选日期、最早一天、随机一天），图上就只剩那天及以前的 K 线，
-      然后一根一根往后放，像当时身在其中那样练判断：先想好"这里该怎么做"，再放下一根看结果。快捷键 <b>Shift+↓</b> 播放 / 暂停，<b>Shift+→</b> 前进一根。
+      并立刻开始一根一根往后放（默认一秒一根，「回放」按钮下方的控制条可以暂停、前进一根、调速度），像当时身在其中那样练判断：先想好"这里该怎么做"，再放下一根看结果。快捷键 <b>Shift+↓</b> 播放 / 暂停，<b>Shift+→</b> 前进一根。
       想看那天的完整分析，点「按这一天分析」。点「回到最新」或 × 退出。</p>`;
   tools.after(help);
   const helpBtn = tools.querySelector(".chart-help-toggle");
@@ -284,14 +284,14 @@ export function createChart(box, legendEl) {
         <button type="button" data-start="random">随机一天</button>
       </span>
     </span>
-    <button type="button" class="replay-play" aria-label="播放" aria-pressed="false" title="播放 / 暂停（Shift+↓）">▶</button>
+    <button type="button" class="replay-play" aria-pressed="false" title="播放 / 暂停（Shift+↓）">▶ 播放</button>
     <button type="button" class="replay-forward" title="前进一根（Shift+→）">前进一根</button>
     <select class="replay-speed" title="播放速度：1x = 一秒一根">${SPEEDS.map((x) => `<option value="${x}">${x}x</option>`).join("")}</select>
     <button type="button" class="replay-realtime">回到最新</button>
     <span class="replay-label" aria-live="polite"></span>
     <button type="button" class="replay-analyze" title="退出回放，载入只用这一天及以前数据的完整分析">按这一天分析</button>
     <button type="button" class="replay-exit" aria-label="退出回放" title="退出回放">×</button>`;
-  box.after(bar);
+  tools.after(bar); // 紧挨着「回放」按钮，在图上方：图下方会被分析师输入框挡住
   const $r = (sel) => bar.querySelector(sel);
   const menu = $r(".replay-menu");
   const speedSel = $r(".replay-speed");
@@ -359,6 +359,7 @@ export function createChart(box, legendEl) {
     const on = rs.mode !== "off";
     const selecting = rs.mode === "select";
     replayBtn.setAttribute("aria-pressed", String(on));
+    replayBtn.textContent = selecting ? "选起点中…" : rs.mode === "replay" ? "退出回放" : "回放";
     bar.hidden = !on;
     badge.hidden = rs.mode !== "replay";
     box.classList.toggle("replay-selecting", selecting);
@@ -367,7 +368,7 @@ export function createChart(box, legendEl) {
     setMenu(false);
     const last = (data?.candles.length ?? 0) - 1;
     const atEnd = rs.mode === "replay" && rs.index >= last;
-    $r(".replay-play").textContent = rs.playing ? "⏸" : "▶";
+    $r(".replay-play").textContent = rs.playing ? "⏸ 暂停" : "▶ 播放";
     $r(".replay-play").setAttribute("aria-pressed", String(Boolean(rs.playing)));
     levelsBtn.disabled = rs.mode === "replay"; // 门槛线属于最新一天，回放时收起，按钮也不能点
     $r(".replay-play").disabled = rs.mode !== "replay" || atEnd;
