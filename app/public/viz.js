@@ -393,7 +393,15 @@ export function conclusionCard(r, close, p) {
     ${conclusionRow("空仓", r.plans.flat, close, true, buys, null)}
     <div class="holding-row">${holdingRow(r, close, p)}</div>
     <div class="pos-cost"><label for="pos-cost">持仓成本</label><input id="pos-cost" inputmode="decimal" placeholder="可不填" value="${esc(p.cost ?? "")}"><span class="pnl">${pnlText(p.cost, close)}</span></div>
+    ${naiveLine(r.naive)}
     <p class="record"><span class="pl">回测</span>${esc(r.record.text)}</p>`;
+}
+
+/** 对照一行：MA200 朴素规则怎么说、双均线怎么说、一不一致，带评估的出处（悬停看整句）。 */
+function naiveLine(n) {
+  const dual = n.dual === null ? "" : `；双均线${n.agrees ? "也" : ""}${esc(n.dual)}
+    <b class="naive-agree ${n.agrees ? "same" : "differ"}">${n.agrees ? "一致" : "不一致"}</b>`;
+  return `<p class="naive" ${tip(n.text)}><span class="pl">对照</span>${esc(n.rule)}${dual}<span class="naive-ev">${esc(n.short)}</span></p>`;
 }
 
 /** K 线图上的虚线：当前处境（找打法里选的空仓 / 持仓）的触发价和止损，加上推翻判断的价位。 */

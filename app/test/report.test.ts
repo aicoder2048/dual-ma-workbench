@@ -153,3 +153,29 @@ describe("评估结论照实标注", () => {
     expect(report.record.text.endsWith(EVALUATION_NOTE)).toBe(true);
   });
 });
+
+describe("MA200 朴素规则对照", () => {
+  const nv = analysis.ma200 as Extract<Analysis["ma200"], { available: true }>;
+  test("NVDA 2026-11-18：收盘在 MA200 下方，朴素规则空仓；双均线也空仓，一致", () => {
+    expect(report.naive.rule).toBe("MA200 朴素规则：收盘在下方 -25.9%，空仓");
+    expect(report.naive.dual).toBe("空仓");
+    expect(report.naive.agrees).toBe(true);
+    expect(report.naive.short).toBe("评估 MAR 0.26 vs 0.14");
+    expect(report.naive.text).toContain("MA200 0.26、照方向持有 0.14、买入持有 0.33");
+  });
+  test("两边说法不同时是不一致", () => {
+    const r = buildReport({ ...analysis, ma200: { ...nv, close_above: true, distance_pct: 3.04, stance: "持有", agrees: false } });
+    expect(r.naive.rule).toBe("MA200 朴素规则：收盘在上方 +3.0%，持有");
+    expect(r.naive.agrees).toBe(false);
+    expect(buildFacts({ ...analysis, ma200: { ...nv, stance: "持有", agrees: false } })["MA200.对照"].value).toContain("不一致");
+  });
+  test("历史不够 205 根：说明原因，不判一致与否", () => {
+    const r = buildReport({ ...analysis, ma200: { available: false, reason: "日线只有 150 根，MA200 对照要 205 根" } });
+    expect(r.naive).toMatchObject({ rule: "MA200 朴素规则：日线只有 150 根，MA200 对照要 205 根", dual: null, agrees: null });
+  });
+  test("长风拿得到 MA200 和对照两个字段", () => {
+    const facts = buildFacts(analysis);
+    expect(facts["MA200"].value).toBe("203.72，向下；2026-11-04 收盘下穿（10 根前）");
+    expect(facts["MA200.对照"].value).toStartWith("MA200 朴素规则：收盘在下方 -25.9%，空仓；双均线照方向持有（稳定 / 加速上涨才持有）：空仓；一致。");
+  });
+});

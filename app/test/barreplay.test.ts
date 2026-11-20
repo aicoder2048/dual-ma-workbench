@@ -129,6 +129,8 @@ describe("选起点的几种方式", () => {
     // 真数据：服务端用 3 年历史算线，图上 260 根从第一根起就都有值
     const full = { ...D, lines: Object.fromEntries(Object.keys(D.lines).map((k) => [k, line(0)])) };
     expect(earliestIndex(full)).toBe(0);
+    // MA200 只是对照线，晚开始也不推迟回放的最早一天
+    expect(earliestIndex({ ...full, lines: { ...full.lines, MA200: line(199) } })).toBe(0);
   });
   test("随机一天：在最早一天和倒数第二根之间", () => {
     expect(randomIndex(D, () => 0)).toBe(119);

@@ -4,6 +4,8 @@ import { DEFAULT_SPEED, OFF, SPEEDS, appendDelta, earliestIndex, indexOnOrBefore
 const SPECS = [];
 [20, 60, 120].forEach((n) => ["MA", "EMA"].forEach((k) =>
   SPECS.push({ key: k + n, token: `--${k.toLowerCase()}${n}`, dashed: k === "EMA", width: k === "MA" ? 2 : 1 })));
+// MA200 朴素规则的对照线：默认不画，在图例里点开
+SPECS.push({ key: "MA200", token: "--ma200", dashed: false, width: 1, off: true });
 
 /** 图表库传来的时间（"2026-10-22"、{year,month,day} 或 UTC 秒）→ "2026-10-22"。 */
 function isoDate(t) {
@@ -49,7 +51,7 @@ export function createChart(box, legendEl) {
   chart.priceScale("vol").applyOptions({ scaleMargins: { top: 0.8, bottom: 0 } });
   const series = {};
   for (const s of SPECS) {
-    series[s.key] = chart.addLineSeries({ lineWidth: s.width, lineStyle: s.dashed ? 2 : 0,
+    series[s.key] = chart.addLineSeries({ lineWidth: s.width, lineStyle: s.dashed ? 2 : 0, visible: !s.off,
       priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false });
   }
 
@@ -57,12 +59,15 @@ export function createChart(box, legendEl) {
   for (const s of SPECS) {
     const b = document.createElement("button");
     b.type = "button";
-    b.setAttribute("aria-pressed", "true");
+    b.setAttribute("aria-pressed", String(!s.off));
+    b.dataset.line = s.key;
+    if (s.off) b.title = "MA200 朴素规则的对照线（收盘在上方持有，否则空仓），默认不画";
     b.innerHTML = `<i class="${s.dashed ? "dash" : ""}" style="--c: var(${s.token})"></i>${s.key}`;
     b.addEventListener("click", () => {
       const on = b.getAttribute("aria-pressed") !== "true";
       b.setAttribute("aria-pressed", String(on));
       series[s.key].applyOptions({ visible: on });
+      showReadout(null);
     });
     legendEl.appendChild(b);
   }
@@ -98,7 +103,7 @@ export function createChart(box, legendEl) {
     const c = view.candles.find((x) => x.time === time) ?? view.candles.at(-1);
     const at = (k) => (view.lines[k] || []).find((p) => p.time === c.time)?.value;
     readout.innerHTML = `<b>${showTime(c.time)}</b><span>收 <b>${f2(c.close)}</b></span>`
-      + SPECS.map((sp) => `<span><i class="${sp.dashed ? "dash" : ""}" style="--c: var(${sp.token})"></i>${sp.key} ${f2(at(sp.key))}</span>`).join("");
+      + SPECS.filter((sp) => series[sp.key].options().visible).map((sp) => `<span><i class="${sp.dashed ? "dash" : ""}" style="--c: var(${sp.token})"></i>${sp.key} ${f2(at(sp.key))}</span>`).join("");
   };
   chart.subscribeCrosshairMove((param) => showReadout(param.time));
 

@@ -66,10 +66,10 @@ export function indexOnOrBefore(candles, date) {
 
 /**
  * 最早一天：6 条线都有值的第一根。服务端用 3 年历史算线，图上的 K 线通常从第一根起就都有值；
- * 历史不够的票（刚上市不久）长均线会晚开始。没有一根齐全时从第一根开始。
+ * 历史不够的票（刚上市不久）长均线会晚开始。没有一根齐全时从第一根开始。MA200 只是对照线，不算在内。
  */
 export function earliestIndex(d) {
-  const starts = Object.values(d.lines).map((pts) => pts[0]?.time).filter(Boolean);
+  const starts = Object.entries(d.lines).filter(([k]) => k !== "MA200").map(([, pts]) => pts[0]?.time).filter(Boolean);
   const from = starts.reduce((a, b) => (a > b ? a : b), "");
   const i = d.candles.findIndex((c) => c.time >= from);
   return i < 0 ? 0 : i;

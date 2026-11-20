@@ -4,6 +4,7 @@
  */
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import type { HoldStance, Ma200 } from "./citations.ts";
 import { PROJECT_ROOT } from "./sources.ts";
 
 export interface SetupRecord {
@@ -66,4 +67,33 @@ export function recordNote(key: string, r: BacktestRecord = RECORD): RecordNote 
       + `胜率 ${Math.round(s.win_rate! * 100)}%，中位数 ${pc(s.median!)}，比随机进场多 ${s.excess == null ? "—" : pc(s.excess)}${ci}：${verdict}。${EVALUATION_NOTE}`,
     setup: s, record: r,
   };
+}
+
+/** 评估 H3 开发集中位数的收益/回撤（MAR），SKILL.md 评估结论、README 是同一组数。 */
+const MAR = { ma200: 0.26, dual: 0.14, hold: 0.33 };
+
+/**
+ * 结论卡片的对照一行。rule：MA200 朴素规则怎么说（算不了时写原因）；dual：双均线照方向持有怎么说；
+ * agrees 算不了时为 null。卡片上写 rule、dual、agrees 和 short，text 是整句（悬停、给模型）。
+ */
+export interface NaiveCompare {
+  rule: string;
+  dual: HoldStance | null;
+  agrees: boolean | null;
+  short: string;
+  text: string;
+}
+
+const SHORT = `评估 MAR ${MAR.ma200} vs ${MAR.dual}`;
+const EVIDENCE = `评估里 MAR：MA200 ${MAR.ma200}、照方向持有 ${MAR.dual}、买入持有 ${MAR.hold}（${EVALUATION_DATE}，H3，见 README）`;
+
+export function naiveCompare(m: Ma200): NaiveCompare {
+  if (!m.available) {
+    const rule = `MA200 朴素规则：${m.reason}`;
+    return { rule, dual: null, agrees: null, short: SHORT, text: `${rule}。${EVIDENCE}` };
+  }
+  const pct = `${m.distance_pct >= 0 ? "+" : ""}${m.distance_pct.toFixed(1)}%`;
+  const rule = `MA200 朴素规则：收盘在${m.close_above ? "上方" : "下方"} ${pct}，${m.stance}`;
+  const dual = `双均线照方向持有（稳定 / 加速上涨才持有）：${m.dual_ma_stance}`;
+  return { rule, dual: m.dual_ma_stance, agrees: m.agrees, short: SHORT, text: `${rule}；${dual}；${m.agrees ? "一致" : "不一致"}。${EVIDENCE}` };
 }

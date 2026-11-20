@@ -24,6 +24,8 @@ from pathlib import Path
 
 import pandas as pd
 
+from indicators import NAIVE_MA
+
 CHART_BARS = 260  # 图上显示最近多少根日 K 线
 CHART_LIB = "https://cdn.jsdelivr.net/npm/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"
 LIST_FIELDS = ("big_picture", "strategy", "direction", "risks")
@@ -68,8 +70,8 @@ def chart_data(df: pd.DataFrame, a: dict, bars: int = CHART_BARS) -> dict:
     view = df.tail(bars)
     dates = [d.strftime("%Y-%m-%d") for d in view.index]
 
-    def line(col: str) -> list[dict]:
-        return [{"time": t, "value": round(float(v), 4)} for t, v in zip(dates, view[col]) if pd.notna(v)]
+    def line(values: pd.Series) -> list[dict]:
+        return [{"time": t, "value": round(float(v), 4)} for t, v in zip(dates, values) if pd.notna(v)]
 
     candles = [{"time": t, "open": float(r.get("Open", r["Close"])), "high": float(r.get("High", r["Close"])),
                 "low": float(r.get("Low", r["Close"])), "close": float(r["Close"])}
@@ -85,7 +87,9 @@ def chart_data(df: pd.DataFrame, a: dict, bars: int = CHART_BARS) -> dict:
     # 明天要扣的那根 K 线 = 倒数第 N 根（见 drop_off）
     drops = [{"time": df.index[-n].strftime("%Y-%m-%d"), "period": n}
              for n in (ln["period"] for ln in a["lines"]) if len(df) >= n and df.index[-n] >= view.index[0]]
-    lines = {f"{k}{ln['period']}": line(f"{k}{ln['period']}") for ln in a["lines"] for k in ("MA", "EMA")}
+    lines = {f"{k}{ln['period']}": line(view[f"{k}{ln['period']}"]) for ln in a["lines"] for k in ("MA", "EMA")}
+    # MA200 朴素规则的对照线（工作台默认不画）；日线窗口前 199 根没有值
+    lines[f"MA{NAIVE_MA}"] = line(df["Close"].rolling(NAIVE_MA).mean().reindex(view.index))
     return {"candles": candles, "volume": volume, "lines": lines, "drops": drops}
 
 

@@ -92,7 +92,7 @@ export function analysisForModel(r: AnalyzeResult, facts: Facts): string {
     `# ${a.label}（${a.date} 收盘 ${a.close.toFixed(2)}，${a.source}）`,
     a.warning ? `⚠️ ${a.warning}` : "",
     "## 规则版报告（脚本算的，引用已核对）",
-    `### 结论\n- 空仓：${facts["结论.空仓"].value}\n- 持仓：${facts["结论.持仓"].value}\n- ${report.record.text}`,
+    `### 结论\n- 空仓：${facts["结论.空仓"].value}\n- 持仓：${facts["结论.持仓"].value}\n- ${report.record.text}\n- 对照：${facts["MA200.对照"].value}`,
     ...report.steps.map((s) => `### ${s.title}\n${s.items.map((i) => `- ${i}`).join("\n")}`),
     "## 可引用数据（引用时原样复制键名，如 [[D:扣20.均值]]）",
     factsForPrompt(facts),

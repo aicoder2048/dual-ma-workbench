@@ -7,7 +7,7 @@
  * 服务端在回答结束后调用 validateCitations，把不存在的编号标出来，前端显示成红色。
  */
 import { buildForecast, buildPlans, planLine, playKey } from "./plan.ts";
-import { recordNote } from "./record.ts";
+import { naiveCompare, recordNote } from "./record.ts";
 import type { SourceLibrary } from "./sources.ts";
 
 export type CitationKind = "S" | "D";
@@ -125,6 +125,19 @@ export type Hourly = Unavailable | {
   available: true; source: string; bars: number; last: string; close: number; arr_ma: string; arr_ema: string; lines: FrameLine[];
 };
 
+/** 持有还是空仓：MA200 对照两边都说成这两个词。 */
+export type HoldStance = "持有" | "空仓";
+/**
+ * MA200 朴素规则的对照（只是对照，不进规则）：收盘在 MA200 上方持有、否则空仓；
+ * dual_ma_stance 是双均线照方向持有（类型稳定 / 加速上涨才持有，评估 H3 的定义）。
+ */
+export type Ma200 = Unavailable | {
+  available: true; period: number; value: number; close_above: boolean; distance_pct: number; slope: number;
+  direction: "上" | "下" | "平";
+  last_cross: { kind: "上穿" | "下穿"; date: string; bars_ago: number } | null;
+  stance: HoldStance; dual_ma_stance: HoldStance; agrees: boolean;
+};
+
 /** 唯一的打法：key 选 plan.ts 里按仓位的措辞，text 是脚本生成的那段话，rules 是用到的规则编号。 */
 export interface Play { key: string; text: string; rules: string[] }
 
@@ -153,6 +166,7 @@ export interface Analysis {
   structure: StructureOut;
   weekly: Weekly;
   hourly: Hourly;
+  ma200: Ma200;
   lean: Lean;
   drops: {
     period: number; tomorrow: number; mean: number; max: number; below: number; count: number;
@@ -240,6 +254,13 @@ export function buildFacts(a: Analysis): Facts {
   put("推演.最早", "这套打法的条件最早哪天能齐", fc.earliest);
   put("推演.失效", "什么价位推翻这个判断", fc.invalid.text);
   put("回测", "这套打法的回测记录（skill 的 backtest.py）", recordNote(playKey(a)).text);
+  const m = a.ma200;
+  if (m.available) {
+    const x = m.last_cross;
+    put("MA200", "200 日 MA（对照用，不进规则）",
+      `${f2(m.value)}，向${m.direction}；${x ? `${x.date} 收盘${x.kind}（${x.bars_ago} 根前）` : "窗口内收盘没穿过"}`);
+  }
+  put("MA200.对照", "MA200 朴素规则（收盘在上方持有，否则空仓）和双均线照方向持有一不一致", naiveCompare(m).text);
   return facts;
 }
 
