@@ -355,26 +355,53 @@ export function planBody(plans, p, close) {
         i.rules?.length ? `<span class="plan-rules">${i.rules.map(ruleBtn).join("")}</span>` : ""}${i.evidence ? evidenceNote(i.evidence) : ""}</li>`).join("")}</ul>`;
 }
 
-// ---------- 结论：空仓、持仓各一行，带触发价、止损、风险；回测记录 ----------
+// ---------- 结论：空仓、持仓各一行，带触发价、止损、目标、盈亏比、股数；回测记录 ----------
 
-/** 一个价位标签：是什么、价位、离现价多远。 */
-function priceChip(key, lv, close, cls) {
+/** 一个价位标签：是什么、价位、离现价多远。item 给测试和读屏定位（trigger / stop / target）。 */
+function priceChip(key, lv, close, cls, item = cls) {
   if (!lv) return "";
-  return `<span class="pchip ${cls}" ${tip(`${key}：${lv.label} ${f2(lv.price)}`)}><span class="ck">${key}</span>${esc(lv.label)}
+  return `<span class="pchip ${cls}" data-item="${item}" ${tip(`${key}：${lv.label} ${f2(lv.price)}`)}><span class="ck">${key}</span>${esc(lv.label)}
     <b class="num">${f2(lv.price)}</b><span class="num muted">${pct((lv.price / close - 1) * 100)}</span></span>`;
 }
 
-/** 一行结论。buys：这套打法空仓会不会买（回测记录里有它），不买时空仓的价位叫「先看」，不叫触发。 */
+const RR_CLASS = { 不做: "bad", 可做: "ok", 理想: "good" };
+
+/** 盈亏比标签：几比几、哪一档（不到 3:1 不做，5:1 以上理想，P24）。悬停看差多少。 */
+function rrChip(t) {
+  if (t.rr === null) return "";
+  const gap = t.rr_gap ? `：要 3:1，目标得到 ${f2(t.rr_gap.target_for_min)}，或止损收紧到 ${f2(t.rr_gap.stop_for_min)}` : "";
+  return `<span class="pchip rr ${RR_CLASS[t.rr_verdict]}" data-item="rr" ${tip(`盈亏比 ${t.rr.toFixed(2)}:1，${t.rr_verdict}（P24）${gap}`)}>
+    <span class="ck">盈亏比</span><b class="num">${t.rr.toFixed(1)}:1</b>${esc(t.rr_verdict)}</span>`;
+}
+
+/** 股数标签：填了账户给股数；没填给每 1 万元风险对应多少股（A6）。 */
+function sizeChip(t) {
+  const z = t.size;
+  if (!z) return "";
+  if (z.shares === null) {
+    return `<span class="pchip size" data-item="size" ${tip(`${z.basis}。在设置里填账户规模，就按每笔可承受亏损给股数`)}>
+      <span class="ck">每 1 万元风险</span><b class="num">${z.per_10k}</b>股</span>`;
+  }
+  return `<span class="pchip size" data-item="size" ${tip(z.basis)}><span class="ck">股数</span><b class="num">${z.shares}</b>${z.capped ? "（账户封顶）" : ""}</span>`;
+}
+
+/** 目标位标签：脚本给的目标 1、2（P25）；解读的在悬停里说。 */
+const targetChips = (t, close) => t.targets.map((x, i) =>
+  priceChip(`目标${t.targets.length > 1 ? i + 1 : ""}`, { label: x.source === "解读" ? `${x.kind}（解读）` : x.kind, price: x.price }, close, "target")).join("");
+
+/** 一行结论。buys：这套打法空仓会不会买（交易计划有进场），不买时空仓的价位叫「先看」，不叫触发。 */
 function conclusionRow(name, plan, close, flat, buys, cost) {
   const fill = (t) => esc(t).replaceAll("{cost}", cost === null ? "成本" : f2(cost));
   const risk = plan.risk === null ? ""
     : plan.risk < 0.05 ? `<span class="pchip risk">止损就在${flat ? "进场价" : "现价"}：再破就走</span>`
     : `<span class="pchip risk"><span class="ck">${flat ? "风险" : "距止损"}</span><b class="num">${plan.risk.toFixed(1)}%</b></span>`;
+  const t = plan.trade;
   return `<div class="concl-row" data-situation="${flat ? "flat" : "holding"}">
       <span class="who">${name}</span>
       <div class="what"><b>${fill(plan.action)}</b>
         <div class="chips-row">${priceChip(flat ? (buys ? "触发" : "先看") : "盯住", plan.trigger, close, "trigger")}
-          ${priceChip(flat ? "进场后止损" : "止损", plan.stop, close, "stop")}${risk}</div></div></div>`;
+          ${priceChip(flat ? "进场后止损" : "止损", plan.stop, close, "stop")}${risk}
+          ${flat && !buys ? "" : targetChips(t, close)}${flat ? rrChip(t) + sizeChip(t) : ""}</div></div></div>`;
 }
 
 /** 结论卡片的持仓那一行：按成本价分浮盈 / 浮亏（没填就是持仓）。输入成本时只重画这一行。 */
@@ -385,7 +412,7 @@ export function holdingRow(r, close, p) {
 }
 
 export function conclusionCard(r, close, p) {
-  const buys = r.record.setup !== null;
+  const buys = r.plans.flat.trade.entry !== null;
   return `<div class="concl-head"><span class="eyebrow">结论</span><b class="concl-trend">${esc(r.trend.type)}</b>
       <span class="concl-lean">接下来几周 <span class="lean-label ${stanceOf(r.visual.lean)}">${esc(r.visual.lean.label)}</span></span>
       <button type="button" id="journal-add" class="journal-add" title="把此刻的计划记进交易日志，之后对照结果">记入日志</button>
@@ -404,15 +431,18 @@ function naiveLine(n) {
   return `<p class="naive" ${tip(n.text)}><span class="pl">对照</span>${esc(n.rule)}${dual}<span class="naive-ev">${esc(n.short)}</span></p>`;
 }
 
-/** K 线图上的虚线：当前处境（找打法里选的空仓 / 持仓）的触发价和止损，加上推翻判断的价位。 */
+/** K 线图上的虚线：当前处境（找打法里选的空仓 / 持仓）的触发价、止损、目标位，加上推翻判断的价位。 */
 export function chartLevels(r, p, close) {
   const k = situationOf(p, close);
   const plan = r.plans[k];
   const flat = k === "flat";
+  const buys = r.plans.flat.trade.entry !== null;
   const inv = r.forecast.invalid.level;
+  const targets = flat && !buys ? [] : plan.trade.targets;
   const lines = [
-    plan.trigger && { kind: "trigger", price: plan.trigger.price, title: flat ? (r.record.setup ? "触发" : "先看") : "盯住" },
+    plan.trigger && { kind: "trigger", price: plan.trigger.price, title: flat ? (buys ? "触发" : "先看") : "盯住" },
     plan.stop && { kind: "stop", price: plan.stop.price, title: flat ? "进场后止损" : "止损" },
+    ...targets.map((t, i) => ({ kind: "target", price: t.price, title: `目标${targets.length > 1 ? i + 1 : ""}` })),
   ].filter(Boolean);
   // 同一个价位只画一条（例如空头结构反弹中：先看的就是推翻判断的理顺价位）
   const same = inv && lines.find((l) => Math.abs(l.price - inv.price) < 0.005);
@@ -437,7 +467,7 @@ export function checklist(checks) {
 /** 还差什么（一句）：会买的打法列没满足的条件；不买的打法照实说，给先看的价位。 */
 function missing(r, close) {
   const t = r.plans.flat.trigger;
-  if (r.record.setup === null) return `这套打法空仓不买。${t ? `先看：${esc(t.label)} ${f2(t.price)}（${pct((t.price / close - 1) * 100)}）。` : ""}`;
+  if (r.plans.flat.trade.entry === null) return `这套打法空仓不买。${t ? `先看：${esc(t.label)} ${f2(t.price)}（${pct((t.price / close - 1) * 100)}）。` : ""}`;
   const left = r.checklist.filter((c) => c.status !== "满足" && c.need && c.id !== "P14");
   if (!left.length) return "条件都齐了。";
   return left.map((c) => `${ruleBtn(c.id)} ${esc(c.need)}`).join("；") + "。";

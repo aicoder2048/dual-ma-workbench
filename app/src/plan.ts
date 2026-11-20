@@ -1,14 +1,16 @@
 /**
  * 结论、找打法、做推演的输出（规则生成，不经过模型）。
  *
- * - buildPlans：按"脚本的打法键（analysis.play.key）× 你的处境"给一句做法、两三条带价位的条件，和两个价位：
+ * - buildPlans：按"脚本的打法键（analysis.trade_plan.key）× 你的处境"给一句做法、两三条带价位的条件，和两个价位：
  *   trigger（空仓：进场触发；不买的打法是"先看"的价位；持仓：加仓或减仓的价位）、stop（空仓：进场后止损；持仓：止损）。
+ *   进场、止损、目标位、盈亏比、股数读脚本的交易计划（trade_plan，skill 的 tradeplan.py），这里只配措辞，不重算。
+ *   盈亏比不到 3:1 时空仓的做法改成"不做"，写出差多少。
  *   用哪几条规则取自 skill 的 references/playbooks.md；规则满不满足、阈值、构造下一步价位、30 天求解都读脚本结果，这里不重算。
  *   处境分四种：空仓、持仓（没填成本）、持仓浮盈、持仓浮亏。成本只在浏览器里，文字里写 {cost}，由页面填上。
  * - buildChecklist：打法用到的每条规则今天的状态，没满足的写还差什么（价位读规则的 levels）。
  * - buildForecast：做推演只答三问，跨度都是 30 天：类型线还能保持多久、容忍到哪；打法的条件最早哪天能齐；什么价位推翻这个判断。
  */
-import type { Analysis, RuleResult, Solve } from "./citations.ts";
+import type { Analysis, PlanSet, RuleResult, Solve, TradePlan } from "./citations.ts";
 
 export type Position = "flat" | "holding";
 /** 你的处境：空仓；持仓但没填成本；持仓浮盈；持仓浮亏。页面按"空仓/持仓"和成本价选一个。 */
@@ -23,9 +25,12 @@ export const COST = "{cost}";
 export interface PlanItem { label: string; text: string; rules?: string[]; evidence?: string }
 /** 一个价位和它是什么。离现价多远由页面按收盘价算。 */
 export interface Level { label: string; price: number }
-/** risk：从进场价（空仓：触发价，没有就是现价；持仓：现价）到止损的距离，%；没有止损或止损不在下方时为 null。 */
-export interface Plan { action: string; items: PlanItem[]; trigger: Level | null; stop: Level | null; risk: number | null }
-type Draft = Omit<Plan, "risk">;
+/**
+ * risk：从进场价（空仓：进场触发价；持仓：现价）到止损的距离，%；没有止损或止损不在下方时为 null。
+ * trade：这个处境对应的脚本交易计划（空仓读 trade_plan.flat，持仓读 trade_plan.holding），目标、盈亏比、股数在里面。
+ */
+export interface Plan { action: string; items: PlanItem[]; trigger: Level | null; stop: Level | null; risk: number | null; trade: TradePlan }
+type Draft = Omit<Plan, "risk" | "trade">;
 
 /** 找打法的清单：一条规则今天的状态；need 是没满足时还差什么（带价位就写价位）。 */
 /** yieldsTo：自己满足、但让位给这条规则（rules.md 的让位），这时不按它做。 */
@@ -99,21 +104,26 @@ export const FORECAST_DAYS = 30;
 function levels(a: Analysis) {
   const line = (n: number) => a.lines.find((l) => l.period === n)!;
   const drop = (n: number) => a.drops.find((d) => d.period === n)!;
-  const ema60 = line(60).ema, drop60 = drop(60).tomorrow;
+  const tp = a.trade_plan;
   return {
     close: a.close,
-    ema20: line(20).ema, ma20: line(20).ma, ma60: line(60).ma, ema60,
-    drop20: drop(20).tomorrow, drop60,
-    /** 60 线组明天一起向下的价位：MA60 看抵扣价、EMA60 看线本身，收盘低于两者中较低的那个，两条都向下。 */
-    turn60: Math.min(ema60, drop60),
+    ema20: line(20).ema, ma20: line(20).ma, ma60: line(60).ma, ema60: line(60).ema,
+    drop20: drop(20).tomorrow,
+    /** 脚本交易计划的进场和止损价位（空仓进场后、持仓），没有就是 null。 */
+    entry: tp.flat.entry, flatStop: tp.flat.stop?.price ?? null, holdStop: tp.holding.stop?.price ?? null,
     p: (x: number) => at(x, a.close),
     ...stateOf(a),
   };
 }
 type L = ReturnType<typeof levels>;
 const lv = (label: string, price: number | null | undefined): Level | null => (price == null ? null : { label, price });
-/** 构造下一步：下一根最高价（底部）/ 最低价（顶部）越过 next_at，最少还差 bars_left 根（脚本的 structure）。 */
-const constructStep = (l: L, id: string) => lv("底部构造下一步", l.lvl(id, "下一步价"));
+/** 交易计划里进场依据的规则 → 价位标签。 */
+const ENTRY_LABEL: Record<string, string> = {
+  P2: "埋伏（现价）", P21: "突破买入（现价）", P11: "回撤到 60 线组", P12: "底部构造完成", P13: "只差小时线（现价）",
+  P14: "四条齐了（现价）", "P19、P20": "20 线组一起拐头", J19: "构造完成、20 线组拐头",
+};
+/** 脚本给的进场触发价；条件里没有日线价位时为 null。 */
+const entryLevel = (l: L) => (l.entry?.price == null ? null : lv(ENTRY_LABEL[l.entry.rule] ?? "进场", l.entry.price));
 /** 30 天理顺向上要守在的价位。打架和过渡的空仓打法拿它当"先看"的价位，不是买点。 */
 const alignUp = (l: L) => lv("30 天内理顺向上要守在", l.solve30("理顺向上")?.level);
 
@@ -155,13 +165,6 @@ const TRANSITION_END = (l: L, up: string, down: string) =>
 const ENTRY_STOP = (l: L): PlanItem =>
   ({ label: "进场后止损", text: `按条件进场后，收盘重新跌回 EMA20 下方（EMA20 现在 ${f2(l.ema20)}）、EMA20 再拐头向下，就走。` });
 
-/** 稳定上涨吃回撤还差的第一步：没回撤到 60 线组就等它；到过了、没底部构造就等构造下一步；只差小时线时没有日线价位。 */
-function pullbackStep(l: L): Level | null {
-  if (!l.met("P11")) return lv("回撤到 60 线组", l.lvl("P11", "60 线组"));
-  if (!l.met("P12")) return constructStep(l, "P12");
-  return l.met("P14") ? lv("四条齐了，现价", l.close) : null;
-}
-
 /**
  * 打法键 → 空仓 / 持仓的打法。键是脚本的 play.key（五种类型、空头结构反弹中、多头结构回撤中、过渡），横盘破位在这里另判。
  * 每份计划都有止损（空仓叫「进场后止损」，进场前要过的关叫「进场门槛」）和「失效」（判断错了的标志，以及接下来改用哪套打法）。
@@ -170,15 +173,18 @@ function pullbackStep(l: L): Level | null {
  */
 const PLAYS: Record<string, Record<Position, (l: L) => Draft>> = {
   横盘: {
-    flat: (l) => ({ action: "中段不做，等末期条件齐了再埋伏。", trigger: null, stop: lv("20/60 死叉（守住）", l.lvl("P3", "避免双死叉")), items: [
+    flat: (l) => ({
+      action: l.entry?.rule === "P2" ? "末期三个条件齐了：小仓位埋伏。" : l.entry?.rule === "P21" ? "末期条件齐了、刚突破箱体：突破买入。" : "中段不做，等末期条件齐了再埋伏。",
+      trigger: entryLevel(l), stop: lv(l.entry?.rule === "P21" ? "起涨 K 线最低价" : "20/60 死叉（守住）", l.flatStop), items: [
       { label: "等什么", text: `末期三个条件：横满 6 个月 ${l.st("J12")}，最高最低均线相差 < ${l.dense}% ${l.st("J13")}，均线向上张嘴 ${l.st("J14")}。`, rules: ["P1", "J12", "J13", "J14"] },
       { label: "方向", text: `横盘结束后往哪走跟周线：${l.basis("J11")}。`, rules: ["J11"] },
       { label: "怎么进", text: "三个条件齐了、还没突破时小仓位埋伏，不在箱体中间追。加分项：此前有大量、缺口，或假跌破后收回。", rules: ["P2", "P6"] },
-      { label: "进场后止损", text: `埋伏后 20/60 死叉（MA20 落到 MA60 ${f2(l.ma60)} 下方）就走；先突破前高后很快跌回、随后跌破 20 线组（假突破的两个动作），也走。`, rules: ["P3", "P5"] },
+      { label: "进场后止损", text: l.entry?.rule === "P21" ? `突破买入的底线是起涨 K 线最低价 ${l.flatStop === null ? "" : f2(l.flatStop)}：跌回突破前的平台，这次攻势就失败了。`
+        : `埋伏后 20/60 死叉（MA20 落到 MA60 ${f2(l.ma60)} 下方）就走；先突破前高后很快跌回、随后跌破 20 线组（假突破的两个动作），也走。`, rules: l.entry?.rule === "P21" ? ["P22"] : ["P3", "P5"] },
       SOLVER_STOP(l),
       { label: "失效", text: TANGLE_END(l, "多半转上涨", "多半转下跌") },
     ] }),
-    holding: (l) => ({ action: "拿着，但守住底线。", trigger: null, stop: lv("20/60 死叉（守住）", l.lvl("P3", "避免双死叉")), items: [
+    holding: (l) => ({ action: "拿着，但守住底线。", trigger: null, stop: lv("20/60 死叉（守住）", l.holdStop), items: [
       { label: "软规则", text: "进场后磨蹭不涨，没到止损也先出来。", rules: ["P4"] },
       { label: "止损", text: `20 线组和 60 线组死叉（MA60 ${f2(l.ma60)} 附近）就走。`, rules: ["P3"] },
       SOLVER_STOP(l),
@@ -193,7 +199,7 @@ const PLAYS: Record<string, Record<Position, (l: L) => Draft>> = {
       { label: "进场门槛", text: `埋伏的底线现在就破了（${l.basis("P3")}）：MA20 ${f2(l.ma20)} / MA60 ${f2(l.ma60)}、EMA20 ${f2(l.ema20)} / EMA60 ${f2(l.ema60)}，别进；等多头排列再埋伏，之后一死叉就走。`, rules: ["P3"] },
       { label: "失效", text: TANGLE_END(l, "多半转上涨", "多半转下跌") },
     ] }),
-    holding: (l) => ({ action: "底线已经破了：离场。", trigger: null, stop: lv("底线已破，现价离场", l.close), items: [
+    holding: (l) => ({ action: "底线已经破了：离场。", trigger: null, stop: lv("底线已破，现价离场", l.holdStop), items: [
       { label: "止损", text: `埋伏仓位的底线已经触发（${l.basis("P3")}；MA20 ${f2(l.ma20)} / MA60 ${f2(l.ma60)}、EMA20 ${f2(l.ema20)} / EMA60 ${f2(l.ema60)}）：离场，条件重新满足再进。`, rules: ["P3"] },
       { label: "失效", text: TANGLE_END(l, "多半转上涨，按上涨的打法重新进", "多半转下跌，更不该拿") },
       SIZE,
@@ -203,15 +209,15 @@ const PLAYS: Record<string, Record<Position, (l: L) => Draft>> = {
     flat: (l) => ({
       action: l.met("P14") ? "吃回撤四个条件齐了：可以进。"
         : l.stage === "回撤中" ? "已经在回撤：等吃回撤的条件齐了再买，不抢。" : "等回调再买，不追高。",
-      trigger: pullbackStep(l), stop: lv("60 线组拐头向下", l.turn60), items: [
+      trigger: entryLevel(l), stop: lv("60 线组拐头向下", l.flatStop), items: [
       { label: "等什么", text: `吃回撤四个条件：中长期均线平行向上 ${l.st("P10")}；回撤到 60 线组（MA60 ${f2(l.ma60)}、EMA60 ${f2(l.ema60)}）且 MA120 方向不变 ${l.st("P11")}；这次回撤后出现底部构造 ${l.st("P12")}；小时线多头排列 ${l.st("P13")}。`, rules: ["P10", "P11", "P12", "P13"] },
       { label: "怎么进", text: `四条都满足才进场（现在 ${l.st("P14")}）。趋势确立后第一次回到 20 / 60 / 120 线组，是非常好的入场点。`, rules: ["P14", "P15"] },
-      { label: "进场后止损", text: `和持仓同一条：60 线组拐头向下（MA60、EMA60 都向下；明天收盘低于 ${f2(l.turn60)} 两条就都向下）才走。20/60 双死叉不算，60/120 还平行向上就是深回撤。`, rules: ["A1", "J7"] },
+      { label: "进场后止损", text: `和持仓同一条：60 线组拐头向下（MA60、EMA60 都向下；明天收盘低于 ${l.flatStop === null ? "—" : f2(l.flatStop)} 两条就都向下）才走。20/60 双死叉不算，60/120 还平行向上就是深回撤。视频没给吃回撤的止损价位，放在 60 线组拐头是解读。`, rules: ["A1", "J7", "P23"] },
       { label: "失效", text: `${TYPE_END(l, true)}：不再是稳定上涨，不再等回调买。20/60 交叉不算，60/120 还平行向上就是深回撤。`, rules: ["J7"] },
     ] }),
     holding: (l) => ({
       action: l.met("P14") ? "持有：吃回撤四个条件齐了，可以加。" : l.stage === "回撤中" ? "持有：已经在回撤，四个条件齐了再加。" : "持有，回调可以加仓。",
-      trigger: pullbackStep(l), stop: lv("60 线组拐头向下", l.turn60), items: [
+      trigger: entryLevel(l), stop: lv("60 线组拐头向下", l.holdStop), items: [
       { label: "加仓", text: `回撤到 60 线组、MA120 方向不变、出现底部构造、小时线多头排列，四条齐了加（现在 ${l.st("P14")}）。`, rules: ["P14"] },
       { label: "止损", text: `60 线组拐头向下（MA60 ${f2(l.ma60)}、EMA60 ${f2(l.ema60)} 都向下）才走。只是碰到 MA60 不算：价格击穿均线、MA 方向不变，就是吃回撤区；20/60 双死叉也不算，60/120 还平行向上就是深回撤。`, rules: ["A1", "J7"] },
       { label: "失效", text: `${TYPE_END(l, true)}，就不是稳定上涨了：不再回调加仓，改按过渡 / 下跌的打法。`, rules: ["J7"] },
@@ -226,7 +232,7 @@ const PLAYS: Record<string, Record<Position, (l: L) => Draft>> = {
       { label: "失效", text: `回落很浅、20 线组一直向上：回归是靠横盘等均线完成的，按稳定上涨的打法等回撤；${DEATH(l)}：上涨结束。` },
     ] }),
     holding: (l) => ({ action: l.met("P8") ? "拿着：没见顶部构造不下车。" : "见了顶部构造：只是提醒，等关键性波动再走。",
-      trigger: null, stop: lv("跌破 EMA20、EMA20 向下", l.ema20), items: [
+      trigger: null, stop: lv("跌破 EMA20、EMA20 向下", l.holdStop), items: [
       { label: "构造", text: l.met("P8")
         ? `顶部构造还没出现（${l.basis("J20")}），不必自己吓自己。`
         : `顶部构造已经出现（${l.basis("J20")}）。构造是路牌不是路，还不动手。`, rules: ["P8", "P9", "J20"] },
@@ -256,10 +262,10 @@ const PLAYS: Record<string, Record<Position, (l: L) => Draft>> = {
   },
   加速下跌: {
     flat: (l) => ({ action: "不抢反弹，等底部构造和均线拐头。",
-      trigger: (l.met("J21") ? null : constructStep(l, "J21")) ?? lv("站上 EMA20（转强第一步，不是买点）", l.ema20), stop: null, items: [
+      trigger: entryLevel(l), stop: lv("20 线组拐头失败", l.flatStop), items: [
       { label: "等什么", text: `底部构造 ${l.st("J21")}；20 线组拐头向上（关键性波动）：${BUY_TURN(l)}`, rules: ["P7", "J21", "J19"] },
-      { label: "再等", text: "排列理顺成多头之前，不买。" },
-      ENTRY_STOP(l),
+      { label: "怎么进", text: `两样都到了才进：底部构造完成、20 线组一起拐头向上${l.entry?.price == null ? "" : `（触发价 ${f2(l.entry.price)}）`}。下跌途中不抢。`, rules: ["P7", "J19"] },
+      { label: "进场后止损", text: `拐头失败就走：进场后收盘跌回 ${l.flatStop === null ? "EMA20 和抵扣价" : f2(l.flatStop)} 下方，20 线组重新向下。`, rules: ["P23"] },
       { label: "失效", text: `${GOLD(l)}：下跌判断失效，按过渡 / 上涨的打法看。` },
     ] }),
     holding: (l) => ({ action: "不在急跌里割最低点，反弹再减仓。", trigger: lv("反弹减仓位 EMA20", l.ema20), stop: null, items: [
@@ -278,7 +284,7 @@ const PLAYS: Record<string, Record<Position, (l: L) => Draft>> = {
       ENTRY_STOP(l),
       { label: "失效", text: TRANSITION_END(l, "（明显偏多）按上涨打", "（明显偏空）按下跌打") },
     ] }),
-    holding: (l) => ({ action: "不加仓，减到心态稳得住。", trigger: null, stop: lv("跌破 EMA20、EMA20 向下", l.ema20), items: [
+    holding: (l) => ({ action: "不加仓，减到心态稳得住。", trigger: null, stop: lv("跌破 EMA20、EMA20 向下", l.holdStop), items: [
       { label: "止损", text: ema20Stop(l, "减"), rules: ["P18"] },
       { label: "失效", text: TRANSITION_END(l, "可以按上涨拿着", "按下跌减仓") },
       SIZE,
@@ -291,7 +297,7 @@ const PLAYS: Record<string, Record<Position, (l: L) => Draft>> = {
       ENTRY_STOP(l),
       { label: "失效", text: `${GOLD(l)}、60 线组拐头向上：不再受压，这次反弹是真的，按上涨的打法看。` },
     ] }),
-    holding: (l) => ({ action: "逢高减仓。", trigger: lv("减仓位 MA60", l.ma60), stop: lv("跌破 EMA20、EMA20 向下", l.ema20), items: [
+    holding: (l) => ({ action: "逢高减仓。", trigger: lv("减仓位 MA60", l.ma60), stop: lv("跌破 EMA20、EMA20 向下", l.holdStop), items: [
       { label: "减仓位", text: l.close >= l.ma60
         ? `已经在 MA60 ${l.p(l.ma60)} 上方，现在就是减仓机会。`
         : `反弹到 MA60 ${l.p(l.ma60)} 附近，是减仓机会。`, rules: ["P16"] },
@@ -303,19 +309,18 @@ const PLAYS: Record<string, Record<Position, (l: L) => Draft>> = {
   },
   多头结构回撤中: {
     flat: (l) => ({ action: "等回调结束再买，不在下跌途中接。",
-      trigger: l.close < l.ema20 ? lv("站上 EMA20", l.ema20) : l.close < l.drop20 ? lv("高于 MA20 抵扣价", l.drop20) : null,
-      stop: lv("跌回 EMA20 下方、EMA20 向下", l.ema20), items: [
+      trigger: entryLevel(l), stop: lv("20 线组拐头失败", l.flatStop), items: [
       { label: "等什么", text: l.close < l.ema20 ? `20 线组重新拐头向上：收盘站上 EMA20 ${l.p(l.ema20)}。`
         : l.close < l.drop20 ? `已经在 EMA20 ${l.p(l.ema20)} 上方；再等 MA20 拐头向上：收盘高于 MA20 抵扣价 ${l.p(l.drop20)}。`
         : `已经在 EMA20 ${l.p(l.ema20)} 和 MA20 抵扣价 ${l.p(l.drop20)} 上方：守住几天、MA20 拐头向上，回调就结束了。`, rules: ["P19", "P20"] },
       { label: "位置", text: l.close >= l.ma60
         ? `回踩到 MA60 ${l.p(l.ma60)} 附近止跌，更好。`
         : `已经跌到 MA60 ${l.p(l.ma60)} 下方：很快收回来才算有撑，收不回来就等 20/60 怎么交叉。` },
-      ENTRY_STOP(l),
+      { label: "进场后止损", text: `拐头失败就走：进场后收盘跌回 ${l.flatStop === null ? "EMA20 和抵扣价" : f2(l.flatStop)} 下方（EMA20 和进场次日的 MA20 抵扣价里较低的），20 线组重新向下。`, rules: ["P23"] },
       { label: "失效", text: `${DEATH(l)}：结构坏了，不再有撑，按过渡 / 下跌的打法看。`, rules: ["J16"] },
     ] }),
     holding: (l) => ({ action: "持有观察，不在急跌里卖。", trigger: null,
-      stop: lv("20/60 双死叉（守住）", l.solve30("20 线组双双跌破 60 线组", false)?.level), items: [
+      stop: lv("20/60 双死叉（守住）", l.holdStop), items: [
       { label: "止损", text: `${DEATH(l)}才算结构坏，那时再走。`, rules: ["J16"] },
       { label: "失效", text: `出现上面的止损信号就不再有撑：结构转空，剩下没走的仓位按过渡 / 下跌的打法处理（MA60 ${f2(l.ma60)}、EMA60 ${f2(l.ema60)} 是分界）。` },
       SIZE,
@@ -374,18 +379,58 @@ const PNL: Record<string, Record<"profit" | "loss", PnlTweak>> = {
   },
 };
 
-/** 这份分析该用哪套打法：脚本给的 play.key；横盘里埋伏的底线已经破了（P3 满足）时改用横盘破位。 */
+/** 这份分析该用哪套打法：脚本交易计划的打法键（横盘里埋伏的底线已经破了时是横盘破位）。 */
 export function playKey(a: Analysis): string {
-  const t = a.play.key;
-  if (t === "横盘" && met(a, "P3")) return "横盘破位";
-  return t;
+  return a.trade_plan.key;
 }
 
-/** 进场价到止损的距离（%）。空仓按触发价进（没有触发价就是现价），持仓按现价。止损不在下方时不算。 */
-function riskOf(p: Draft, k: Situation, close: number): number | null {
-  if (!p.stop) return null;
-  const entry = k === "flat" ? p.trigger?.price ?? close : close;
-  return p.stop.price <= entry ? ((entry - p.stop.price) / entry) * 100 : null;
+const ratio = (x: number) => `${x.toFixed(1)}:1`;
+
+/** 目标位一句：价位、是什么、离现价多远；解读的标出来。 */
+function targetsText(t: TradePlan, close: number): string {
+  return t.targets.map((x, i) => `目标 ${i + 1}：${x.kind} ${at(x.price, close)}${x.source === "解读" ? "（解读）" : ""}`).join("；");
+}
+
+/** 盈亏比一句：几比几、哪一档；不做时写差多少。 */
+export function rrText(t: TradePlan): string | null {
+  if (t.rr === null || t.rr_verdict === null) return null;
+  if (t.rr_verdict === "不做") {
+    const g = t.rr_gap!;
+    return `${ratio(t.rr)}，不到 3:1，不做：目标得到 ${f2(g.target_for_min)}，或止损收紧到 ${f2(g.stop_for_min)}，才够 3:1。`;
+  }
+  return `${ratio(t.rr)}，${t.rr_verdict}（不到 3:1 不做，5:1 以上理想）。`;
+}
+
+/** 股数一句：填了账户给股数，没填给每 1 万元风险对应多少股。 */
+export function sizeText(t: TradePlan): string | null {
+  const z = t.size;
+  if (!z) return null;
+  if (z.shares === null) return `没填账户：每 1 万元风险对应 ${z.per_10k} 股（单位亏损 ${f2(z.unit_risk)}）。在设置里填账户规模，就按每笔可承受亏损给股数。`;
+  return `${z.shares} 股：${z.basis}。`;
+}
+
+/** 空仓会买时，计划里多三条：目标、盈亏比、股数；持仓只多目标。 */
+function tradeItems(t: TradePlan, close: number, flat: boolean): PlanItem[] {
+  const out: PlanItem[] = [];
+  if (t.targets.length) out.push({ label: "目标", text: targetsText(t, close), rules: ["P25"] });
+  if (!flat) return out;
+  const rr = rrText(t);
+  if (rr) out.push({ label: "盈亏比", text: rr, rules: ["P24"] });
+  const size = sizeText(t);
+  if (size) out.push({ label: "股数", text: size, rules: ["A6"] });
+  return out;
+}
+
+/** 把目标、盈亏比、股数插在止损之前（计划的顺序：等什么 → 怎么进 → 目标 → 盈亏比 → 股数 → 止损 → 失效 → 仓位）。 */
+function withTrade(items: PlanItem[], extra: PlanItem[]): PlanItem[] {
+  const at = items.findIndex((i) => ["进场门槛", "止损", "进场后止损", "失效"].includes(i.label));
+  const k = at < 0 ? items.length : at;
+  return [...items.slice(0, k), ...extra, ...items.slice(k)];
+}
+
+/** 盈亏比不到 3:1：空仓的做法改成不做（P24）。 */
+function flatAction(d: Draft, t: TradePlan): string {
+  return t.rr_verdict === "不做" ? `不做：盈亏比 ${ratio(t.rr!)}，不到 3:1。` : d.action;
 }
 
 /** 按趋势类型和阶段定的打法。浮盈 / 浮亏在持仓打法的做法之后加一行「盈亏」，价位和持仓一样。 */
@@ -393,7 +438,9 @@ export function buildPlans(a: Analysis): Record<Situation, Plan> {
   const key = playKey(a);
   const play = PLAYS[key];
   const l = levels(a);
-  const holding = play.holding(l);
+  const tp = a.trade_plan;
+  const hold = play.holding(l);
+  const holding: Draft = { ...hold, items: withTrade(hold.items, tradeItems(tp.holding, a.close, false)) };
   const withPnl = (k: "profit" | "loss"): Draft => {
     const t = PNL[key][k];
     return {
@@ -402,8 +449,13 @@ export function buildPlans(a: Analysis): Record<Situation, Plan> {
       items: [{ label: "盈亏", text: t.line }, ...holding.items.filter((i) => !t.omit?.includes(i.label))],
     };
   };
-  const drafts: Record<Situation, Draft> = { flat: play.flat(l), holding, profit: withPnl("profit"), loss: withPnl("loss") };
-  return Object.fromEntries(SITUATIONS.map((k) => [k, { ...drafts[k], risk: riskOf(drafts[k], k, a.close) }])) as Record<Situation, Plan>;
+  const f = play.flat(l);
+  const flat: Draft = { ...f, action: flatAction(f, tp.flat), items: withTrade(f.items, tradeItems(tp.flat, a.close, true)) };
+  const drafts: Record<Situation, Draft> = { flat, holding, profit: withPnl("profit"), loss: withPnl("loss") };
+  return Object.fromEntries(SITUATIONS.map((k) => {
+    const trade = k === "flat" ? tp.flat : tp.holding;
+    return [k, { ...drafts[k], risk: trade.risk_pct, trade }];
+  })) as Record<Situation, Plan>;
 }
 
 /** 结论里的一行（给模型看的数据字段）：做法、触发价、止损、风险。空仓的止损叫进场后止损。 */
@@ -412,7 +464,33 @@ export function planLine(p: Plan, close: number, flat: boolean): string {
   if (p.trigger) parts.push(`${p.trigger.label} ${at(p.trigger.price, close)}`);
   if (p.stop) parts.push(`${flat ? "进场后止损" : "止损"}：${p.stop.label} ${at(p.stop.price, close)}`);
   if (p.risk !== null) parts.push(`到止损 ${p.risk.toFixed(1)}%`);
+  if (p.trade.targets.length) parts.push(targetsText(p.trade, close));
+  if (flat && p.trade.rr !== null) parts.push(`盈亏比 ${ratio(p.trade.rr)}（${p.trade.rr_verdict}）`);
   return parts.join("；");
+}
+
+/** 交易计划给模型看的数据字段（[[D:计划.进场]] 这样引用）：键、说明、值。价位都是脚本的 trade_plan。 */
+export function planFacts(tp: PlanSet, close: number): [string, string, string][] {
+  const f = tp.flat, h = tp.holding;
+  const price = (x: number | null) => (x === null ? "没有日线价位" : at(x, close));
+  const stopText = (s: TradePlan["stop"]) => s ? `${price(s.price)}，${s.reason}（${s.rule}${s.source === "解读" ? "，解读" : ""}）` : null;
+  const why = f.notes.join("；");
+  const out: [string, string, string][] = [
+    ["计划.进场", "空仓的进场触发价和条件（交易计划）", f.entry ? `${price(f.entry.price)}，${f.entry.condition}（${f.entry.rule}）` : `空仓不进场：${why || "这套打法不买"}`],
+  ];
+  if (f.entry) {
+    out.push(
+      ["计划.止损", "空仓进场后的止损（什么原则进就什么原则出，P23）", stopText(f.stop) ?? "没有止损价"],
+      ["计划.目标", "空仓进场后的目标位（P25）", f.targets.length ? targetsText(f, close) : (f.notes.find((n) => n.includes("目标")) ?? "目标位算不出")],
+      ["计划.盈亏比", "盈亏比：(第一目标 − 进场) ÷ (进场 − 止损)，不到 3:1 不做（P24）", rrText(f) ?? `算不了：${why}`],
+      ["计划.股数", "建议股数：每笔可承受亏损 ÷ (进场 − 止损)，向下取整（A6）", sizeText(f) ?? `算不了：${why}`],
+    );
+  }
+  out.push(
+    ["计划.持仓止损", "持仓的止损（按进场的原则，不按成本）", stopText(h.stop) ?? h.notes.join("；")],
+    ["计划.持仓目标", "持仓的目标位（P25）", h.targets.length ? targetsText(h, close) : "上方没有目标位"],
+  );
+  return out;
 }
 
 // ---------- 找打法：条件清单 ----------

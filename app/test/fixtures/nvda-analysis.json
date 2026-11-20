@@ -207,14 +207,79 @@
  ],
  "play": {
   "key": "加速下跌",
-  "text": "加速下跌（起点）：不抢反弹。等底部构造（J21 不满足）和关键性波动（20 线组拐头向上）。",
+  "text": "加速下跌（起点）：不抢反弹。等底部构造（J21 不满足）和关键性波动（20 线组拐头向上）。盈亏比 0.6:1，不到 3:1，不做（P24）。第一目标 228.86（缺口）。要 3:1，目标得到 299.59，或止损收紧到 206.66。",
   "rules": [
    "P7",
    "P8",
    "P9",
    "J19",
-   "J21"
+   "J21",
+   "J37",
+   "P24"
   ]
+ },
+ "trade_plan": {
+  "key": "加速下跌",
+  "flat": {
+   "entry": {
+    "price": 212.21,
+    "condition": "收盘站上 EMA20 183.08 和 MA20 抵扣价 212.21，20 线组一起拐头向上；先等底部构造完成（最高价越过 170.00）",
+    "rule": "J19"
+   },
+   "stop": {
+    "price": 183.0849393320308,
+    "reason": "20 线组拐头失败：进场后收盘跌回 183.08 下方（EMA20 183.08、进场次日要扣的 210.96 里较低的），两条线重新向下",
+    "rule": "P23",
+    "source": "视频"
+   },
+   "targets": [
+    {
+     "price": 228.86,
+     "kind": "缺口",
+     "rule": "P25",
+     "source": "视频",
+     "date": "2026-10-12"
+    }
+   ],
+   "rr": 0.5716726289367404,
+   "rr_verdict": "不做",
+   "rr_gap": {
+    "target_for_min": 299.58518200390756,
+    "stop_for_min": 206.66
+   },
+   "risk_pct": 13.724641000880823,
+   "size": {
+    "shares": null,
+    "risk_amount": null,
+    "per_10k": 343,
+    "unit_risk": 29.125061,
+    "capped": false,
+    "basis": "单位亏损 29.13；没填账户，每 1 万元风险对应 343 股"
+   },
+   "notes": []
+  },
+  "holding": {
+   "entry": null,
+   "stop": null,
+   "targets": [
+    {
+     "price": 170.0,
+     "kind": "缺口",
+     "rule": "P25",
+     "source": "视频",
+     "date": "2026-11-12"
+    }
+   ],
+   "rr": null,
+   "rr_verdict": null,
+   "rr_gap": null,
+   "risk_pct": null,
+   "size": null,
+   "notes": [
+    "下跌趋势里下方没有均线托底，止损不靠均线：反弹到 EMA20 一带就是离场点",
+    "止损按进场的原则给，成本价只用来算仓位"
+   ]
+  }
  },
  "rules": [
   {
@@ -278,6 +343,17 @@
    "yields_to": null
   },
   {
+   "id": "A6",
+   "kind": "公理",
+   "name": "仓位公式：最大亏损额 ÷ 单位亏损",
+   "status": "满足",
+   "basis": "单位亏损 29.13；没填账户，每 1 万元风险对应 343 股",
+   "levels": {
+    "单位亏损": 29.125061
+   },
+   "yields_to": null
+  },
+  {
    "id": "J1",
    "kind": "判定",
    "name": "类型看 60/120 线组",
@@ -300,7 +376,7 @@
    "kind": "判定",
    "name": "加速上涨 / 加速下跌",
    "status": "满足",
-   "basis": "加速下跌，起点（按乖离）",
+   "basis": "加速下跌，起点（按乖离）；旁证 J37 不满足：收盘离 EMA120 -26.8%（偏离 ≥ 50% 算大幅乖离）；周线离 EMA120 -9.7%（周线那一档 ≥ 70%）",
    "levels": {},
    "yields_to": null
   },
@@ -560,6 +636,143 @@
    "yields_to": null
   },
   {
+   "id": "J30",
+   "kind": "判定",
+   "name": "某周期出了前三步就假定在走好",
+   "status": "需看图",
+   "basis": "脚本算不了",
+   "levels": {},
+   "yields_to": null
+  },
+  {
+   "id": "J31",
+   "kind": "判定",
+   "name": "小周期多头走出来",
+   "status": "需看图",
+   "basis": "脚本算不了",
+   "levels": {},
+   "yields_to": null
+  },
+  {
+   "id": "J32",
+   "kind": "判定",
+   "name": "小周期不破坏排列，大一级会完成前三步",
+   "status": "需看图",
+   "basis": "脚本算不了",
+   "levels": {},
+   "yields_to": null
+  },
+  {
+   "id": "J33",
+   "kind": "判定",
+   "name": "周期共振",
+   "status": "需看图",
+   "basis": "脚本算不了",
+   "levels": {},
+   "yields_to": null
+  },
+  {
+   "id": "J34",
+   "kind": "判定",
+   "name": "看周线拐头先看日线均线密集",
+   "status": "需看图",
+   "basis": "脚本算不了",
+   "levels": {},
+   "yields_to": null
+  },
+  {
+   "id": "J35",
+   "kind": "判定",
+   "name": "长期 MA 拐不下来，市场会强行逆转",
+   "status": "需看图",
+   "basis": "脚本算不了",
+   "levels": {},
+   "yields_to": null
+  },
+  {
+   "id": "J36",
+   "kind": "判定",
+   "name": "引力回归",
+   "status": "需看图",
+   "basis": "脚本算不了",
+   "levels": {},
+   "yields_to": null
+  },
+  {
+   "id": "J37",
+   "kind": "判定",
+   "name": "乖离阈值：EMA120 50%、周线 70%",
+   "status": "不满足",
+   "basis": "收盘离 EMA120 -26.8%（偏离 ≥ 50% 算大幅乖离）；周线离 EMA120 -9.7%（周线那一档 ≥ 70%）",
+   "levels": {
+    "EMA120": 206.09753043907662
+   },
+   "yields_to": null
+  },
+  {
+   "id": "J38",
+   "kind": "判定",
+   "name": "方框时间内拿下山头",
+   "status": "需看图",
+   "basis": "脚本算不了",
+   "levels": {},
+   "yields_to": null
+  },
+  {
+   "id": "J39",
+   "kind": "判定",
+   "name": "2B 只解决回归",
+   "status": "需看图",
+   "basis": "脚本算不了",
+   "levels": {},
+   "yields_to": null
+  },
+  {
+   "id": "J40",
+   "kind": "判定",
+   "name": "周线均线密集至少翻倍",
+   "status": "需看图",
+   "basis": "脚本算不了",
+   "levels": {},
+   "yields_to": null
+  },
+  {
+   "id": "J41",
+   "kind": "判定",
+   "name": "没有标志性动作趋势不会改变",
+   "status": "需看图",
+   "basis": "脚本算不了",
+   "levels": {},
+   "yields_to": null
+  },
+  {
+   "id": "J42",
+   "kind": "判定",
+   "name": "突破多次试探的位置，占领筹码峰",
+   "status": "需看图",
+   "basis": "脚本算不了",
+   "levels": {},
+   "yields_to": null
+  },
+  {
+   "id": "J43",
+   "kind": "判定",
+   "name": "分歧越大，确定性越强",
+   "status": "需看图",
+   "basis": "脚本算不了",
+   "levels": {},
+   "yields_to": null
+  },
+  {
+   "id": "J44",
+   "kind": "判定",
+   "name": "收盘高于所有爆量日，恐怕要往上",
+   "status": "需看图",
+   "basis": "脚本算不了",
+   "levels": {},
+   "yields_to": null
+  },
+  {
    "id": "P1",
    "kind": "动作",
    "name": "横盘中段不做",
@@ -729,9 +942,10 @@
    "kind": "动作",
    "name": "排列不合理不买",
    "status": "满足",
-   "basis": "20 线组在 60 线组下方，不买；理顺（带方向）20 天内要持平在 223.89（+48.3%）以上",
+   "basis": "20 线组在 60 线组下方，不买；理顺（带方向）10 天内要持平在 273.59（+81.2%）以上；30 天内要持平在 223.89（+48.3%）以上",
    "levels": {
-    "20 天内理顺": 223.88794234657288
+    "10 天内理顺": 273.5885029335022,
+    "30 天内理顺": 223.88794234657288
    },
    "yields_to": null
   },
@@ -766,6 +980,167 @@
    "levels": {
     "MA20 明天抵扣价": 212.21
    },
+   "yields_to": null
+  },
+  {
+   "id": "P21",
+   "kind": "动作",
+   "name": "突破买入",
+   "status": "需看图",
+   "basis": "脚本算不了",
+   "levels": {},
+   "yields_to": null
+  },
+  {
+   "id": "P22",
+   "kind": "动作",
+   "name": "突破买入的止损：起涨 K 线最低价",
+   "status": "不满足",
+   "basis": "没有突破买入（只用于突破买入）",
+   "levels": {},
+   "yields_to": null
+  },
+  {
+   "id": "P23",
+   "kind": "动作",
+   "name": "什么原则进，就什么原则出",
+   "status": "满足",
+   "basis": "空仓进场后：20 线组拐头失败：进场后收盘跌回 183.08 下方（EMA20 183.08、进场次日要扣的 210.96 里较低的），两条线重新向下",
+   "levels": {
+    "止损": 183.0849393320308
+   },
+   "yields_to": null
+  },
+  {
+   "id": "P24",
+   "kind": "动作",
+   "name": "盈亏比不到 3:1 不做",
+   "status": "满足",
+   "basis": "0.57:1 < 3:1，不做；要 3:1 目标得到 299.59，或止损收紧到 206.66",
+   "levels": {
+    "进场": 212.21,
+    "止损": 183.0849393320308,
+    "目标 1": 228.86
+   },
+   "yields_to": null
+  },
+  {
+   "id": "P25",
+   "kind": "动作",
+   "name": "目标位：缺口和均线密集区",
+   "status": "满足",
+   "basis": "目标 1 缺口 228.86（2026-10-12）",
+   "levels": {
+    "目标 1": 228.86
+   },
+   "yields_to": null
+  },
+  {
+   "id": "P26",
+   "kind": "动作",
+   "name": "预期没到、底线没破就拿着",
+   "status": "需看图",
+   "basis": "脚本算不了",
+   "levels": {},
+   "yields_to": null
+  },
+  {
+   "id": "P27",
+   "kind": "动作",
+   "name": "到目标、中长线完好不一定走",
+   "status": "需看图",
+   "basis": "脚本算不了",
+   "levels": {},
+   "yields_to": null
+  },
+  {
+   "id": "P28",
+   "kind": "动作",
+   "name": "前高过不去是止盈点",
+   "status": "需看图",
+   "basis": "脚本算不了",
+   "levels": {},
+   "yields_to": null
+  },
+  {
+   "id": "P29",
+   "kind": "动作",
+   "name": "标志性动作当参考点",
+   "status": "需看图",
+   "basis": "脚本算不了",
+   "levels": {},
+   "yields_to": null
+  },
+  {
+   "id": "P30",
+   "kind": "动作",
+   "name": "在门槛价设买入提醒",
+   "status": "需看图",
+   "basis": "脚本算不了",
+   "levels": {},
+   "yields_to": null
+  },
+  {
+   "id": "P31",
+   "kind": "动作",
+   "name": "抵扣价突然下降处狙击",
+   "status": "需看图",
+   "basis": "脚本算不了",
+   "levels": {},
+   "yields_to": null
+  },
+  {
+   "id": "P32",
+   "kind": "动作",
+   "name": "急跌后假跌破，破线拐头合二为一",
+   "status": "需看图",
+   "basis": "脚本算不了",
+   "levels": {},
+   "yields_to": null
+  },
+  {
+   "id": "P33",
+   "kind": "动作",
+   "name": "下跌后只认 2B 和下一级别均线密集",
+   "status": "需看图",
+   "basis": "脚本算不了",
+   "levels": {},
+   "yields_to": null
+  },
+  {
+   "id": "P34",
+   "kind": "动作",
+   "name": "目光随扩散上移",
+   "status": "需看图",
+   "basis": "脚本算不了",
+   "levels": {},
+   "yields_to": null
+  },
+  {
+   "id": "P35",
+   "kind": "动作",
+   "name": "走不好在原级别解决",
+   "status": "需看图",
+   "basis": "脚本算不了",
+   "levels": {},
+   "yields_to": null
+  },
+  {
+   "id": "P36",
+   "kind": "动作",
+   "name": "周期共振第一时间反应",
+   "status": "需看图",
+   "basis": "脚本算不了",
+   "levels": {},
+   "yields_to": null
+  },
+  {
+   "id": "P37",
+   "kind": "动作",
+   "name": "周线 2B 先看日线呼应",
+   "status": "需看图",
+   "basis": "脚本算不了",
+   "levels": {},
    "yields_to": null
   }
  ],
@@ -869,6 +1244,22 @@
   "PATTERN_RECENT_BARS": {
    "value": 60,
    "source": "脚本自定"
+  },
+  "BIAS120_PCT": {
+   "value": 50.0,
+   "source": "视频"
+  },
+  "WEEKLY_BIAS120_PCT": {
+   "value": 70.0,
+   "source": "视频"
+  },
+  "RR_MIN": {
+   "value": 3.0,
+   "source": "视频"
+  },
+  "RR_IDEAL": {
+   "value": 5.0,
+   "source": "视频"
   }
  },
  "drops": [

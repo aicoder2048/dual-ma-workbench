@@ -6,7 +6,7 @@
  *
  * 服务端在回答结束后调用 validateCitations，把不存在的编号标出来，前端显示成红色。
  */
-import { buildForecast, buildPlans, planLine, playKey } from "./plan.ts";
+import { buildForecast, buildPlans, planFacts, planLine, playKey } from "./plan.ts";
 import { naiveCompare, recordNote } from "./record.ts";
 import type { SourceLibrary } from "./sources.ts";
 
@@ -143,6 +143,33 @@ export type Ma200 = Unavailable | {
 /** 唯一的打法：key 选 plan.ts 里按仓位的措辞，text 是脚本生成的那段话，rules 是用到的规则编号。 */
 export interface Play { key: string; text: string; rules: string[] }
 
+/**
+ * 交易计划（skill 的 tradeplan.py，JSON 的 trade_plan）：进场、止损、目标位、盈亏比、股数都是脚本算的，
+ * plan.ts 和页面只读，不重算。flat 是空仓（不买的打法 entry 为 null），holding 是持仓（没有进场和股数，止损按进场的原则）。
+ * source：视频给了定价位的办法写"视频"，视频没给价位、脚本按原则放的写"解读"。
+ */
+export type PlanSource = "视频" | "解读";
+export interface PlanEntry { price: number | null; condition: string; rule: string }
+export interface PlanStop { price: number | null; reason: string; rule: string; source: PlanSource }
+export interface PlanTarget { price: number; kind: string; rule: string; source: PlanSource; date: string | null }
+/** shares 为 null 时没填账户，看 per_10k（每 1 万元风险对应多少股）。 */
+export interface PlanSize { shares: number | null; risk_amount: number | null; per_10k: number; unit_risk: number; capped: boolean; basis: string }
+export type RrVerdict = "不做" | "可做" | "理想";
+export interface TradePlan {
+  entry: PlanEntry | null;
+  stop: PlanStop | null;
+  targets: PlanTarget[];
+  rr: number | null;
+  rr_verdict: RrVerdict | null;
+  /** 不做时：要 3:1，目标得到哪、或止损得收紧到哪。 */
+  rr_gap: { target_for_min: number; stop_for_min: number } | null;
+  risk_pct: number | null;
+  size: PlanSize | null;
+  notes: string[];
+}
+/** key：打法键，横盘里埋伏的底线已破时是"横盘破位"。 */
+export interface PlanSet { key: string; flat: TradePlan; holding: TradePlan }
+
 /** dma_analyze.py --json 里 analysis 的形状（只列用到的字段）。 */
 export interface Analysis {
   label: string;
@@ -161,6 +188,7 @@ export interface Analysis {
   volume: { ratio: number; spikes: string[] } | null;
   regime: Regime;
   play: Play;
+  trade_plan: PlanSet;
   rules: RuleResult[];
   steps: PairProgress[];
   thresholds: Record<string, { value: number; source: string }>;
@@ -251,6 +279,7 @@ export function buildFacts(a: Analysis): Facts {
   const plans = buildPlans(a);
   put("结论.空仓", "空仓的做法、触发价、进场后止损", planLine(plans.flat, a.close, true));
   put("结论.持仓", "持仓的做法、加减仓价位、止损", planLine(plans.holding, a.close, false));
+  for (const [k, label, value] of planFacts(a.trade_plan, a.close)) put(k, label, value);
   const fc = buildForecast(a, plans);
   put("推演.保持", `类型线 MA60、MA120 未来 ${fc.days} 天能保持多久、守在哪`, fc.hold);
   put("推演.最早", "这套打法的条件最早哪天能齐", fc.earliest);

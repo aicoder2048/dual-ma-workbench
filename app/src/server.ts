@@ -13,7 +13,7 @@ import { Practice, yfinancePrices } from "./practice/service.ts";
 import { SessionStore } from "./practice/session.ts";
 import { PROJECT_ROOT, SOURCE_DOCS, SourceLibrary } from "./sources.ts";
 import { initialModel, piCatalog, piDefaultModel } from "./agents/catalog.ts";
-import { SettingsStore } from "./settings.ts";
+import { SettingsStore, sizingArgs } from "./settings.ts";
 import { Watchlist } from "./watchlist.ts";
 import { Workbench, type Client } from "./workbench.ts";
 
@@ -24,7 +24,8 @@ const HOST = "127.0.0.1";
 const catalog = piCatalog();
 const models = await catalog.list();
 const settings = new SettingsStore(undefined, { model: initialModel(models, piDefaultModel()) });
-const analyzer = new Analyzer(undefined, undefined, () => settings.get().dataSource);
+// 练习的分析不带仓位参数（Practice 自己跑脚本）：换算过的价格只给每 1 万元风险的股数
+const analyzer = new Analyzer(undefined, undefined, () => settings.get().dataSource, () => sizingArgs(settings.get()));
 const journal = new Journal();
 const prices = yfinancePrices();
 const practice = new Practice({ store: new SessionStore(), journal, prices, run: pythonRunner });
