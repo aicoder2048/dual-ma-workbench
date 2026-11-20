@@ -357,11 +357,14 @@ export function planBody(plans, p, close) {
 
 // ---------- 结论：空仓、持仓各一行，带触发价、止损、目标、盈亏比、股数；回测记录 ----------
 
-/** 一个价位标签：是什么、价位、离现价多远。item 给测试和读屏定位（trigger / stop / target）。 */
-function priceChip(key, lv, close, cls, item = cls) {
+/**
+ * 一个价位标签：是什么、价位、离现价多远。item 给测试和读屏定位（trigger / stop / target）。
+ * note 换掉"离现价多远"那一格；compact 时不写价位的说明（悬停看），五样放得下一行。
+ */
+function priceChip(key, lv, close, cls, { item = cls, note = pct((lv?.price / close - 1) * 100), compact = false } = {}) {
   if (!lv) return "";
-  return `<span class="pchip ${cls}" data-item="${item}" ${tip(`${key}：${lv.label} ${f2(lv.price)}`)}><span class="ck">${key}</span>${esc(lv.label)}
-    <b class="num">${f2(lv.price)}</b><span class="num muted">${pct((lv.price / close - 1) * 100)}</span></span>`;
+  return `<span class="pchip ${cls}" data-item="${item}" ${tip(`${key}：${lv.label} ${f2(lv.price)}`)}><span class="ck">${key}</span>${compact ? "" : esc(lv.label)}
+    <b class="num">${f2(lv.price)}</b>${note ? `<span class="num muted">${note}</span>` : ""}</span>`;
 }
 
 const RR_CLASS = { 不做: "bad", 可做: "ok", 理想: "good" };
@@ -380,14 +383,15 @@ function sizeChip(t) {
   if (!z) return "";
   if (z.shares === null) {
     return `<span class="pchip size" data-item="size" ${tip(`${z.basis}。在设置里填账户规模，就按每笔可承受亏损给股数`)}>
-      <span class="ck">每 1 万元风险</span><b class="num">${z.per_10k}</b>股</span>`;
+      <span class="ck">股数</span><b class="num">${z.per_10k}</b>/万元</span>`;
   }
   return `<span class="pchip size" data-item="size" ${tip(z.basis)}><span class="ck">股数</span><b class="num">${z.shares}</b>${z.capped ? "（账户封顶）" : ""}</span>`;
 }
 
 /** 目标位标签：脚本给的目标 1、2（P25）；解读的在悬停里说。 */
-const targetChips = (t, close) => t.targets.map((x, i) =>
-  priceChip(`目标${t.targets.length > 1 ? i + 1 : ""}`, { label: x.source === "解读" ? `${x.kind}（解读）` : x.kind, price: x.price }, close, "target")).join("");
+const targetChips = (t, close, compact) => t.targets.map((x, i) =>
+  priceChip(`目标${t.targets.length > 1 ? i + 1 : ""}`, { label: x.source === "解读" ? `${x.kind}（解读）` : x.kind, price: x.price }, close, "target",
+    { compact, note: compact ? "" : undefined })).join("");
 
 /** 一行结论。buys：这套打法空仓会不会买（交易计划有进场），不买时空仓的价位叫「先看」，不叫触发。 */
 function conclusionRow(name, plan, close, flat, buys, cost) {
@@ -396,12 +400,18 @@ function conclusionRow(name, plan, close, flat, buys, cost) {
     : plan.risk < 0.05 ? `<span class="pchip risk">止损就在${flat ? "进场价" : "现价"}：再破就走</span>`
     : `<span class="pchip risk"><span class="ck">${flat ? "风险" : "距止损"}</span><b class="num">${plan.risk.toFixed(1)}%</b></span>`;
   const t = plan.trade;
+  // 空仓会买：五样排一行（触发、止损带风险、目标、盈亏比、股数），价位的说明放悬停里
+  const five = flat && buys;
+  const chips = five
+    ? priceChip("触发", plan.trigger, close, "trigger", { compact: true, note: "" })
+      + priceChip("止损", plan.stop, close, "stop", { compact: true, note: plan.risk === null ? "" : `-${plan.risk.toFixed(1)}%` })
+      + targetChips(t, close, true) + rrChip(t) + sizeChip(t)
+    : priceChip(flat ? "先看" : "盯住", plan.trigger, close, "trigger") + priceChip(flat ? "进场后止损" : "止损", plan.stop, close, "stop") + risk
+      + (flat ? "" : targetChips(t, close, true));
   return `<div class="concl-row" data-situation="${flat ? "flat" : "holding"}">
       <span class="who">${name}</span>
-      <div class="what"><b>${fill(plan.action)}</b>
-        <div class="chips-row">${priceChip(flat ? (buys ? "触发" : "先看") : "盯住", plan.trigger, close, "trigger")}
-          ${priceChip(flat ? "进场后止损" : "止损", plan.stop, close, "stop")}${risk}
-          ${flat && !buys ? "" : targetChips(t, close)}${flat ? rrChip(t) + sizeChip(t) : ""}</div></div></div>`;
+      <div class="what"><b>${fill(plan.action)}</b></div>
+      <div class="chips-row${five ? " five" : ""}">${chips}</div></div>`;
 }
 
 /** 结论卡片的持仓那一行：按成本价分浮盈 / 浮亏（没填就是持仓）。输入成本时只重画这一行。 */
