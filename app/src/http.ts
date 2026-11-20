@@ -117,7 +117,8 @@ export function createHandler(deps: Deps) {
       if (req.method === "PUT") {
         const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
         const patch: Record<string, unknown> = {};
-        for (const k of ["model", "thinkingAnalyst", "thinkingAdvisor", "dataSource", "voiceAnalyst", "voiceAdvisor", "autoSpeak"]) {
+        for (const k of ["model", "thinkingAnalyst", "thinkingAdvisor", "dataSource", "voiceAnalyst", "voiceAdvisor", "autoSpeak",
+          "account", "riskMode", "riskPct", "riskAmount"]) {
           if (k in body) patch[k] = body[k];
         }
         if ("model" in patch) {

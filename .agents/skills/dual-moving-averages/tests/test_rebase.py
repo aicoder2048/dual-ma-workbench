@@ -51,6 +51,9 @@ def verdict(a: dict) -> dict:
     return {
         "regime": (r["name"], r["type"], r["stage"], r["transition"], r["depth"]),
         "play": a["play"]["key"],
+        # 交易计划：打法键、进场和止损依据的规则、盈亏比档位都不随价格水平变（价位按系数缩放，见下一个测试）
+        "plan": [(a["trade_plan"]["key"], p["entry"] and p["entry"]["rule"], p["stop"] and p["stop"]["rule"], p["rr_verdict"],
+                  [t["kind"] for t in p["targets"]]) for p in (a["trade_plan"]["flat"], a["trade_plan"]["holding"])],
         "rules": [(x["id"], x["status"], x["yields_to"]) for x in a["rules"]],
         "lean": (a["lean"]["label"], round(a["lean"]["score"], 9), a["lean"]["after"]["label"]),
         "arr": (a["arr_ma"], a["arr_ema"]),
@@ -90,6 +93,12 @@ def test_rebasing_scales_every_level_by_the_same_factor(name):
         for k in (k for k in x["levels"] if k != "还差几根"):   # 唯一不是价位的一项：K 线根数
             assert y["levels"][k] == pytest.approx(x["levels"][k] * factor), (x["id"], k)
     assert b["bias20"] == pytest.approx(a["bias20"]) and b["spread_pct"] == pytest.approx(a["spread_pct"])
+    for x, y in ((a["trade_plan"][k], b["trade_plan"][k]) for k in ("flat", "holding")):
+        for part in ("entry", "stop"):
+            if x[part] and x[part]["price"] is not None:
+                assert y[part]["price"] == pytest.approx(x[part]["price"] * factor), part
+        assert [t["price"] for t in y["targets"]] == pytest.approx([t["price"] * factor for t in x["targets"]])
+        assert (y["rr"] is None) == (x["rr"] is None) and (x["rr"] is None or y["rr"] == pytest.approx(x["rr"]))
     assert b["ma200"]["value"] == pytest.approx(a["ma200"]["value"] * factor)
 
 

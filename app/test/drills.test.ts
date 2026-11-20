@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import type { Analysis } from "../src/citations.ts";
 import { buildPlans } from "../src/plan.ts";
+import { entryStateOf } from "../src/practice/discipline.ts";
 import { parseCsv, rebase, toCsv } from "../src/practice/blind.ts";
 import {
   DROPOFF_CHOICES, GENERATORS, KINDS, PLAY_CHOICES, playClass, REGIME_NAMES, SIGNAL_CHOICES, STOP_CHOICES, TWO_B_CHOICES,
@@ -120,7 +121,12 @@ describe("出题函数：答案就是分析里的字段", () => {
       expect(picked(d)).not.toBe("反弹卖");
       expect(d.parts[0].choices).toEqual([...PLAY_CHOICES]);
       const stop = buildPlans(a).flat.stop;
-      expect(picked(d, 1)).toBe(stop ? STOP_CHOICES.find((c) => stop.label.startsWith(c.slice(0, 5)))! : "不设（这时不进场）");
+      const buys = entryStateOf(a).entries !== null;
+      // 蒙眼：交易计划是换算后那段行情算的（不带账户，没有股数），价位和题目里的收盘同一个量级
+      expect(a.trade_plan.flat.size?.shares ?? null).toBeNull();
+      const prices = [a.trade_plan.flat.entry?.price, a.trade_plan.flat.stop?.price, ...a.trade_plan.flat.targets.map((t) => t.price)];
+      for (const x of prices) if (x != null) expect(x / a.close).toBeGreaterThan(0.2), expect(x / a.close).toBeLessThan(5);
+      expect(picked(d, 1)).toBe(stop && buys ? STOP_CHOICES.find((c) => stop.label.startsWith(c.slice(0, 5)))! : "不设（这时不进场）");
     }
   });
 });

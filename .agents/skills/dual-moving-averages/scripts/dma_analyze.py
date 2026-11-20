@@ -27,13 +27,14 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import sys
 import time
 import urllib.error
 import urllib.parse
 import urllib.request
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from datetime import datetime, time as dtime
 from enum import Enum
 from pathlib import Path
@@ -43,6 +44,7 @@ import pandas as pd
 
 import regime as rg
 import rules as rl
+import tradeplan as tp
 from indicators import NAIVE_MA, PERIODS, add_indicators, arrangement
 from projection import HURDLE_DAYS, extend, hurdle_path, projection
 from hourly import load_hourly
@@ -75,6 +77,8 @@ THRESHOLDS = {
     "FAKE_DAYS": (rl.FAKE_DAYS, "脚本自定"), "STOP_DAYS": (rl.STOP_DAYS, "脚本自定"),
     "BREAKOUT_BARS": (rl.BREAKOUT_BARS, "脚本自定"), "FRESH_BARS": (rl.FRESH_BARS, "脚本自定"),
     "PATTERN_RECENT_BARS": (rl.PATTERN_RECENT_BARS, "脚本自定"),
+    "BIAS120_PCT": (rl.BIAS120_PCT, "视频"), "WEEKLY_BIAS120_PCT": (rl.WEEKLY_BIAS120_PCT, "视频"),
+    "RR_MIN": (tp.RR_MIN, "视频"), "RR_IDEAL": (tp.RR_IDEAL, "视频"),
 }
 
 
@@ -373,10 +377,11 @@ def lean_after(df: pd.DataFrame) -> dict:
 
 
 def analyze(df: pd.DataFrame, label: str, src: str, history: pd.DataFrame | None = None,
-            hourly: dict | None = None) -> dict:
+            hourly: dict | None = None, sizing: tp.Sizing | None = None) -> dict:
     """把三步分析算成结构化数据，Markdown 和 HTML 都从这里渲染。
 
     history 是周线用的更长历史，默认就用 df；hourly 是 hourly.load_hourly 的结果，没有时 P13 需看图。
+    sizing 是账户规模和每笔可承受亏损，只影响交易计划的股数；不给时只算每 1 万元风险对应多少股。
     """
     hourly = hourly or {"available": False, "reason": "没有取小时线"}
     row = df.iloc[-1]
@@ -408,8 +413,13 @@ def analyze(df: pd.DataFrame, label: str, src: str, history: pd.DataFrame | None
     lean = lean_of(df)
     lean["flips"] = flip_levels(lines, drops, c)
     lean["after"] = lean_after(df)
-    results = rl.evaluate(rl.Ctx(df=df, regime=regime, p20=p20, p60=p60, structure=structure, weekly=weekly,
-                                     hourly=hourly))
+    ctx = rl.Ctx(df=df, regime=regime, p20=p20, p60=p60, structure=structure, weekly=weekly, hourly=hourly)
+    plan = tp.build(ctx, sizing)
+    results = rl.evaluate(replace(ctx, plan=plan))
+    play = rl.build_play(regime, results)
+    short = tp.verdict_line(plan)
+    if short:
+        play = {**play, "text": f"{play['text']}{short}", "rules": [*play["rules"], "P24"]}
     prev = float(df["Close"].iloc[-2])
     return {
         "label": label, "date": str(df.index[-1].date()), "close": c,
@@ -419,7 +429,7 @@ def analyze(df: pd.DataFrame, label: str, src: str, history: pd.DataFrame | None
         "spread_pct": rg.spread6(row), "bias20": float(row["BIAS20"]), "bias_pctl": bias_pctl,
         "crosses": crosses, "volume": volume,
         "regime": _plain(asdict(regime)), "steps": [_plain(asdict(p20)), _plain(asdict(p60))],
-        "play": rl.build_play(regime, results), "rules": results,
+        "play": play, "trade_plan": tp.plan_json(plan), "rules": results,
         "thresholds": {k: {"value": v, "source": s} for k, (v, s) in THRESHOLDS.items()},
         "drops": drops, "lean": lean,
         "projection": projection(df), "structure": structure_json(df), "weekly": weekly,
@@ -444,6 +454,32 @@ def ma200_line(m: dict) -> str:
             f"{'上方' if m['close_above'] else '下方'}（{m['distance_pct']:+.1f}%），{m['stance']}；MA{m['period']} 向{m['direction']}{cross}。"
             f"双均线照方向持有（稳定 / 加速上涨才持有）：{m['dual_ma_stance']}，{'一致' if m['agrees'] else '不一致'}。"
             "评估里 MA200 的收益/回撤（MAR 0.26）高于照方向持有（0.14），见 SKILL.md 评估结论。")
+
+
+def _level(x: dict | None, word: str) -> str:
+    if not x:
+        return f"{word}：没有"
+    price = "没有日线价位" if x["price"] is None else f"{x['price']:.2f}"
+    text = x.get("condition") or x.get("reason")
+    return f"{word}：{price}（{x['rule']}{'，解读' if x.get('source') == '解读' else ''}）{text}"
+
+
+def plan_lines(tpj: dict) -> list[str]:
+    """报告"2) 定策略"下的交易计划：空仓的五样（进场、止损、目标、盈亏比、股数），持仓的止损和目标。"""
+    out = [f"**交易计划**（打法键：{tpj['key']}）", ""]
+    for name, p in (("空仓", tpj["flat"]), ("持仓", tpj["holding"])):
+        items = [_level(p["stop"], "止损")] if name == "持仓" else [_level(p["entry"], "进场"), _level(p["stop"], "止损")]
+        if p["targets"]:
+            items.append("目标：" + "；".join(f"{t['price']:.2f}（{t['kind']}，{t['date']}{'，解读' if t['source'] == '解读' else ''}）"
+                                            for t in p["targets"]))
+        if name == "空仓" and p["entry"]:
+            items.append(f"盈亏比：{p['rr']:.2f}:1，{p['rr_verdict']}" if p["rr"] is not None else "盈亏比：算不了")
+            z = p["size"]
+            if z:
+                items.append(f"股数：{z['shares']} 股（{z['basis']}）" if z["shares"] is not None else f"股数：{z['basis']}")
+        items += p["notes"]
+        out.append(f"- {name}：" + "；".join(items))
+    return out
 
 
 def render_markdown(a: dict) -> str:
@@ -492,7 +528,8 @@ def render_markdown(a: dict) -> str:
     if a["volume"]:
         out.append(f"- 成交量：今日 {a['volume']['ratio']:.1f}× 50 日均量；近 20 日大量（>{rl.VOLUME_SPIKE}×）："
                    + (", ".join(a["volume"]["spikes"]) or "无"))
-    out += ["", "## 2) 定策略", "", a["play"]["text"], "", f"用到的规则：{'、'.join(a['play']['rules'])}", "",
+    out += ["", "## 2) 定策略", "", a["play"]["text"], "", f"用到的规则：{'、'.join(a['play']['rules'])}", ""]
+    out += plan_lines(a["trade_plan"]) + ["",
             f"## 3) 看方向：抵扣价推演（未来 {PROJECT_DAYS} 天）", "",
             "| MA | 明天抵扣价 | 明天 MA 方向（价格不变） | 未来扣价均值 | 未来扣价最高 | 低于现价的天数 | 价格不变时 MA 变化 | 第几天首次扣到低于现价 |",
             "|---|---|---|---|---|---|---|---|"]
@@ -527,6 +564,9 @@ def main() -> None:
     p.add_argument("--commentary", help="点评 JSON（格式见 html_report.py），放进网页报告")
     p.add_argument("--chart-bars", type=int, default=None,
                    help="--json 的图表数据取最近多少根（默认和网页报告一样）；盲测练习要整段")
+    p.add_argument("--account", type=float, help="账户规模（金额），用来算交易计划的股数")
+    p.add_argument("--risk-pct", type=float, default=1.0, help="每笔可承受亏损占账户的百分比，默认 1")
+    p.add_argument("--risk-amount", type=float, help="每笔可承受亏损的固定金额；给了就不用 --risk-pct")
     p.add_argument("--json", action="store_true",
                    help="改为输出 JSON：{analysis, chart}，给网页工作台和 agent 工具用")
     a = p.parse_args()
@@ -534,6 +574,11 @@ def main() -> None:
         p.error("需要 ticker 或 --csv")
     if a.commentary and not a.html:
         p.error("--commentary 需要和 --html 一起用")
+    for name in ("account", "risk_pct", "risk_amount"):
+        v = getattr(a, name)
+        if v is not None and not (math.isfinite(v) and v > 0):
+            p.error(f"--{name.replace('_', '-')} 要是正数：{v}")
+    sizing = tp.Sizing(account=a.account, risk_pct=a.risk_pct, risk_amount=a.risk_amount)
     df, history, src = load_prices(a.ticker, a.csv, a.asof, a.env_file, a.source)
     df = add_indicators(df)
     hourly = None
@@ -541,7 +586,7 @@ def main() -> None:
         hourly = load_hourly(a.ticker, a.asof, find_polygon_key(a.env_file), a.source, polygon_json)
     elif a.csv:
         hourly = {"available": False, "reason": "CSV 模式不取小时线"}
-    result = analyze(df, a.ticker.upper() if a.ticker else a.csv, src, history, hourly)
+    result = analyze(df, a.ticker.upper() if a.ticker else a.csv, src, history, hourly, sizing)
     if a.json:
         from html_report import CHART_BARS, chart_data
 

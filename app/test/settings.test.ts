@@ -3,7 +3,7 @@ import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Analyzer } from "../src/analyze.ts";
-import { DEFAULT_SETTINGS, SettingsStore, sourceArg, VOICE_OPTIONS } from "../src/settings.ts";
+import { DEFAULT_SETTINGS, SettingsStore, sizingArgs, sourceArg, VOICE_OPTIONS } from "../src/settings.ts";
 
 const tmp = () => mkdtempSync(join(tmpdir(), "dma-set-"));
 
@@ -95,5 +95,53 @@ describe("语音设置", () => {
     expect(() => s.update({ autoSpeak: "yes" } as any)).toThrow();
     s.update({ voiceAdvisor: "zh-CN-XiaoyiNeural", autoSpeak: true });
     expect(s.get().voiceAdvisor).toBe("zh-CN-XiaoyiNeural");
+  });
+});
+
+describe("仓位设置：账户规模和每笔可承受亏损", () => {
+  test("默认：没填账户，按账户的 1%", () => {
+    expect(DEFAULT_SETTINGS).toMatchObject({ account: null, riskMode: "pct", riskPct: 1, riskAmount: null });
+  });
+  test("按比例：填了账户才传给脚本；没填就什么都不传（脚本只给每 1 万元风险的股数）", () => {
+    expect(sizingArgs(DEFAULT_SETTINGS)).toEqual([]);
+    expect(sizingArgs({ ...DEFAULT_SETTINGS, account: 50000 })).toEqual(["--account", "50000", "--risk-pct", "1"]);
+    expect(sizingArgs({ ...DEFAULT_SETTINGS, account: 50000, riskPct: 0.5 })).toEqual(["--account", "50000", "--risk-pct", "0.5"]);
+  });
+  test("按固定金额：金额本身就够算股数，填了账户再用来封顶", () => {
+    expect(sizingArgs({ ...DEFAULT_SETTINGS, riskMode: "amount", riskAmount: 400 })).toEqual(["--risk-amount", "400"]);
+    expect(sizingArgs({ ...DEFAULT_SETTINGS, riskMode: "amount", riskAmount: 400, account: 50000 }))
+      .toEqual(["--account", "50000", "--risk-amount", "400"]);
+    // 选了金额却没填：退回按比例
+    expect(sizingArgs({ ...DEFAULT_SETTINGS, riskMode: "amount", account: 50000 })).toEqual(["--account", "50000", "--risk-pct", "1"]);
+  });
+  test("非法值整体拒绝；null 是清空", () => {
+    const s = new SettingsStore(join(tmp(), "s.json"));
+    for (const bad of [{ account: -1 }, { account: 0 }, { account: Number.NaN }, { account: "5万" }, { riskPct: 0 }, { riskPct: 101 },
+      { riskAmount: -5 }, { riskMode: "kelly" }]) {
+      expect(() => s.update(bad as any)).toThrow();
+    }
+    s.update({ account: 80000, riskMode: "amount", riskAmount: 500 });
+    expect(s.get()).toMatchObject({ account: 80000, riskMode: "amount", riskAmount: 500 });
+    s.update({ account: null });
+    expect(s.get().account).toBeNull();
+  });
+  test("文件里手改成非法的仓位字段回到默认", () => {
+    const file = join(tmp(), "s.json");
+    writeFileSync(file, JSON.stringify({ account: -3, riskPct: 500, riskMode: "x", riskAmount: 200 }));
+    expect(new SettingsStore(file).get()).toMatchObject({ account: null, riskPct: 1, riskMode: "pct", riskAmount: 200 });
+  });
+  test("Analyzer 把仓位参数传给脚本，改了仓位按新参数重新算", async () => {
+    const calls: string[][] = [];
+    let args: string[] = [];
+    const fixture = JSON.stringify({ analysis: { label: "NVDA" }, chart: {} });
+    const a = new Analyzer(async (x) => (calls.push(x), fixture), Date.now, () => "polygon", () => args);
+    await a.analyze("NVDA");
+    args = ["--account", "50000", "--risk-pct", "1"];
+    await a.analyze("NVDA");
+    await a.analyze("NVDA");
+    expect(calls).toEqual([
+      ["NVDA", "--json", "--source", "auto"],
+      ["NVDA", "--json", "--source", "auto", "--account", "50000", "--risk-pct", "1"],
+    ]);
   });
 });

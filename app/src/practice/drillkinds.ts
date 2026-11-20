@@ -265,10 +265,14 @@ const construct: Generator = (c) => {
 
 export const PLAY_CHOICES = ["等", "埋伏", "不做", "回撤买", "反弹卖"] as const;
 export type PlayClass = (typeof PLAY_CHOICES)[number];
-/** 空仓计划的止损（plan.ts 的 flat.stop.label）→ 选项。没有止损是「不设」。 */
-export const STOP_CHOICES = ["60 线组拐头向下", "20/60 死叉", "跌回 EMA20 下方、EMA20 向下", "不设（这时不进场）"] as const;
+/**
+ * 空仓计划的止损（plan.ts 的 flat.stop.label，价位来自 skill 的交易计划）→ 选项。
+ * 回测里空仓不买的打法（entryStateOf 的 entries 为 null）答「不设」：加速下跌的交易计划虽然给了等构造和拐头之后的止损，回测不进场。
+ */
+export const NO_STOP = "不设（这时不进场）";
+export const STOP_CHOICES = ["60 线组拐头向下", "20/60 死叉", "20 线组拐头失败", "起涨 K 线最低价", NO_STOP] as const;
 const STOP_OF: Record<string, (typeof STOP_CHOICES)[number]> = {
-  "60 线组拐头向下": "60 线组拐头向下", "20/60 死叉（守住）": "20/60 死叉", "跌回 EMA20 下方、EMA20 向下": "跌回 EMA20 下方、EMA20 向下",
+  "60 线组拐头向下": "60 线组拐头向下", "20/60 死叉（守住）": "20/60 死叉", "20 线组拐头失败": "20 线组拐头失败", "起涨 K 线最低价": "起涨 K 线最低价",
 };
 
 /**
@@ -292,10 +296,10 @@ const play: Generator = (c) => {
   const cls = playClass(a);
   if (!cls) return [];
   const plan = buildPlans(a).flat;
-  const stop = plan.stop ? STOP_OF[plan.stop.label] : STOP_CHOICES[3];
+  const st = entryStateOf(a);
+  const stop = plan.stop && st.entries !== null ? STOP_OF[plan.stop.label] : NO_STOP;
   if (!stop) throw new Error(`看打法：没见过的止损「${plan.stop!.label}」，加进 STOP_CHOICES`);
   const key = playKey(a);
-  const st = entryStateOf(a);
   const hourlyless = Boolean(st.entries?.some((e) => e.id === "P14" && e.status === "满足")) && a.rules.find((r) => r.id === "P14")?.status === "需看图";
   // 空仓不买的打法：用空仓计划里「等什么」那些条件的规则（脚本的 play.rules 是持仓的做法，例如下跌里的反弹卖）
   const flatRules = plan.items.flatMap((i) => i.rules ?? []);
@@ -311,7 +315,7 @@ const play: Generator = (c) => {
       // 结论卡片的 P14 照实写需看图（没有小时线）；回测和练习按前三条判，这时卡片上的做法和答案对不上，不引用它
       hourlyless ? "P14：P10、P11、P12 都满足；P13 要看小时线，练习里没有，照回测的口径算满足" : `空仓做法：${plan.action}`,
       st.entries === null ? `「${key}」空仓不买（回测的打法里没有它）` : `进场条件：${st.entries.map((e) => `${e.id} ${e.status}`).join("，")}`,
-      plan.stop ? `进场后止损：${plan.stop.label} ${f2(plan.stop.price)}` : "这套打法空仓没有止损：不进场",
+      stop !== NO_STOP && plan.stop ? `进场后止损：${plan.stop.label} ${f2(plan.stop.price)}` : "这时空仓不进场，没有止损",
       "等 = 这套打法会买、条件还没齐；不做 = 这种状态空仓不进场；反弹卖是持仓的做法",
     ],
     rules: rulesOf(a, [...new Set(ids)]), hint: null,

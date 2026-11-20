@@ -16,7 +16,7 @@ import { seeded } from "../src/practice/pool.ts";
 import { Practice } from "../src/practice/service.ts";
 import { SessionStore } from "../src/practice/session.ts";
 import { prices, REAL, REAL_TICKER } from "../test/fixtures/practice-prices.ts";
-import { SettingsStore } from "../src/settings.ts";
+import { SettingsStore, sizingArgs } from "../src/settings.ts";
 import { SourceLibrary } from "../src/sources.ts";
 import { Speaker } from "../src/tts.ts";
 import { Watchlist } from "../src/watchlist.ts";
@@ -42,6 +42,7 @@ const CHART = (() => {
 const MP3 = readFileSync(resolve(import.meta.dir, "../test/fixtures/tts-sample.mp3"));
 const ttsCalls: { text: string; voice: string }[] = [];
 const wsSent: any[] = [];
+const analyzeCalls: string[][] = []; // 工作台交给脚本的参数（看仓位设置传没传过去）
 let staleNext = false;
 let warningNext: string | null = null;
 const sockets = new Set<any>(); // 连着的页面，用来模拟服务端推消息
@@ -58,15 +59,25 @@ beforeAll(async () => {
   const journal = new Journal(join(dir, "journal.json"));
   const practice = new Practice({ store: new SessionStore(join(dir, "sessions.json")), journal, prices, run: pythonRunner,
     dir: practiceDir, pool: [{ ticker: REAL_TICKER }], random: seeded(3) }); // 和单元测试同一道题：之后 40 根会碰到止损
+  const settings = new SettingsStore(join(dir, "s.json"));
   const analyzer = new Analyzer(async (args) => {
+      analyzeCalls.push(args);
       if (args[0] === "ANT") throw new Error("取不到 ANT 的行情");
       if (args[0] === "SLOW") { await Bun.sleep(1500); throw new Error("SLOW 超时"); }
-      if (args[0] === "SPY") return JSON.stringify({ analysis: spy, chart: CHART }); // 稳定上涨·回撤中：交易日志用
+      if (args[0] === "SPY") { // 稳定上涨·回撤中：交易日志用；带了 --account 就照脚本给股数（替身：按 1000 ÷ 单位亏损）
+        const a = structuredClone(spy) as Analysis;
+        const z = a.trade_plan.flat.size!;
+        if (args.includes("--account")) a.trade_plan.flat.size = { ...z, shares: Math.floor(1000 / z.unit_risk), risk_amount: 1000, basis: `1000 ÷ 单位亏损 ${z.unit_risk.toFixed(2)}` };
+        return JSON.stringify({ analysis: a, chart: CHART });
+      }
       if (args[0] === "BOUNCE") { // 空头结构反弹中：计划里有推演求解的辅助条，清单里有回测不支持的 J18
-        return JSON.stringify({ analysis: { ...(nvda as Analysis), label: "BOUNCE", play: { ...nvda.play, key: "空头结构反弹中", rules: ["P17", "J18", "J17"] } }, chart: CHART });
+        const n = nvda as Analysis;
+        const flat = { ...n.trade_plan.flat, entry: null, stop: null, targets: [], rr: null, rr_verdict: null, rr_gap: null, risk_pct: null, size: null };
+        return JSON.stringify({ analysis: { ...n, label: "BOUNCE", play: { ...n.play, key: "空头结构反弹中", rules: ["P17", "J18", "J17"] },
+          trade_plan: { ...n.trade_plan, key: "空头结构反弹中", flat } }, chart: CHART });
       }
       return JSON.stringify({ analysis: { ...(nvda as Analysis), label: args[0], warning: warningNext ?? nvda.warning }, chart: CHART });
-  });
+  }, Date.now, () => "polygon", () => sizingArgs(settings.get()));
   analyzer.mount(practice);
   // 识别题库：同一段假"真实"行情，真的 scan.py；先出好几段的题
   const drills = new DrillBank({ prices, dir: join(dir, "drills"), pool: [{ ticker: REAL_TICKER }], random: seeded(5) });
@@ -76,7 +87,7 @@ beforeAll(async () => {
     watchlist: new Watchlist(join(dir, "w.json")), journal,
     library: SourceLibrary.load(),
     publicDir: resolve(import.meta.dir, "../public"),
-    settings: new SettingsStore(join(dir, "s.json")),
+    settings,
     // 假清单：不读本机 pi 的登录
     catalog: { list: async () => [
       { id: "openai-codex/gpt-6.1-sol", provider: "openai-codex", name: "GPT-6.1 Sol", billing: "订阅", verified: true, image: true,
@@ -136,6 +147,29 @@ async function addAdvisorAnswer(page: Page, text: string) {
 }
 
 describe("设置", () => {
+  test("仓位：账户规模、按比例（默认 1%）或固定金额，默认视图看得见；填了账户就把参数交给脚本，结论卡片换成股数", async () => {
+    const { page, errors } = await open(undefined, "SPY@2024-04-19");
+    await page.click("#settings-btn");
+    for (const sel of ["#sp-account", "#sp-riskPct", "#sp-riskAmount", "input[name=riskMode][value=pct]"]) {
+      await page.locator(sel).scrollIntoViewIfNeeded();
+      expect({ sel, ok: await notCovered(page, sel) }).toEqual({ sel, ok: true });
+    }
+    expect(await page.inputValue("#sp-riskPct")).toBe("1");
+    expect(await page.isChecked("input[name=riskMode][value=pct]")).toBe(true);
+    await page.fill("#sp-account", "100000");
+    await page.press("#sp-account", "Enter");
+    await page.waitForFunction(() => document.getElementById("sp-status")?.textContent?.includes("重算股数"));
+    await page.waitForFunction(() => document.querySelector('#verdict .concl-row[data-situation="flat"] [data-item=size]')?.textContent?.includes("/万元") === false);
+    expect(analyzeCalls.some((a) => a[0] === "SPY" && a.join(" ").includes("--account 100000 --risk-pct 1"))).toBe(true);
+    expect(await page.textContent('#verdict .concl-row[data-situation="flat"] [data-item=size]')).toContain("80");
+    // 清空账户：回到每 1 万元风险
+    await page.fill("#sp-account", "");
+    await page.press("#sp-account", "Enter");
+    await page.waitForFunction(() => document.querySelector('#verdict .concl-row[data-situation="flat"] [data-item=size]')?.textContent?.includes("/万元"));
+    expect(errors).toEqual([]);
+    await page.close();
+  }, 60_000);
+
   test("能打开，默认长风云希、鸿雁晓晓", async () => {
     const { page, errors } = await open();
     await page.click("#settings-btn");
@@ -524,15 +558,18 @@ describe("K 线图工具", () => {
     await page.close();
   }, 30_000);
 
-  test("价位线：结论里的价位（不买的打法是「先看」）和推翻判断的价位画在图上，可以关掉", async () => {
+  test("价位线：结论里的触发、止损、目标和推翻判断的价位画在图上，可以关掉", async () => {
     const { page } = await open();
     await page.waitForSelector("#chart canvas");
     const levels = () => page.evaluate(async () => (await import("/app.js")).getChart().levels());
-    // NVDA 加速下跌：空仓不买，先看底部构造下一步 170.00；推翻判断：30 天内 20/60 双金叉的价位
+    // NVDA 加速下跌：等构造完成、20 线组一起拐头（212.21），拐头失败止损 183.08，目标缺口 228.86；推翻判断：30 天内 20/60 双金叉的价位
     const on = await levels();
-    expect(on.map((l: { kind: string; title: string }) => [l.kind, l.title])).toEqual([["trigger", "先看"], ["invalid", "判断失效"]]);
-    expect(on[0].price).toBe(170);
-    expect(on[1].price).toBeCloseTo(206.26, 2);
+    expect(on.map((l: { kind: string; title: string }) => [l.kind, l.title]))
+      .toEqual([["trigger", "触发"], ["stop", "进场后止损"], ["target", "目标"], ["invalid", "判断失效"]]);
+    expect(on[0].price).toBe(212.21);
+    expect(on[1].price).toBeCloseTo(183.08, 2);
+    expect(on[2].price).toBe(228.86);
+    expect(on[3].price).toBeCloseTo(206.26, 2);
     await page.click(".levels-toggle");
     expect(await levels()).toEqual([]);
     await page.close();
@@ -616,13 +653,39 @@ describe("中栏：结论 → 看大局 → 找打法 → 做推演", () => {
       expect({ sel, ok: await notCovered(page, sel) }).toEqual({ sel, ok: true });
     }
     const flat = (await page.textContent('#verdict .concl-row[data-situation="flat"]'))!;
-    expect(flat).toContain("不抢反弹");
-    expect(flat).toContain("先看"); // 不买的打法不叫「触发」
-    expect(flat).toContain("170.00");
+    expect(flat).toContain("不做：盈亏比 0.6:1"); // 加速下跌等构造和 20 线组拐头再进，但到缺口的空间不够 3:1
+    expect(flat).toContain("触发");
+    expect(flat).toContain("212.21");
     const holding = (await page.textContent('#verdict .concl-row[data-situation="holding"]'))!;
     expect(holding).toContain("反弹再减仓");
     expect(holding).toContain("183.08");
     expect(await page.textContent("#verdict .record")).toContain("空仓不买，回测没有进场");
+    expect(errors).toEqual([]);
+    await page.close();
+  }, 30_000);
+
+  test("结论：空仓五样（触发、止损、目标、盈亏比、股数）、持仓的止损和目标，默认视图看得见、没被挡；图上画目标线", async () => {
+    const { page, errors } = await open(undefined, "SPY@2024-04-19");
+    const flat = '#verdict .concl-row[data-situation="flat"]';
+    const holding = '#verdict .concl-row[data-situation="holding"]';
+    for (const sel of [`${flat} [data-item=trigger]`, `${flat} [data-item=stop]`, `${flat} [data-item=target]`, `${flat} [data-item=rr]`, `${flat} [data-item=size]`,
+      `${holding} [data-item=stop]`, `${holding} [data-item=target]`]) {
+      expect({ sel, ok: await notCovered(page, sel) }).toEqual({ sel, ok: true });
+    }
+    const f = (await page.textContent(flat))!.replace(/\s+/g, "");
+    expect(f).toContain("不做：盈亏比1.9:1");
+    expect(f).toContain("触发500.45");
+    expect(f).toContain("止损488.03-2.5%"); // 60 线组拐头（解读），风险按触发价算
+    expect(f).toContain("目标524.61"); // 前高（解读），说明在悬停里
+    expect(f).toContain("股数804/万元"); // 没填账户：每 1 万元风险对应的股数
+    expect(await page.getAttribute(`${flat} [data-item=rr]`, "class")).toContain("bad");
+    expect(await page.textContent(`${holding} [data-item=stop]`)).toContain("488.03"); // 持仓止损按进场原则，不按成本
+    const kinds = await page.evaluate(async () => {
+      const { chartLevels } = await import("/viz.js");
+      const d = await (await fetch("/api/analyze?ticker=SPY&asof=2024-04-19")).json();
+      return chartLevels(d.report, { pos: "flat", cost: "" }, d.analysis.close).map((l: { kind: string; title: string }) => `${l.kind}:${l.title}`);
+    });
+    expect(kinds).toEqual(expect.arrayContaining(["trigger:触发", "stop:进场后止损", "target:目标"]));
     expect(errors).toEqual([]);
     await page.close();
   }, 30_000);
@@ -664,9 +727,9 @@ describe("中栏：结论 → 看大局 → 找打法 → 做推演", () => {
     expect(await notCovered(page, `${card} .checklist li`)).toBe(true);
     const rows = await page.locator(`${card} .checklist li`).evaluateAll((els) =>
       els.map((e) => [(e as HTMLElement).dataset.rule, e.querySelector(".mark")!.textContent]));
-    expect(rows).toEqual([["P7", "✓"], ["P8", "✓"], ["P9", "✗"], ["J19", "✗"], ["J21", "✗"]]);
+    expect(rows).toEqual([["P7", "✓"], ["P8", "✓"], ["P9", "✗"], ["J19", "✗"], ["J21", "✗"], ["J37", "✗"], ["P24", "✓"]]);
     expect(await page.textContent(`${card} .checklist li[data-rule="J21"] .need`)).toContain("170.00");
-    expect(await page.textContent(`${card} .missing`)).toContain("空仓不买");
+    expect(await page.textContent(`${card} .missing`)).toContain("170.00"); // 加速下跌会买（等构造完成），还差构造下一步
     expect(await page.locator(`${card} details.all-rules`).getAttribute("open")).toBeNull(); // 全部规则折叠在最下面
     expect(errors).toEqual([]);
     await page.close();
@@ -677,11 +740,11 @@ describe("中栏：结论 → 看大局 → 找打法 → 做推演", () => {
     await page.waitForSelector("#chart canvas");
     const plan = page.locator('[data-step="play"] .plan-body');
     const titles = () => page.evaluate(async () => (await import("/app.js")).getChart().levels().map((l: { title: string }) => l.title));
-    expect(await plan.textContent()).toContain("不抢反弹");
-    expect(await titles()).toEqual(["先看", "判断失效"]);
+    expect(await plan.textContent()).toContain("不做：盈亏比 0.6:1");
+    expect(await titles()).toEqual(["触发", "进场后止损", "目标", "判断失效"]);
     await page.click('[data-pos="holding"]');
     expect(await plan.textContent()).toContain("反弹再减仓");
-    expect(await titles()).toEqual(["盯住", "判断失效"]);
+    expect(await titles()).toEqual(["盯住", "目标", "判断失效"]);
     await page.fill("#pos-cost", "200");
     expect(await page.textContent(".pnl")).toContain("-24.5%");
     await page.reload();

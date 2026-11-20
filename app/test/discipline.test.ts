@@ -10,9 +10,12 @@ const NOW = "2026-11-20T00:00:00.000Z";
 /** NVDA 的分析，换掉打法键和几条规则的状态。 */
 function analysis(play: string, status: Record<string, RuleResult["status"]>, yielded: string[] = []): Analysis {
   const a = nvda as Analysis;
+  // 脚本的打法键在 trade_plan.key；横盘里 P3 满足（埋伏的底线破了）时脚本给横盘破位
+  const key = play === "横盘" && status.P3 === "满足" ? "横盘破位" : play;
   return {
     ...a,
     play: { ...a.play, key: play },
+    trade_plan: { ...a.trade_plan, key },
     rules: a.rules.map((r) => ({ ...r, status: status[r.id] ?? r.status, yields_to: yielded.includes(r.id) ? "P17" : r.yields_to })),
   };
 }

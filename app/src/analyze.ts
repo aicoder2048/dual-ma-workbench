@@ -76,6 +76,8 @@ export class Analyzer {
     private now: () => number = Date.now,
     /** 当前设置的数据源；切换后缓存按新数据源重新取。 */
     private source: () => DataSource = () => "polygon",
+    /** 当前设置的仓位（settings.ts 的 sizingArgs）：交易计划的股数按它算，改了缓存按新参数重新算。 */
+    private sizing: () => string[] = () => [],
   ) {}
 
   /** 接上盲测练习：页面、长风、鸿雁、推荐问法都经过这里取数，练习的票只会拿到蒙过眼的数据。 */
@@ -88,11 +90,12 @@ export class Analyzer {
     const ticker = normalizeTicker(tickerRaw);
     const asof = normalizeAsof(asofRaw);
     const src = sourceArg(this.source());
-    const key = `${ticker}|${asof ?? "latest"}|${src}`;
+    const sizing = this.sizing();
+    const key = `${ticker}|${asof ?? "latest"}|${src}|${sizing.join(" ")}`;
     const hit = this.cache.get(key);
     if (hit && (asof || this.now() - hit.at < LATEST_TTL_MS)) return hit.value;
 
-    const args = [ticker, "--json", ...(asof ? ["--asof", asof] : []), "--source", src];
+    const args = [ticker, "--json", ...(asof ? ["--asof", asof] : []), "--source", src, ...sizing];
     const value = this.run(args).then((out) => JSON.parse(out) as AnalyzeResult);
     this.cache.set(key, { at: this.now(), value });
     value.catch(() => this.cache.delete(key)); // 失败不缓存，下次重试

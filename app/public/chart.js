@@ -165,8 +165,8 @@ export function createChart(box, legendEl) {
     ts.setVisibleLogicalRange({ from: r.to - next, to: r.to }); // 以最右边（最新一天）为锚
   }, { passive: false });
 
-  // ---------- 价位线：结论里的触发价、止损，和做推演里推翻判断的价位 ----------
-  const LEVEL_COLOR = { trigger: "--up", stop: "--down", invalid: "--neutral" };
+  // ---------- 价位线：结论里的触发价、止损、目标位，和做推演里推翻判断的价位 ----------
+  const LEVEL_COLOR = { trigger: "--up", stop: "--down", target: "--accent", invalid: "--neutral" };
   let levels = [];
   let levelLines = [];
   let levelsOn = true;
@@ -548,7 +548,7 @@ export function createChart(box, legendEl) {
     },
     /** 停止回放、回到完整数据（取数失败、中栏收起图表时用）。 */
     stopReplay() { dispatch({ type: "exit" }); },
-    /** 价位线：[{ kind: trigger | stop | invalid, price, title }]，来自 viz.js 的 chartLevels。 */
+    /** 价位线：[{ kind: trigger | stop | target | invalid, price, title }]，来自 viz.js 的 chartLevels。 */
     setLevels(list) {
       levels = list;
       paintLevels();

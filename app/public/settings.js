@@ -71,6 +71,25 @@ function modelSection() {
     </fieldset>`;
 }
 
+/** 仓位设置的字段：改了要重算交易计划的股数。 */
+const SIZING = ["account", "riskMode", "riskPct", "riskAmount"];
+const sizingChanged = (a, b) => SIZING.some((k) => a[k] !== b[k]);
+const num = (x) => (x === null || x === undefined ? "" : String(x));
+
+/** 仓位：账户规模和每笔可承受亏损（默认账户的 1%，也可以填固定金额）。交易计划按它算建议股数。 */
+function sizingSection(s) {
+  if (!("riskMode" in s)) return `<fieldset><legend>仓位</legend><p class="bad">服务端还是旧版本，没有仓位设置：请重启服务（just wildgoose）后刷新页面。</p></fieldset>`;
+  return `<fieldset class="sizing"><legend>仓位 <span>交易计划按它算建议股数</span></legend>
+      <div class="voice-row"><label for="sp-account">账户规模</label>
+        <input id="sp-account" name="account" type="number" min="0" step="any" inputmode="decimal" placeholder="不填：只给每 1 万元风险对应多少股" value="${num(s.account)}"></div>
+      <div class="voice-row"><label><input type="radio" name="riskMode" value="pct" ${s.riskMode === "pct" ? "checked" : ""}> 按比例</label>
+        <span class="sp-num"><input id="sp-riskPct" name="riskPct" type="number" min="0" max="100" step="any" inputmode="decimal" value="${num(s.riskPct)}" aria-label="每笔可承受亏损占账户的百分比">% 账户</span></div>
+      <div class="voice-row"><label><input type="radio" name="riskMode" value="amount" ${s.riskMode === "amount" ? "checked" : ""}> 固定金额</label>
+        <span class="sp-num"><input id="sp-riskAmount" name="riskAmount" type="number" min="0" step="any" inputmode="decimal" placeholder="例如 500" value="${num(s.riskAmount)}" aria-label="每笔可承受亏损的金额"></span></div>
+      <p class="opt-note">每笔可承受亏损（金额）÷（进场 − 止损）= 股数，向下取整（A6）。止损放在趋势结构上，不按这个比例定。</p>
+    </fieldset>`;
+}
+
 function render() {
   const panel = $("settings-panel");
   const { settings, dataSources } = view;
@@ -85,6 +104,7 @@ function render() {
           <span class="opt-note">${esc(d.note)}</span>
         </label>`).join("")}
     </fieldset>
+    ${sizingSection(settings)}
     <fieldset><legend>语音播报 <span>微软 Edge 在线语音，回答的文字会发到微软的服务</span></legend>
       ${!view.voices ? `<p class="bad">服务端还是旧版本，没有语音选项：请重启服务（just wildgoose）后刷新页面。</p>` : `
       ${[["voiceAnalyst", "分析师·长风"], ["voiceAdvisor", "解语花·鸿雁"]].map(([key, who]) => `
@@ -103,7 +123,7 @@ function render() {
     <p class="sp-status" id="sp-status" aria-live="polite"></p>`;
 }
 
-/** onDataSourceChange：数据源变了以后重新取数。 */
+/** onDataSourceChange：数据源或仓位变了以后重新取数（仓位只影响交易计划的股数，也要重算）。 */
 let openPanel = () => {};
 /** 顶栏状态胶囊点了也打开设置。 */
 export const openSettings = () => openPanel();
@@ -153,15 +173,17 @@ export async function initSettings({ onDataSourceChange }) {
     render();
     $("sp-status").textContent =
       name === "model" ? `已切换到 ${shortModel(view.settings.model)}。下一次提问生效，对话上下文保留。` :
-      name === "dataSource" ? "已切换数据源，正在重新取数…" : "已保存。下一次提问生效。";
+      name === "dataSource" ? "已切换数据源，正在重新取数…" :
+      SIZING.includes(name) ? "已保存，正在按新的仓位重算股数…" : "已保存。下一次提问生效。";
     paintModelBadges(view.settings);
-    if (name === "dataSource" && before.dataSource !== view.settings.dataSource) onDataSourceChange();
+    if ((name === "dataSource" && before.dataSource !== view.settings.dataSource) || sizingChanged(before, view.settings)) onDataSourceChange();
   }
 
   panel.addEventListener("change", async (e) => {
-    const input = e.target.closest("input[type=radio], input[type=checkbox], select");
+    const input = e.target.closest("input[type=radio], input[type=checkbox], input[type=number], select");
     if (!input) return;
-    const value = input.type === "checkbox" ? input.checked : input.value;
+    const value = input.type === "checkbox" ? input.checked
+      : input.type === "number" ? (input.value.trim() === "" ? null : Number(input.value)) : input.value;
     // 不是订阅的模型：先确认再切（按量计费每次提问都花钱）
     const m = input.name === "model" && view.models.find((x) => x.id === value);
     if (m && m.billing !== "订阅") {
@@ -179,7 +201,7 @@ export async function initSettings({ onDataSourceChange }) {
 
 /** 其他页面改了设置（WebSocket 推过来）。 */
 export function applyRemoteSettings(settings, { onDataSourceChange }) {
-  const changedSource = view && view.settings.dataSource !== settings.dataSource;
+  const changedSource = view && (view.settings.dataSource !== settings.dataSource || sizingChanged(view.settings, settings));
   if (view) view.settings = settings;
   paintModelBadges(settings);
   if (changedSource) onDataSourceChange();

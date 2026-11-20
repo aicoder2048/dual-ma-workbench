@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Callable
+from typing import TYPE_CHECKING, Callable
 
 import pandas as pd
 
@@ -15,6 +15,9 @@ from indicators import PERIODS, arrangement
 from projection import HURDLE_DAYS, Event, EventKind, SolveStatus, hurdle_path, solve
 from regime import DENSE_PCT, RANGE_MIN_DAYS, PairProgress, Regime, Stage, Step, Transition, TrendType, Turn
 from structure import State, Structure
+
+if TYPE_CHECKING:
+    from tradeplan import PlanSet
 
 VOLUME_SPIKE = 2.0       # 脚本自定：成交量 > 50 日均量 2 倍算大量
 VOLUME_PERSIST = 3       # 脚本自定：近 20 日大量 ≥ 3 天算持续放量
@@ -24,6 +27,8 @@ STOP_DAYS = 5            # 脚本自定：5 天内避免 20/60 双交叉要逆�
 BREAKOUT_BARS = 10       # 脚本自定：假突破的"迅速跌回"看突破后 10 根
 FRESH_BARS = 5           # 脚本自定：双线系统的"首次"指最近 5 根内才拐上来
 PATTERN_RECENT_BARS = 60  # 脚本自定：M 顶 / W 底、2B 只看最近 60 根里成形的
+BIAS120_PCT = 50.0       # 视频 G 16:24：收盘偏离 EMA120 50% 以上
+WEEKLY_BIAS120_PCT = 70.0  # 视频 G 24:31：周线偏离 120 线超过 70%
 
 
 class Kind(str, Enum):
@@ -54,6 +59,7 @@ class Ctx:
     structure: Structure | None
     weekly: dict
     hourly: dict | None = None
+    plan: PlanSet | None = None   # tradeplan.build 的结果：A6、P22–P25 读它
 
     @property
     def close(self) -> float:
@@ -150,6 +156,9 @@ def j3_accel(c: Ctx) -> Result:
     r = c.regime
     ok = r.type in (TrendType.ACCEL_UP, TrendType.ACCEL_DOWN)
     basis = f"{r.type.value}，{r.accel.phase}（按{r.accel.by}）" if ok else f"不是加速（{r.name}）"
+    if ok:
+        j37 = j37_extreme_bias(c)
+        basis += f"；旁证 J37 {j37.status.value}：{j37.basis}"
     return _met(ok, basis)
 
 
@@ -380,6 +389,24 @@ def j29_arrangement(c: Ctx) -> Result:
     return _met(ma == ema and ma != "混乱", f"MA {ma}、EMA {ema}")
 
 
+def weekly_bias120(w: dict) -> float | None:
+    """周收盘对周线 EMA120 的偏离（%）。视频说"120 的成本均线"，没说 MA 还是 EMA，和日线那一档一样用 EMA120（解读）。"""
+    if not w.get("available"):
+        return None
+    line = next(x for x in w["lines"] if x["period"] == 120)
+    return (w["close"] / line["ema"] - 1) * 100
+
+
+def j37_extreme_bias(c: Ctx) -> Result:
+    """J37：收盘偏离 EMA120 ≥ 50%，或周线偏离 120 线 ≥ 70%。只当加速的旁证（J3 依据里写出），不改类型判断。"""
+    ema = float(c.row["EMA120"])
+    d = (c.close / ema - 1) * 100
+    w = weekly_bias120(c.weekly)
+    week = f"周线离 EMA120 {w:+.1f}%（周线那一档 ≥ {WEEKLY_BIAS120_PCT:g}%）" if w is not None else "周线不可用"
+    ok = abs(d) >= BIAS120_PCT or (w is not None and abs(w) >= WEEKLY_BIAS120_PCT)
+    return _met(ok, f"收盘离 EMA120 {d:+.1f}%（偏离 ≥ {BIAS120_PCT:g}% 算大幅乖离）；{week}", {"EMA120": ema})
+
+
 # ---------- 动作 ----------
 
 def p1_range_wait(c: Ctx) -> Result:
@@ -588,13 +615,76 @@ def p20_second_chance(c: Ctx) -> Result:
                 {"MA20 明天抵扣价": float(c.df["Close"].iloc[-20])})
 
 
+# ---------- 交易计划：价位在 tradeplan.build，这里只把空仓那份计划写成规则状态 ----------
+
+def _no_plan() -> Result:
+    return Result(Status.CHART, "没有交易计划（没跑 tradeplan.build）")
+
+
+def a6_position_size(c: Ctx) -> Result:
+    if c.plan is None:
+        return _no_plan()
+    f = c.plan.flat
+    if f.size is None:
+        why = next((n for n in f.notes if "股数" in n or "止损" in n), "空仓这套打法不买")
+        return Result(Status.MET, f"今天套用不了：{why}")
+    z = f.size
+    return Result(Status.MET, z.basis, {"单位亏损": z.unit_risk})   # levels 只放价位，股数在 basis 和 trade_plan 里
+
+
+def p22_breakout_stop(c: Ctx) -> Result:
+    if c.plan is None:
+        return _no_plan()
+    s = c.plan.flat.stop
+    if s is None or s.rule != "P22":
+        return _met(False, "没有突破买入（只用于突破买入）")
+    return _met(True, s.reason, {"起涨 K 线最低价": s.price})
+
+
+def p23_exit_by_entry(c: Ctx) -> Result:
+    if c.plan is None:
+        return _no_plan()
+    f, h = c.plan.flat, c.plan.holding
+    stop = f.stop if f.entry is not None and f.entry.price is not None else h.stop
+    if stop is None:
+        return _met(False, "空仓不买，持仓也没有均线止损" if f.entry is None else "进场条件还没有价位")
+    who = "空仓进场后" if stop is f.stop else "持仓"
+    return _met(True, f"{who}：{stop.reason}", {} if stop.price is None else {"止损": stop.price})
+
+
+def p24_reward_risk(c: Ctx) -> Result:
+    """满足 = 盈亏比不到 3:1，不做（和 P17"排列不合理不买"满足就不买一样读）。"""
+    if c.plan is None:
+        return _no_plan()
+    f = c.plan.flat
+    if f.entry is None or f.entry.price is None:
+        return _met(False, "空仓这套打法今天没有进场价，不用算盈亏比")
+    if f.rr is None:
+        return Result(Status.CHART, "盈亏比算不了：" + ("；".join(f.notes) or "没有目标位或止损"))
+    lv = {"进场": f.entry.price, "止损": f.stop.price, "目标 1": f.targets[0].price}
+    if f.rr_verdict == "不做":
+        return _met(True, f"{f.rr:.2f}:1 < 3:1，不做；要 3:1 目标得到 {_f(f.rr_gap['target_for_min'])}，"
+                          f"或止损收紧到 {_f(f.rr_gap['stop_for_min'])}", lv)
+    return _met(False, f"{f.rr:.2f}:1，{f.rr_verdict}（≥ 3:1 可做，≥ 5:1 理想）", lv)
+
+
+def p25_targets(c: Ctx) -> Result:
+    if c.plan is None:
+        return _no_plan()
+    p = c.plan.flat if c.plan.flat.entry is not None and c.plan.flat.entry.price is not None else c.plan.holding
+    if not p.targets:
+        return _met(False, next((n for n in p.notes if "目标" in n), "上方没有目标位"))
+    return _met(True, "；".join(f"目标 {i} {t.kind} {_f(t.price)}（{t.date}）" for i, t in enumerate(p.targets, 1)),
+                {f"目标 {i}": t.price for i, t in enumerate(p.targets, 1)})
+
+
 RULES: tuple[Rule, ...] = (
     Rule("A1", Kind.AXIOM, "MA 的门槛是抵扣价", a1_ma_hurdle),
     Rule("A2", Kind.AXIOM, "MA 的门槛路径", a2_hurdle_path),
     Rule("A3", Kind.AXIOM, "EMA 的门槛是线本身", a3_ema_line),
     Rule("A4", Kind.AXIOM, "单根线 EMA 先拐、MA 后拐", a4_ema_first),
     Rule("A5", Kind.AXIOM, "趋势由小级别向大级别扩散", None),
-    Rule("A6", Kind.AXIOM, "仓位公式：最大亏损额 ÷ 单位亏损", None),
+    Rule("A6", Kind.AXIOM, "仓位公式：最大亏损额 ÷ 单位亏损", a6_position_size),
     Rule("J1", Kind.VERDICT, "类型看 60/120 线组", j1_type_from_60_120),
     Rule("J2", Kind.VERDICT, "钟表方向：固定时长、对数坐标", j2_clock),
     Rule("J3", Kind.VERDICT, "加速上涨 / 加速下跌", j3_accel),
@@ -631,7 +721,7 @@ RULES: tuple[Rule, ...] = (
     Rule("J34", Kind.VERDICT, "看周线拐头先看日线均线密集", None),
     Rule("J35", Kind.VERDICT, "长期 MA 拐不下来，市场会强行逆转", None),
     Rule("J36", Kind.VERDICT, "引力回归", None),
-    Rule("J37", Kind.VERDICT, "乖离阈值：EMA120 50%、周线 70%", None),
+    Rule("J37", Kind.VERDICT, "乖离阈值：EMA120 50%、周线 70%", j37_extreme_bias),
     Rule("J38", Kind.VERDICT, "方框时间内拿下山头", None),
     Rule("J39", Kind.VERDICT, "2B 只解决回归", None),
     Rule("J40", Kind.VERDICT, "周线均线密集至少翻倍", None),
@@ -660,10 +750,10 @@ RULES: tuple[Rule, ...] = (
     Rule("P19", Kind.ACTION, "双线系统第 1 次机会", p19_first_chance),
     Rule("P20", Kind.ACTION, "双线系统第 2 次机会", p20_second_chance),
     Rule("P21", Kind.ACTION, "突破买入", None),
-    Rule("P22", Kind.ACTION, "突破买入的止损：起涨 K 线最低价", None),
-    Rule("P23", Kind.ACTION, "什么原则进，就什么原则出", None),
-    Rule("P24", Kind.ACTION, "盈亏比不到 3:1 不做", None),
-    Rule("P25", Kind.ACTION, "目标位：缺口和均线密集区", None),
+    Rule("P22", Kind.ACTION, "突破买入的止损：起涨 K 线最低价", p22_breakout_stop),
+    Rule("P23", Kind.ACTION, "什么原则进，就什么原则出", p23_exit_by_entry),
+    Rule("P24", Kind.ACTION, "盈亏比不到 3:1 不做", p24_reward_risk),
+    Rule("P25", Kind.ACTION, "目标位：缺口和均线密集区", p25_targets),
     Rule("P26", Kind.ACTION, "预期没到、底线没破就拿着", None),
     Rule("P27", Kind.ACTION, "到目标、中长线完好不一定走", None),
     Rule("P28", Kind.ACTION, "前高过不去是止盈点", None),
@@ -679,8 +769,8 @@ RULES: tuple[Rule, ...] = (
 )
 BY_ID = {r.id: r for r in RULES}
 
-# 两条规则同时满足、结论相反时谁说了算：键让位给值里第一条满足的规则（rules.md P17、P16）
-YIELDS_TO = {"P19": ("P17", "P16"), "P20": ("P17", "P16")}
+# 两条规则同时满足、结论相反时谁说了算：键让位给值里第一条满足的规则（rules.md P17、P16、P24）
+YIELDS_TO = {"P19": ("P17", "P16", "P24"), "P20": ("P17", "P16", "P24"), "P2": ("P24",), "P14": ("P24",)}
 
 
 def evaluate(ctx: Ctx) -> list[dict]:
@@ -754,7 +844,9 @@ def build_play(regime: Regime, results: list[dict]) -> dict:
         else:
             text = (f"加速下跌（{phase}）：不抢反弹。等底部构造（J21 {st['J21']['status']}）"
                     "和关键性波动（20 线组拐头向上）。")
-        ids = ["P7", "P8", "P9", "J19", "J20" if up else "J21"]
+        if st["J37"]["status"] == "满足":
+            text += f"大幅乖离（J37，旁证）：{st['J37']['basis'].split('；')[0]}，很可能要回归，什么时候回归不知道。"
+        ids = ["P7", "P8", "P9", "J19", "J20" if up else "J21", "J37"]
     elif key == "空头结构反弹中":
         text = (f"空头结构反弹中：不买。20 线组还在 60 线组下方，反弹解除不了双死叉，是离场机会。"
                 f"{st['P17']['basis'].split('；', 1)[-1]}。")

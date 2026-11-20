@@ -23,6 +23,8 @@ uv run ../.agents/skills/dual-moving-averages/scripts/backtest.py   # 逐笔回�
   - 大模型：从 pi 动态读（`src/agents/catalog.ts`），列出在 pi 里登录过的 provider 的全部模型；计费：Pi 标明是订阅的 OAuth 算订阅，api_key 算按量计费，anthropic 一律按量，其他未知；不是订阅的切换前要确认。默认 `openai-codex/gpt-6.1-sol`；没选过时用 pi 的默认模型（是订阅才用）。切换后下一次提问生效，对话上下文保留，不改 Pi 的全局默认模型。
   - 思考程度：长风、鸿雁分开设，默认 medium；模型不支持时用最近的一档（`thinkingFor`）。
   - 市场数据：默认 Polygon/Massive（失败或超出约 5 年时回退 yfinance）；可选 yfinance。
+  - 仓位：账户规模、每笔可承受亏损（默认账户的 1%，也可以填固定金额）。作为 `--account`、`--risk-pct` / `--risk-amount` 交给 `dma_analyze.py`，交易计划按它给建议股数；没填账户只给每 1 万元风险对应多少股。练习不带这几个参数。
+- **交易计划**：结论卡片的进场、止损、目标位、盈亏比、股数都读脚本 JSON 的 `trade_plan`（skill 的 `tradeplan.py`），`plan.ts` 只配措辞，不重算。盈亏比不到 3:1 时空仓做法写"不做"和差多少。
 - **数据**：调 skill 脚本 `dma_analyze.py --json`（Polygon，失败回退 yfinance），key 在项目根目录 `.env`。
 - **引用**：`[[S:编号]]` 指原文片段（`bun run sources` 列出全部编号），`[[D:字段]]` 指当前分析数据。每轮回答结束后服务端逐条核对，找不到出处的显示红色。
 - **自选股**：存在 `data/watchlist.json`。

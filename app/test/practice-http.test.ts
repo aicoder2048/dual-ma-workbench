@@ -86,6 +86,15 @@ describe("练习的接口", () => {
     expect(a.analysis.label).toBe("练习 #1");
     expect(JSON.stringify(a.analysis)).not.toMatch(DATE_RE);
     expect(leaks(a.raw)).toEqual([]);
+    // 交易计划也蒙眼：价位是指数（和换算后的收盘同一量级），日期写成 T-n，练习不带账户所以没有股数
+    const tp = a.analysis.trade_plan;
+    for (const p of [tp.flat, tp.holding]) {
+      for (const t of p.targets) expect(t.date === null || /^T/.test(t.date)).toBe(true);
+      for (const x of [p.entry?.price, p.stop?.price, ...p.targets.map((t: { price: number }) => t.price)]) {
+        if (x != null) expect(x / a.analysis.close).toBeGreaterThan(0.2), expect(x / a.analysis.close).toBeLessThan(5);
+      }
+    }
+    expect(tp.flat.size?.shares ?? null).toBeNull();
     expect((await call(`/api/analyze?ticker=${encodeURIComponent("练习 #1")}&asof=T%2B1`)).status).toBe(400);
     // MA200 对照也蒙眼：值是指数（最近 200 根练习收盘的均值），图上那条线一样，穿过的那天写成 T-n
     const ma200 = bars.slice(t0 - 199, t0 + 1).reduce((s, b) => s + b.close, 0) / 200;

@@ -1,5 +1,5 @@
 /**
- * 工作台设置：大模型和思考程度、市场数据源、语音。存在 data/settings.json，界面右上角的设置面板修改。
+ * 工作台设置：大模型和思考程度、市场数据源、语音、仓位（账户规模和每笔可承受亏损）。存在 data/settings.json，界面右上角的设置面板修改。
  *
  * 大模型从 pi 动态读（agents/catalog.ts）：在 pi 里登录过的 provider 的模型都能选。
  * 这里只校验格式；能不能用（登录了没有、在不在 Pi 的目录里）由清单判断。
@@ -26,6 +26,9 @@ export const VOICE_OPTIONS: { id: string; label: string; gender: "男" | "女"; 
   { id: "zh-TW-HsiaoChenNeural", label: "晓臻", gender: "女", note: "台湾口音，亲切" },
 ];
 
+/** 每笔可承受亏损按账户的比例（pct）还是固定金额（amount）。 */
+export type RiskMode = "pct" | "amount";
+
 export interface Settings {
   /** provider/model，如 openai-codex/gpt-6.1-sol。 */
   model: string;
@@ -37,12 +40,30 @@ export interface Settings {
   voiceAdvisor: string;
   /** 回答结束后自动朗读。 */
   autoSpeak: boolean;
+  /** 账户规模（金额）；没填时交易计划只给每 1 万元风险对应多少股。 */
+  account: number | null;
+  riskMode: RiskMode;
+  /** 每笔可承受亏损占账户的百分比，默认 1。 */
+  riskPct: number;
+  /** 每笔可承受亏损的固定金额（riskMode 是 amount 时用）。 */
+  riskAmount: number | null;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
   model: DEFAULT_MODEL, thinkingAnalyst: "medium", thinkingAdvisor: "medium", dataSource: "polygon",
   voiceAnalyst: "zh-CN-YunxiNeural", voiceAdvisor: "zh-CN-XiaoxiaoNeural", autoSpeak: false,
+  account: null, riskMode: "pct", riskPct: 1, riskAmount: null,
 };
+
+/**
+ * 设置里的仓位 → 脚本参数（交易计划的股数按它算）。按比例时没填账户就什么都不传（脚本只给每 1 万元风险的股数）；
+ * 按金额时金额本身就够算股数（视频 F：最大亏损用金额），账户只用来封顶。
+ */
+export function sizingArgs(s: Pick<Settings, "account" | "riskMode" | "riskPct" | "riskAmount">): string[] {
+  const account = s.account ? ["--account", String(s.account)] : [];
+  if (s.riskMode === "amount" && s.riskAmount) return [...account, "--risk-amount", String(s.riskAmount)];
+  return s.account ? [...account, "--risk-pct", String(s.riskPct)] : [];
+}
 
 /** 设置里的数据源 → 脚本的 --source 参数。Polygon 允许回退，否则回放早年日期会失败。 */
 export function sourceArg(s: DataSource): "auto" | "yfinance" {
@@ -52,6 +73,11 @@ export function sourceArg(s: DataSource): "auto" | "yfinance" {
 export const validModel = (m: unknown): m is string => typeof m === "string" && /^[^/\s]+\/\S+$/.test(m);
 const validSource = (s: unknown): s is DataSource => DATA_OPTIONS.some((o) => o.id === s);
 export const validVoice = (v: unknown): v is string => VOICE_OPTIONS.some((o) => o.id === v);
+const positive = (x: unknown): x is number => typeof x === "number" && Number.isFinite(x) && x > 0;
+/** 账户、固定金额：正数，或 null 表示不填。 */
+const validMoney = (x: unknown): x is number | null => x === null || positive(x);
+const validPct = (x: unknown): x is number => positive(x) && x <= 100;
+const validMode = (x: unknown): x is RiskMode => x === "pct" || x === "amount";
 
 export class SettingsStore {
   private current: Settings;
@@ -82,6 +108,10 @@ export class SettingsStore {
       voiceAnalyst: validVoice(raw.voiceAnalyst) ? raw.voiceAnalyst : d.voiceAnalyst,
       voiceAdvisor: validVoice(raw.voiceAdvisor) ? raw.voiceAdvisor : d.voiceAdvisor,
       autoSpeak: typeof raw.autoSpeak === "boolean" ? raw.autoSpeak : d.autoSpeak,
+      account: validMoney(raw.account) ? raw.account : d.account,
+      riskMode: validMode(raw.riskMode) ? raw.riskMode : d.riskMode,
+      riskPct: validPct(raw.riskPct) ? raw.riskPct : d.riskPct,
+      riskAmount: validMoney(raw.riskAmount) ? raw.riskAmount : d.riskAmount,
     };
   }
 
@@ -106,6 +136,11 @@ export class SettingsStore {
     if (patch.autoSpeak !== undefined && typeof patch.autoSpeak !== "boolean") {
       throw new Error(`autoSpeak 应为 true 或 false：${patch.autoSpeak}`);
     }
+    for (const k of ["account", "riskAmount"] as const) {
+      if (patch[k] !== undefined && !validMoney(patch[k])) throw new Error(`${k === "account" ? "账户规模" : "每笔可承受亏损"}要是正数，或留空：${patch[k]}`);
+    }
+    if (patch.riskPct !== undefined && !validPct(patch.riskPct)) throw new Error(`每笔可承受亏损的比例要在 0 到 100 之间：${patch.riskPct}`);
+    if (patch.riskMode !== undefined && !validMode(patch.riskMode)) throw new Error(`riskMode 应为 pct 或 amount：${patch.riskMode}`);
     const prev = this.current;
     this.current = { ...prev, ...patch };
     mkdirSync(dirname(this.file), { recursive: true });
