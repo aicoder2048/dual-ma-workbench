@@ -1,6 +1,6 @@
 # 归雁 · 双均线工作台
 
-dual-moving-averages skill 的网页版：左「自选股」、中「分析师·长风」、右「解语花·鸿雁」。分析师·长风负责判断，取李白"长风破浪会有时"，顺势而行，和归雁、鸿雁成一组；解语花·鸿雁负责解惑，解语花取"懂你的话、替你解答"之意。
+dual-moving-averages skill 的网页版：左「自选股 / 交易日志」、中「分析师·长风」、右「解语花·鸿雁」。分析师·长风负责判断，取李白"长风破浪会有时"，顺势而行，和归雁、鸿雁成一组；解语花·鸿雁负责解惑，解语花取"懂你的话、替你解答"之意。
 
 ```bash
 cd app && bun install     # 第一次
@@ -24,6 +24,11 @@ uv run ../.agents/skills/dual-moving-averages/scripts/backtest.py   # 逐笔回�
 - **数据**：调 skill 脚本 `dma_analyze.py --json`（Polygon，失败回退 yfinance），key 在项目根目录 `.env`。
 - **引用**：`[[S:编号]]` 指原文片段（`bun run sources` 列出全部编号），`[[D:字段]]` 指当前分析数据。每轮回答结束后服务端逐条核对，找不到出处的显示红色。
 - **自选股**：存在 `data/watchlist.json`。
+- **交易日志**（`src/journal.ts`，页面 `public/journal.js`）：存在 `data/journal.json`。一笔的状态：计划 → 已进场 → 已离场，计划也可以放弃；不合法的转移返回 409。
+  - 记入（`POST /api/journal`）：页面只发票、日期、处境、仓位、理由和一个随机编号；快照由服务端按这几样重新跑分析取，不信页面发来的计划。同一个编号记两次只算一次。
+  - 之后（`POST /api/journal/<编号>`）：`enter` / `exit`（填错了可以再做一次来改）、`cancel`、`review`。请求里夹带别的字段（如快照）直接拒绝，快照记入后不变。
+  - 文件读不了（不是 JSON、结构不对、编号重复）就报错并写明文件，不覆盖；写入先写 `journal.json.tmp` 再改名。
+  - 收益按做多算，持有天数是自然日；汇总少于 10 笔标"只当参考"。长风读不到日志：照没照计划，左栏的汇总已经直接回答；要让长风读，得另改提示词和引用校验（日志里的数字不来自 dma_analyze）。
 
 ## 结构
 
@@ -34,9 +39,10 @@ uv run ../.agents/skills/dual-moving-averages/scripts/backtest.py   # 逐笔回�
                            │   ├─ agents/tools.ts    dma_analyze / search_sources / read_source / suggest_questions
                            │   ├─ agents/prompts.ts  长风（方法论取自 SKILL.md）、鸿雁
                            │   └─ agents/suggest.ts  规则版问法 + 轻量 Pi 会话生成 AI 版
-                           ├─ src/http.ts       页面、分析、自选股、原文片段
+                           ├─ src/http.ts       页面、分析、自选股、交易日志、原文片段
+                           ├─ src/journal.ts    交易日志：状态转移、快照、汇总、读写 data/journal.json
                            ├─ src/sources.ts    引用库（切片、检索）
                            ├─ src/citations.ts  引用解析、数据字段、校验
                            └─ src/analyze.ts    调 Python 脚本，带缓存
-public/  app.js 页面状态 · agents.js 两个面板 · chart.js 图表 · cite.js 引用渲染 · selection.js 划选问鸿雁
+public/  app.js 页面状态 · journal.js 交易日志 · agents.js 两个面板 · chart.js 图表 · cite.js 引用渲染 · selection.js 划选问鸿雁
 ```
