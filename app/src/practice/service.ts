@@ -107,7 +107,8 @@ export interface ActiveView {
   /** 已经确定下一根开盘要成交的：例如"收盘站上触发价，下一根开盘买入"。 */
   pending: string | null;
 }
-export interface RevealView { ticker: string; start: string; at: string; end: string; result: Extract<Session, { phase: "revealed" }>["result"]; chart: ChartData }
+/** priceFactor：真实价格 = 指数 × priceFactor（日志里记的是指数）。 */
+export interface RevealView { ticker: string; start: string; at: string; end: string; priceFactor: number; result: Extract<Session, { phase: "revealed" }>["result"]; chart: ChartData }
 
 /** 往后一根时新增的图表数据。 */
 export interface ChartDelta { candle: ChartData["candles"][number]; volume: ChartData["volume"]; lines: Record<string, { time: string; value: number }[]>; drops: ChartData["drops"] }
@@ -462,7 +463,7 @@ export class Practice {
     const lo = full.candles[from].time;
     const within = <P extends { time: string }>(xs: P[]) => xs.filter((p) => p.time >= lo);
     return {
-      ticker: s.secret.ticker, start: s.secret.start, at: day(bars[s.cursor].date), end: day(bars[s.endIndex].date), result: s.result,
+      ticker: s.secret.ticker, start: s.secret.start, at: day(bars[s.cursor].date), end: day(bars[s.endIndex].date), priceFactor: k, result: s.result,
       chart: {
         candles: full.candles.slice(from).map((c) => ({ ...c, time: day(c.time), open: c.open * k, high: c.high * k, low: c.low * k, close: c.close * k })),
         volume: within(full.volume).map((v) => ({ ...v, time: day(v.time) })),

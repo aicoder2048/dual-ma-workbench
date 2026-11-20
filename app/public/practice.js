@@ -317,8 +317,10 @@ function showReveal() {
   chart?.setLevels([]);
   $("ticker").textContent = `${v.label} · ${r.ticker}`;
   $("meta-line").textContent = `开局 ${r.start} · 揭晓在 ${r.at}`;
+  // 日志里记的是指数，这里换回真实价格，和图对得上
+  const px = (x) => f2(x * r.priceFactor);
   const trades = v.trades.filter((e) => e.state === "closed").map((e) =>
-    `<li>${esc(e.entry.date)} 买 @ ${f2(e.entry.price)} → ${esc(e.exit.date)} 卖 @ ${f2(e.exit.price)}（${esc(e.exit.reason)}）</li>`).join("");
+    `<li>${esc(e.entry.date)} 买 @ ${px(e.entry.price)} → ${esc(e.exit.date)} 卖 @ ${px(e.exit.price)}（${esc(e.exit.reason.replace(/\d+\.\d+/g, (n) => px(Number(n))))}）</li>`).join("");
   $("practice").innerHTML = `
     <div class="pr-head"><b>${esc(v.label)} 揭晓：${esc(r.ticker)}</b><span class="pr-phase">揭晓</span>
       <span>开局 <b class="num">${esc(r.start)}</b>，揭晓在 <b class="num">${esc(r.at)}</b>（${tLabel(v.t)}），图上一直画到 ${esc(r.end)}</span></div>
@@ -330,6 +332,7 @@ function showReveal() {
     ${trades ? `<ul class="pr-trades">${trades}</ul>` : `<p class="muted">这一题没有成交。</p>`}
     <p class="muted">图上的价格已经换回真实价格；练习时看到的是指数（第一根收盘 = 100）。照没照计划、教训，在左栏「交易日志」点开这一笔填。</p>
     <div class="pr-tools"><button type="button" data-act="new">再出一道题</button><button type="button" data-act="journal">去复盘</button></div>`;
+  $("center-scroll").scrollTop = 0;
   deps.refreshJournal();
   refreshList();
 }
