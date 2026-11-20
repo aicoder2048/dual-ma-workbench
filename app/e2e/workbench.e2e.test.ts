@@ -1268,7 +1268,11 @@ describe("两个 agent 都写角色 + 名字", () => {
     }
     expect(await page.getAttribute("main.panel.center", "aria-label")).toBe("分析师·长风");
     expect(await page.getAttribute("aside.panel.right", "aria-label")).toBe("解语花·鸿雁");
-    expect(await page.textContent(".panel.right .panel-head b")).toBe("和解语花·鸿雁的对话");
+    expect(await page.textContent(".panel.right .panel-head b")).toBe("解语花·鸿雁");
+    // 标题、说明各占一行：标题不换行，说明放不下就省略号，不折成两行
+    const lines = await page.$$eval(".panel.right .panel-head > *", (els) =>
+      els.map((el) => Math.round(el.getBoundingClientRect().height / parseFloat(getComputedStyle(el).lineHeight || "0") || 0)));
+    expect(lines).toEqual([1, 1]);
     expect(errors).toEqual([]);
     await page.close();
   }, 30_000);
