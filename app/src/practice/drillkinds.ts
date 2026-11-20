@@ -296,6 +296,7 @@ const play: Generator = (c) => {
   if (!stop) throw new Error(`看打法：没见过的止损「${plan.stop!.label}」，加进 STOP_CHOICES`);
   const key = playKey(a);
   const st = entryStateOf(a);
+  const hourlyless = Boolean(st.entries?.some((e) => e.id === "P14" && e.status === "满足")) && a.rules.find((r) => r.id === "P14")?.status === "需看图";
   const ids = st.entries === null ? a.play.rules : [...(st.play === "横盘" ? ["P1", "P2"] : []), ...st.entries.map((e) => e.id)];
   return [{
     kind: "play", cls, view: { bars: 160, lines: true, drops: true }, marks: [],
@@ -305,7 +306,8 @@ const play: Generator = (c) => {
       { prompt: "按这套打法，进场后的止损放在哪？", choices: [...STOP_CHOICES], answer: STOP_CHOICES.indexOf(stop) },
     ],
     evidence: [
-      `空仓做法：${plan.action}`,
+      // 结论卡片的 P14 照实写需看图（没有小时线）；回测和练习按前三条判，这时卡片上的做法和答案对不上，不引用它
+      hourlyless ? "P14：P10、P11、P12 都满足；P13 要看小时线，练习里没有，照回测的口径算满足" : `空仓做法：${plan.action}`,
       st.entries === null ? `「${key}」空仓不买（回测的打法里没有它）` : `进场条件：${st.entries.map((e) => `${e.id} ${e.status}`).join("，")}`,
       plan.stop ? `进场后止损：${plan.stop.label} ${f2(plan.stop.price)}` : "这套打法空仓没有止损：不进场",
       "等 = 这套打法会买、条件还没齐；不做 = 这种状态空仓不进场；反弹卖是持仓的做法",
