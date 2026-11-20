@@ -35,8 +35,7 @@ class Weekly:
 def to_weekly(df: pd.DataFrame) -> pd.DataFrame:
     """按周五结束的自然周聚合，索引用每周实际的最后一个交易日。"""
     agg = {col: how for col, how in AGG.items() if col in df.columns}
-    weeks = df.resample("W-FRI")
-    out = weeks.agg(agg)
+    out = df.resample("W-FRI").agg(agg)
     out.index = df.index.to_series().resample("W-FRI").last()
     return out.dropna(subset=["Close"])
 
