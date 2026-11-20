@@ -1,7 +1,7 @@
 /**
  * 调用 skill 的 Python 脚本（PEP 723，`uv run --script`）拿分析结果，带内存缓存。
  *
- * 网页图表、自选股标签、分析师的 dma_analyze 工具都走这里，保证同一次计算的数字处处一致。
+ * 网页图表、自选股标签、长风的 dma_analyze 工具都走这里，保证同一次计算的数字处处一致。
  */
 import { execFile } from "node:child_process";
 import { resolve } from "node:path";

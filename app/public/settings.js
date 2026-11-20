@@ -9,7 +9,7 @@ let view = null; // { settings, models, thinkingLevels, effective, dataSources, 
 export const currentSettings = () => view?.settings ?? null;
 
 const PREVIEW = {
-  voiceAnalyst: "我是分析师。现在六条均线都向下，明显偏空。收盘站上 EMA20，才是第一个转折信号。",
+  voiceAnalyst: "我是长风。现在六条均线都向下，明显偏空。收盘站上 EMA20，才是第一个转折信号。",
   voiceAdvisor: "我是鸿雁。抵扣价就是均线明天要扣掉的那天收盘价。收盘价高于它，均线就往上走。",
 };
 
@@ -45,7 +45,7 @@ function modelSection() {
   }
   const groups = [...new Set(models.map((m) => m.provider))];
   const current = models.find((m) => m.id === settings.model);
-  return `<fieldset><legend>大模型 <span>分析师、鸿雁、动态问法共用；列的是你在 pi 里登录过的</span></legend>
+  return `<fieldset><legend>大模型 <span>长风、鸿雁、动态问法共用；列的是你在 pi 里登录过的</span></legend>
       <select id="sp-model" name="model" aria-label="大模型">
         ${current ? "" : `<option value="" selected disabled>${esc(settings.model)}（不可用）</option>`}
         ${groups.map((p) => {
@@ -58,7 +58,7 @@ function modelSection() {
       <div class="sp-confirm" id="sp-confirm" hidden></div>
     </fieldset>
     <fieldset><legend>思考程度 <span>越高越慢；按量计费时也越贵</span></legend>
-      ${[["thinkingAnalyst", "分析师", "analyst"], ["thinkingAdvisor", "鸿雁", "advisor"]].map(([key, who, role]) => {
+      ${[["thinkingAnalyst", "长风", "analyst"], ["thinkingAdvisor", "鸿雁", "advisor"]].map(([key, who, role]) => {
         const eff = view.effective?.[role];
         const want = settings[key];
         return `<div class="voice-row">
@@ -77,7 +77,7 @@ function render() {
   panel.innerHTML = `
     <div class="sp-head"><b>设置</b><button type="button" class="close" aria-label="关闭">×</button></div>
     ${modelSection()}
-    <fieldset><legend>市场数据 <span>图表、报告、分析师取数共用</span></legend>
+    <fieldset><legend>市场数据 <span>图表、报告、长风取数共用</span></legend>
       ${dataSources.map((d, i) => `
         <label class="opt">
           <input type="radio" name="dataSource" value="${esc(d.id)}" ${d.id === settings.dataSource ? "checked" : ""}>
@@ -87,7 +87,7 @@ function render() {
     </fieldset>
     <fieldset><legend>语音播报 <span>微软 Edge 在线语音，回答的文字会发到微软的服务</span></legend>
       ${!view.voices ? `<p class="bad">服务端还是旧版本，没有语音选项：请重启服务（just wildgoose）后刷新页面。</p>` : `
-      ${[["voiceAnalyst", "分析师"], ["voiceAdvisor", "鸿雁"]].map(([key, who]) => `
+      ${[["voiceAnalyst", "长风"], ["voiceAdvisor", "鸿雁"]].map(([key, who]) => `
         <div class="voice-row">
           <label for="sp-${key}">${who}</label>
           <select id="sp-${key}" name="${key}">

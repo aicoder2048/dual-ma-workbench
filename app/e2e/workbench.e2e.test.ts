@@ -114,7 +114,7 @@ async function addAdvisorAnswer(page: Page, text: string) {
 }
 
 describe("设置", () => {
-  test("能打开，默认分析师云希、鸿雁晓晓", async () => {
+  test("能打开，默认长风云希、鸿雁晓晓", async () => {
     const { page, errors } = await open();
     await page.click("#settings-btn");
     await expect(page.isVisible("#settings-panel")).resolves.toBe(true);
@@ -193,7 +193,7 @@ describe("设置", () => {
     await page.close();
   }, 30_000);
 
-  test("分析师的思考程度改成 high：保存，刷新后还是 high", async () => {
+  test("长风的思考程度改成 high：保存，刷新后还是 high", async () => {
     const { page, errors } = await open();
     await page.click("#settings-btn");
     await page.selectOption("select[name=thinkingAnalyst]", "high");
@@ -386,7 +386,7 @@ describe("取数失败", () => {
     warningNext = "今日 K 线未完成（美东 13:03，收盘 16:00）。";
     const { page, errors } = await open(undefined, "AMZN").finally(() => { warningNext = null; });
     expect(await page.isVisible("#warning")).toBe(true);
-    // 分析师对话很长、滚过了总结：提示条出现
+    // 长风对话很长、滚过了总结：提示条出现
     await page.evaluate(async () => {
       const { panels } = await import("/app.js");
       panels.analyst.history([{ role: "user", text: "长对话" },
@@ -413,7 +413,7 @@ describe("取数失败", () => {
     await page.waitForSelector("#analyst-chips.dim", { state: "attached" });
     expect(await page.$$("#analyst-chips .chip, #advisor-chips .chip")).toHaveLength(0);
     expect(page.url()).toEndWith("#ANT");
-    // 告诉服务端：页面现在是 ANT，取数失败（分析师、鸿雁据此不再用上一只票）
+    // 告诉服务端：页面现在是 ANT，取数失败（长风、鸿雁据此不再用上一只票）
     expect(wsSent.filter((m) => m.type === "view").at(-1)).toEqual({ type: "view", ticker: "ANT", asof: null, error: "取不到 ANT 的行情" });
     expect(await page.textContent("#data-status-v")).not.toContain("盘中");
     expect(await page.isVisible("#peek")).toBe(false);
@@ -1021,7 +1021,7 @@ describe("K 线回放", () => {
     await page.close();
   }, 30_000);
 
-  test("回放中同一只票被重新载入（分析师调了取数）：停在原来那天，不露出后面的 K 线；换票才退出", async () => {
+  test("回放中同一只票被重新载入（长风调了取数）：停在原来那天，不露出后面的 K 线；换票才退出", async () => {
     const { page, errors } = await start("RPLH");
     await page.click(".replay-toggle");
     await page.click(".replay-start");
@@ -1029,7 +1029,7 @@ describe("K 线回放", () => {
     await page.dispatchEvent(".replay-menu input[type=date]", "change");
     await waitRp(page, (r) => r.mode === "replay" && r.index === 150);
     expect((await rp(page)).playing).toBe(true);
-    // 分析师工具推来同一只票的最新分析 → showAnalysis → setData
+    // 长风工具推来同一只票的最新分析 → showAnalysis → setData
     await page.evaluate(async () => {
       const app = await import("/app.js");
       const data = await (await fetch("/api/analyze?ticker=RPLH")).json();
@@ -1207,6 +1207,19 @@ describe("规则清单：每条规则的结论能点到 rules.md", () => {
     expect(await dir.locator("table.hurdles tbody tr").count()).toBe(3);
     expect(await dir.locator("table.hurdles").textContent()).toContain("239.24"); // MA60 30 天抵扣价最高
     expect(await dir.locator(".flow").textContent()).toContain("30 个交易日");
+    await page.close();
+  }, 30_000);
+});
+
+describe("中栏 agent 叫「长风」", () => {
+  test("默认视图下输入区的名字是长风，看得见；页面上不再出现「分析师」", async () => {
+    const { page, errors } = await open();
+    const name = page.locator("#analyst-composer .role-bar b");
+    expect(await name.textContent()).toBe("长风");
+    expect(await name.isVisible()).toBe(true);
+    expect(await page.getAttribute("main.panel.center", "aria-label")).toBe("长风");
+    expect(await page.textContent("body")).not.toContain("分析师");
+    expect(errors).toEqual([]);
     await page.close();
   }, 30_000);
 });

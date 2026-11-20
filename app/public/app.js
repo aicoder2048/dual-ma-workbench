@@ -171,7 +171,7 @@ function showLoadError(ticker, asof, message) {
   showPane(false);
   document.querySelectorAll(".wl-item").forEach((li) =>
     li.classList.toggle("active", li.dataset.ticker === ticker && !asof));
-  send({ type: "view", ticker, asof, error: message }); // 分析师、鸿雁据此不再用上一只票
+  send({ type: "view", ticker, asof, error: message }); // 长风、鸿雁据此不再用上一只票
 }
 $("load-error-retry").addEventListener("click", async (e) => {
   if (!state.ticker) return;
@@ -182,7 +182,7 @@ $("load-error-retry").addEventListener("click", async (e) => {
   $("load-error-retry").textContent = "重试";
 });
 
-/** 渲染一份分析结果（HTTP 拿到的，或分析师工具推过来的）。 */
+/** 渲染一份分析结果（HTTP 拿到的，或长风工具推过来的）。 */
 export function showAnalysis(data, asof = null) {
   collapseDrawer(); // 下面要重新渲染三步卡片：抽屉里不能留着旧的
   const a = data.analysis;
