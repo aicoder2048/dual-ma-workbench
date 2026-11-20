@@ -297,7 +297,9 @@ const play: Generator = (c) => {
   const key = playKey(a);
   const st = entryStateOf(a);
   const hourlyless = Boolean(st.entries?.some((e) => e.id === "P14" && e.status === "满足")) && a.rules.find((r) => r.id === "P14")?.status === "需看图";
-  const ids = st.entries === null ? a.play.rules : [...(st.play === "横盘" ? ["P1", "P2"] : []), ...st.entries.map((e) => e.id)];
+  // 空仓不买的打法：用空仓计划里「等什么」那些条件的规则（脚本的 play.rules 是持仓的做法，例如下跌里的反弹卖）
+  const flatRules = plan.items.flatMap((i) => i.rules ?? []);
+  const ids = st.entries === null ? (flatRules.length ? flatRules : a.play.rules) : [...(st.play === "横盘" ? ["P1", "P2"] : []), ...st.entries.map((e) => e.id)];
   return [{
     kind: "play", cls, view: { bars: 160, lines: true, drops: true }, marks: [],
     context: `空仓。脚本判定：${a.regime.name}（打法「${key}」）。`,
