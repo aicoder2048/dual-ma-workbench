@@ -501,7 +501,7 @@ body.offline .status-pill .dot { background: var(--bad); }
 .chart-tools .draw-toggle { margin-left: auto; }
 .chart-tools .levels-toggle { margin-left: 0; }
 
-/* K 线回放：选起点的覆盖层、图下方的控制条、标题旁的「回放中」 */
+/* K 线回放：选起点的覆盖层、「回放」按钮下方的控制条（菜单向下展开，盖在图上）、标题旁的「回放中」 */
 .chart.replay-selecting { cursor: crosshair; }
 .replay-overlay { position: absolute; left: 0; top: 0; pointer-events: none; z-index: 3; }
 .replay-dim { position: absolute; top: 0; bottom: 0; background: color-mix(in srgb, var(--card) 65%, transparent); }
@@ -516,7 +516,7 @@ body.offline .status-pill .dot { background: var(--bad); }
 .replay-label { font-family: var(--mono); color: var(--muted); margin-left: auto; }
 .replay-bar .replay-exit { border: 0; background: transparent; font-size: 16px; line-height: 1; padding: 0 4px; color: var(--muted); }
 .replay-start-wrap { position: relative; }
-.replay-menu { position: absolute; left: 0; bottom: calc(100% + 4px); z-index: 5; display: grid; gap: 4px; min-width: 210px;
+.replay-menu { position: absolute; left: 0; top: calc(100% + 4px); z-index: 7; display: grid; gap: 4px; min-width: 210px;
   background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 6px; box-shadow: 0 6px 20px rgb(0 0 0 / .15); }
 .replay-menu[hidden] { display: none; }
 .replay-menu button { border-radius: 6px; text-align: left; }

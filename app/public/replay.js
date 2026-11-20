@@ -18,7 +18,7 @@ export function step(s, action, total) {
       return s.mode === "select" ? s : { mode: "select" };
     case "pick":
       if (s.mode === "off" || !Number.isInteger(action.index) || action.index < 0 || action.index > last) return s;
-      return at(action.index);
+      return at(action.index, action.index < last); // 选好起点就开始播放（最后一根没东西可放）
     case "realtime":
     case "exit":
       return s.mode === "off" ? s : OFF;

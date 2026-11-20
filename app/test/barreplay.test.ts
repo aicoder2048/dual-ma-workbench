@@ -17,10 +17,12 @@ describe("回放状态机", () => {
   const select = { mode: "select" } as const;
   const at = (index: number, playing = false) => ({ mode: "replay", index, playing }) as const;
 
-  test("关 → 选起点 → 选中某天（暂停）→ 播放 → 暂停", () => {
+  test("关 → 选起点 → 选中某天就开始播放 → 暂停 → 播放", () => {
     let s: any = step(off, { type: "enter" }, N);
     expect(s).toEqual(select);
     s = step(s, { type: "pick", index: 50 }, N);
+    expect(s).toEqual(at(50, true)); // 选好起点立刻动起来，用户不用再找播放键
+    s = step(s, { type: "toggle" }, N);
     expect(s).toEqual(at(50));
     s = step(s, { type: "play" }, N);
     expect(s).toEqual(at(50, true));
@@ -40,14 +42,14 @@ describe("回放状态机", () => {
     expect(step(at(N - 1), { type: "toggle" }, N)).toEqual(at(N - 1));
   });
 
-  test("回放中可以重选起点（停下播放）、直接换一天、回到最新", () => {
+  test("回放中可以重选起点（enter 停下播放）、直接换一天（pick 接着播）、回到最新", () => {
     expect(step(at(50, true), { type: "enter" }, N)).toEqual(select);
-    expect(step(at(50, true), { type: "pick", index: 10 }, N)).toEqual(at(10));
+    expect(step(at(50, true), { type: "pick", index: 10 }, N)).toEqual(at(10, true));
     expect(step(at(50, true), { type: "realtime" }, N)).toEqual(off);
     expect(step(select, { type: "exit" }, N)).toEqual(off);
   });
 
-  test("最后一根也能选（没东西可放，但合法）；越界的选不了", () => {
+  test("最后一根也能选（没东西可放，不播放）；越界的选不了", () => {
     expect(step(select, { type: "pick", index: N - 1 }, N)).toEqual(at(N - 1));
     for (const index of [-1, N, 1.5, NaN]) expect(step(select, { type: "pick", index }, N)).toBe(select);
   });
