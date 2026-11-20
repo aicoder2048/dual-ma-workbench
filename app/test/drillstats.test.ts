@@ -33,8 +33,7 @@ describe("统计（手算）", () => {
     expect(s.missed.length).toBe(2);
   });
 
-  test("连对：最后两题错了，现在 0；最长 4（第 4–6 题加第 1 题前面断开）", () => {
-    // 对 对 错 | 对 对 对 | 错 错 → 最长 3
+  test("连对：对 对 错 | 对 对 对 | 错 错 → 现在 0，最长 3", () => {
     expect(s.streak).toEqual({ current: 0, best: 3 });
     expect(drillStats([ans("chart", "横盘", false, 1), ans("chart", "横盘", true, 1), ans("chart", "横盘", true, 1)]).streak).toEqual({ current: 2, best: 2 });
   });
