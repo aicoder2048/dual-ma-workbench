@@ -5,7 +5,7 @@
 
 点评 JSON（全部字段可选；文本里可以用 **加粗**）：
 {
-  "headline": "下跌趋势，正在进入极度超卖",        # 一句话结论
+  "headline": "下跌趋势，正在进入加速下跌",        # 一句话结论
   "stance": "bearish",                              # bullish | bearish | neutral，决定结论颜色
   "summary": "不抄底，不抢反弹；反弹到 20 日线附近减仓。",
   "big_picture": ["..."],                           # 第 1 步的点评要点
