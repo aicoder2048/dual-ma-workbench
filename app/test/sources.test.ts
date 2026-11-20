@@ -130,4 +130,9 @@ describe("公开版的规则库", () => {
   test("每条规则都能按编号引用", () => {
     for (const id of ["rules#A1", "rules#J16", "rules#P13", "rules#P17", "rules#P20"]) expect(lib.has(id), id).toBe(true);
   });
+  test("外部交叉引用的 X 规则也能按编号引用，章节片段只留说明文字", () => {
+    expect(lib.has("rules#X1")).toBe(true);
+    const section = lib.index().find((e) => e.id.startsWith("rules#外部交叉引用"))!;
+    expect(lib.get(section.id)!.body).not.toContain("| X1 |");
+  });
 });

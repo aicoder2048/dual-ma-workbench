@@ -75,7 +75,7 @@ const HEADING = /^(#{1,3})\s+(.+?)\s*$/;
 // "2.3 抵扣价" 或 "1. 双均线是干什么的"；不匹配 "2020 年的例子"
 const SECTION_NO = /^(\d+\.\d+(?:\.\d+)*|\d+)\.?\s+(?=\D)/;
 const DOTTED_OR_DOT = /^(\d+\.\d+(?:\.\d+)*\s|\d+\.\s)/;
-const RULE_ROW = /^\| ([AJP]\d+) \| (公理|判定|动作) \|/;
+const RULE_ROW = /^\| ([AJPX]\d+) \| (公理|判定|动作) \|/;
 const RULE_HEAD = /^\| 编号 \||^\|---/;
 const HEADING_PART_CHARS = 16;
 const clip = (t: string) => (t.length > HEADING_PART_CHARS ? `${t.slice(0, HEADING_PART_CHARS)}…` : t);
