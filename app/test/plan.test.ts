@@ -124,9 +124,10 @@ describe("成本价参与策略：浮盈、浮亏分开说", () => {
   const plans = buildPlans(bear);
   const text = (k: "holding" | "profit" | "loss") => [plans[k].action, ...plans[k].items.map((i) => i.text)].join("");
 
-  test("浮盈：先保住利润，止损提到成本附近（成本由页面填进 {cost}）", () => {
+  test("浮盈：止损跟着趋势结构，不按成本定（成本由页面填进 {cost}）", () => {
     expect(text("profit")).toContain("{cost}");
-    expect(text("profit")).toMatch(/保本|锁住|利润/);
+    expect(text("profit")).toContain("趋势结构");
+    expect(text("profit")).not.toContain("保本");
     expect(text("profit")).not.toMatch(/浮亏|涨回成本/);
   });
   test("浮亏：不等回本", () => {
@@ -202,9 +203,10 @@ describe("空头结构反弹中 / 多头结构回撤中进入策略", () => {
     expect(p.holding.action).toContain("持有");
     expect(all(p.holding)).toContain("双死叉");
   });
-  test("空头结构反弹中：浮盈先锁利保本，浮亏不等回本、反弹到减仓位就减", () => {
+  test("空头结构反弹中：浮盈先锁利、止损不按成本定，浮亏不等回本、反弹到减仓位就减", () => {
     const p = buildPlans(conflict("空头结构反弹中"));
-    expect(all(p.profit)).toContain("保本");
+    expect(all(p.profit)).toContain("锁住");
+    expect(all(p.profit)).not.toContain("保本");
     expect(all(p.loss)).toContain("不等回本");
   });
   test("多头结构回撤中：浮盈有安全垫、不在回调里卖；浮亏不加仓摊低", () => {

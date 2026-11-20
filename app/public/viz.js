@@ -140,7 +140,7 @@ export function biasMeter(v) {
     <figcaption>离 20 线 ${pct(v.bias.value)}：在自身历史里排 ${Math.round(p * 100)}% 分位。</figcaption></figure>`;
 }
 
-/** 五步进度（rules.md J15）：每对线组这一轮转折走到哪一步，每步带日期。 */
+/** 五个进度点（rules.md J15）：每对线组这一轮转折走到哪一步，每步带日期。 */
 const STEP_NAMES = ["破线", "EMA 拐头", "MA 拐头", "第一个交叉", "双交叉"];
 export function fiveSteps(v) {
   const rows = v.steps.map((p) => {
@@ -154,7 +154,7 @@ export function fiveSteps(v) {
       <td class="num">${t?.progress ?? 0}/5${last ? `<span class="sub">上一轮 ${last}</span>` : ""}</td></tr>`;
   }).join("");
   return `<table class="vt steps5"><thead><tr><th>线组</th>${STEP_NAMES.map((n) => `<th>${n}</th>`).join("")}<th>进度</th></tr></thead><tbody>${rows}</tbody></table>
-    <p class="legend-note">每对线组现在站在哪边、这一轮往反方向走到第几步 ${ruleBtn("J15")}。双交叉要同一对周期的 MA、EMA 都交叉 ${ruleBtn("J16")}。</p>`;
+    <p class="legend-note">每对线组现在站在哪边、这一轮往反方向走到第几个进度点 ${ruleBtn("J15")}。双交叉要同一对周期的 MA、EMA 都交叉 ${ruleBtn("J16")}。</p>`;
 }
 
 /** 周线、小时线的排列：大一级定方向（J11），小一级找进场点（P13）。 */
