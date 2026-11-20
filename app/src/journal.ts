@@ -239,7 +239,7 @@ export const SMALL_SAMPLE = 10;
 
 export interface Group { n: number; winRate: number | null; mean: number | null; median: number | null; avgDays: number | null; small: boolean }
 
-function group(outcomes: Outcome[]): Group {
+export function group(outcomes: Outcome[]): Group {
   const n = outcomes.length;
   if (!n) return { n, winRate: null, mean: null, median: null, avgDays: null, small: true };
   const pnl = outcomes.map((o) => o.pnl).sort((x, y) => x - y);

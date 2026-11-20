@@ -17,6 +17,7 @@ import { buildReport } from "../report.ts";
 import { PROJECT_ROOT } from "../sources.ts";
 import { addDays, isPracticeLabel, labeler, labelOf, PRACTICE_LABEL, parseCsv, parseT, rebase, relabel, tLabel, toCsv, type Bar } from "./blind.ts";
 import { DEFAULT_SINCE, HORIZON, pickStart, pickTicker, POOL, seeded, windowStart, type PoolEntry } from "./pool.ts";
+import { entryStateOf, scoreOf, scoreTrade, type TradeDiscipline } from "./discipline.ts";
 import { fillOn, next, PHASE_LABEL, practiceStats, PracticeError, resultOf, type Manual, type Prepared, type Session, type SessionStore } from "./session.ts";
 
 const pexec = promisify(execFile);
@@ -110,7 +111,11 @@ export interface ActiveView {
   pending: string | null;
 }
 /** priceFactor：真实价格 = 指数 × priceFactor（日志里记的是指数）。 */
-export interface RevealView { ticker: string; start: string; at: string; end: string; priceFactor: number; result: Extract<Session, { phase: "revealed" }>["result"]; chart: ChartData }
+/** score：这一题的纪律分（✓ 项数 / 评了的项数），没评的为 null。 */
+export interface RevealView {
+  ticker: string; start: string; at: string; end: string; priceFactor: number;
+  result: Extract<Session, { phase: "revealed" }>["result"]; score: ReturnType<typeof scoreOf>; chart: ChartData;
+}
 
 /** 往后一根时新增的图表数据。 */
 export interface ChartDelta { candle: ChartData["candles"][number]; volume: ChartData["volume"]; lines: Record<string, { time: string; value: number }[]>; drops: ChartData["drops"] }
@@ -310,7 +315,7 @@ export class Practice {
       sessions: sessions.map((s) => ({
         id: s.id, no: s.no, label: labelOf(s.no), phase: s.phase, phaseLabel: PHASE_LABEL[s.phase], createdAt: s.createdAt,
         t: s.phase === "posing" ? null : s.cursor - s.startIndex,
-        reveal: s.phase === "revealed" ? { ticker: s.secret.ticker, start: s.secret.start, result: s.result } : null,
+        reveal: s.phase === "revealed" ? { ticker: s.secret.ticker, start: s.secret.start, result: s.result, score: scoreOf(s.result.discipline ?? []) } : null,
       })).reverse(),
       stats: practiceStats(sessions, entries),
     };
@@ -329,12 +334,12 @@ export class Practice {
       switch (a.type) {
         case "step": case "enter": case "exit": {
           if (s.phase === "revealed" || a.from !== s.cursor - s.startIndex) return this.viewOf(s, true);
-          const after = this.step(s, a.type === "step" ? null : a.type);
+          const after = await this.step(s, a.type === "step" ? null : a.type);
           return { ...(await this.viewOf(after, after.phase === "revealed")), delta: await this.deltaAt(after) };
         }
         case "plan": return this.viewOf(await this.plan(s, a), false);
         case "cancel": return this.viewOf(this.cancel(s), false);
-        case "reveal": return this.viewOf(s.phase === "revealed" ? s : this.reveal(s), true);
+        case "reveal": return this.viewOf(s.phase === "revealed" ? s : await this.reveal(s), true);
       }
     });
   }
@@ -348,7 +353,7 @@ export class Practice {
    * 往后一根：先按已经看到的那根收盘决定这笔单在下一根开盘成不成交，再往后走。走到最后一根自动揭晓。
    * 日志先写、练习后写：中途断了，再走一次会看到日志已经成交（进场后不再成交、已离场按结束算），结果一样。
    */
-  private step(s: Prepared, manual: Manual): Prepared {
+  private async step(s: Prepared, manual: Manual): Promise<Prepared> {
     if (s.phase === "revealed") throw new PracticeError("已经揭晓了", 409);
     if (s.cursor >= s.endIndex) throw new PracticeError("已经是最后一根", 409);
     let closed = false;
@@ -364,7 +369,7 @@ export class Practice {
       throw new PracticeError("手上没有单：先记一个计划（可以选下一根开盘直接买）", 409);
     }
     let after = next(s, { type: "step", closed }, this.now()) as Prepared;
-    if (after.cursor === after.endIndex) after = this.reveal(after);
+    if (after.cursor === after.endIndex) after = await this.reveal(after);
     this.o.store.put(after);
     return after;
   }
@@ -400,7 +405,7 @@ export class Practice {
   }
 
   /** 揭晓：没成交的计划放弃，持仓按最后一根收盘平掉，算好结果存下。 */
-  private reveal(s: Prepared): Prepared {
+  private async reveal(s: Prepared): Promise<Prepared> {
     const bars = this.barsOf(s.id);
     if (s.phase === "advancing") {
       const e = this.o.journal.get(s.active);
@@ -411,9 +416,33 @@ export class Practice {
       }
     }
     const entries = s.trades.map((t) => this.o.journal.get(t));
-    const after = next(s, { type: "reveal", result: resultOf(bars, s, entries) }, this.now()) as Prepared;
+    const result = { ...resultOf(bars, s, entries), discipline: await this.disciplineOf(s, entries) };
+    const after = next(s, { type: "reveal", result }, this.now()) as Prepared;
     this.o.store.put(after);
     return after;
+  }
+
+  /** 揭晓时逐笔评「照打法」：进场前一根的分析（截到那一根）、计划的止损、之后每根收盘。 */
+  private async disciplineOf(s: Prepared, entries: JournalEntry[]): Promise<TradeDiscipline[]> {
+    const bars = this.barsOf(s.id);
+    const at = this.indexOf(s);
+    const out: TradeDiscipline[] = [];
+    for (const e of entries) {
+      const order = e.practice!.order;
+      const entryT = e.state === "open" || e.state === "closed" ? at(e.entry.date) - s.startIndex : null;
+      const decision = entryT === null ? null : entryStateOf((await this.rawAt(s, s.startIndex + entryT - 1)).analysis);
+      const stop = e.snapshot.stop ? { price: e.snapshot.stop.price, whose: "计划" as const }
+        : order.stop !== null ? { price: order.stop, whose: "自己" as const } : null;
+      out.push({
+        journalId: e.id,
+        checks: scoreTrade({
+          mode: order.mode, size: e.size, entryT, decision, stop,
+          exitT: e.state === "closed" ? at(e.exit.date) - s.startIndex : null,
+          close: (t) => bars[s.startIndex + t].close,
+        }, s.cursor - s.startIndex),
+      });
+    }
+    return out;
   }
 
   // ---------- 给页面的 ----------
@@ -471,6 +500,7 @@ export class Practice {
     const within = <P extends { time: string }>(xs: P[]) => xs.filter((p) => p.time >= lo);
     return {
       ticker: s.secret.ticker, start: s.secret.start, at: day(bars[s.cursor].date), end: day(bars[s.endIndex].date), priceFactor: k, result: s.result,
+      score: scoreOf(s.result.discipline ?? []),
       chart: {
         candles: full.candles.slice(from).map((c) => ({ ...c, time: day(c.time), open: c.open * k, high: c.high * k, low: c.low * k, close: c.close * k })),
         volume: within(full.volume).map((v) => ({ ...v, time: day(v.time) })),

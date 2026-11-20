@@ -35,14 +35,16 @@ function statsHtml(st) {
     <p class="pr-hold">${hold}</p>
     ${v.n && v.small ? `<p class="j-small">揭晓不到 10 题：数字只当参考。</p>` : ""}
     <table class="j-stats"><thead><tr><th>练习的单</th><th>笔</th><th>胜率</th><th>均值</th><th>中位</th></tr></thead>
-      <tbody>${row("照计划", c.followed)}${row("没照", c.deviated)}${row("全部", c.all)}</tbody></table>
+      <tbody>${row("照计划", c.followed)}${row("没照", c.deviated)}${row("纪律高", st.discipline.high)}${row("纪律低", st.discipline.low)}${row("全部", c.all)}</tbody></table>
+    ${st.discipline.score ? `<p class="pr-disc-sum">照打法：✓ <b class="num">${st.discipline.score.passed}/${st.discipline.score.scored}</b> 项（纪律高 = 这笔没有 ✗）</p>` : ""}
     ${c.all.n && c.all.small ? `<p class="j-small">已离场 ${c.all.n} 笔，少于 10 笔：只当参考。</p>` : ""}
     ${c.unreviewed ? `<p class="j-small">${c.unreviewed} 笔还没复盘（在交易日志里点开填）。</p>` : ""}`;
 }
 
 function cardHtml(s) {
   const r = s.reveal;
-  const line = r ? `${esc(r.ticker)} · ${esc(r.start)} 起 · 我 <b class="num ${r.result.mine >= 0 ? "bullish" : "bearish"}">${pct(r.result.mine)}</b> / 持有 <span class="num">${pct(r.result.hold)}</span>`
+  const line = r ? `${esc(r.ticker)} · ${esc(r.start)} 起 · 我 <b class="num ${r.result.mine >= 0 ? "bullish" : "bearish"}">${pct(r.result.mine)}</b> / 持有 <span class="num">${pct(r.result.hold)}</span>${
+      r.score ? ` · 纪律 <b class="num">${r.score.passed}/${r.score.scored}</b>` : ""}`
     : s.t === null ? "出题中" : `走到 ${tLabel(s.t)}`;
   return `<li class="j-item pr-item" data-id="${esc(s.id)}" tabindex="0"><span class="sym">${esc(s.label)}</span>
     <span class="j-state ${s.phase === "revealed" ? "closed" : "open"}">${esc(s.phaseLabel)}</span><span class="j-line">${line}</span></li>`;
@@ -330,11 +332,29 @@ function showReveal() {
       <span>${diff >= 0 ? "跑赢" : "跑输"} <b class="num">${Math.abs(diff).toFixed(2)}</b> 个百分点</span>
     </div>
     ${trades ? `<ul class="pr-trades">${trades}</ul>` : `<p class="muted">这一题没有成交。</p>`}
+    ${disciplineHtml(res.discipline, r.score, v.trades, px)}
     <p class="muted">图上的价格已经换回真实价格；练习时看到的是指数（第一根收盘 = 100）。照没照计划、教训，在左栏「交易日志」点开这一笔填。</p>
     <div class="pr-tools"><button type="button" data-act="new">再出一道题</button><button type="button" data-act="journal">去复盘</button></div>`;
   $("center-scroll").scrollTop = 0;
   deps.refreshJournal();
   refreshList();
+}
+
+const MARK = { pass: ["✓", "满足"], fail: ["✗", "没做到"], na: ["—", "不评"] };
+
+/** 揭晓后的「照打法」：每一笔四项 ✓ / ✗ / —，哪一根、为什么。价位换回真实价格。 */
+function disciplineHtml(list, score, trades, px) {
+  if (!list) return "";
+  if (!list.length) return `<div class="pr-disc"><p class="muted">照打法：这一题没记计划，不评纪律。</p></div>`;
+  const body = list.map((d, i) => {
+    const e = trades.find((x) => x.id === d.journalId);
+    const head = `第 ${i + 1} 笔${e ? `（${esc(MODE_TEXT[e.practice.order.mode])}）` : ""}`;
+    const items = d.checks.map((c) => `<li class="${c.mark}"><span class="mark" aria-label="${MARK[c.mark][1]}">${MARK[c.mark][0]}</span>
+      <b>${esc(c.item)}</b><span class="num">${c.t === null ? "" : tLabel(c.t)}</span><span>${esc(c.why.replace(/\d+\.\d{2}/g, (n) => px(Number(n))))}</span></li>`).join("");
+    return `<p class="pr-disc-head">${head}</p><ul class="pr-disc-list">${items}</ul>`;
+  }).join("");
+  return `<div class="pr-disc"><h4>照打法${score ? ` <b class="num">纪律 ${score.passed}/${score.scored}</b>` : "：没有可评的项"}</h4>${body}
+    <p class="muted">只看照没照打法，不看盈亏。打法、条件看进场前一根收盘；止损用计划的进场后止损（没有就用自己的），收盘跌破后下一根开盘该走。仓位练习按整笔成交，不评。</p></div>`;
 }
 
 // ---------- 启动 ----------

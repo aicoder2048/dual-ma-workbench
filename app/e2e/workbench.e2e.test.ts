@@ -1548,11 +1548,22 @@ describe("盲测练习", () => {
     expect(await page.textContent("#practice .pr-result")).toContain("同期买入持有");
     expect(await page.textContent("#chart-readout")).toMatch(/20\d\d-\d\d-\d\d/); // 图上换回真实日期
     expect(await usable(page, '#practice [data-act="new"]')).toBe(true);
+    // 照打法：揭晓后才有；四项，每项写哪一根、为什么；止损是自动卖的，不会晚
+    expect(await usable(page, "#practice .pr-disc h4")).toBe(true);
+    expect(await page.textContent("#practice .pr-disc h4")).toMatch(/照打法 纪律 \d\/\d/);
+    const rows = await page.locator("#practice .pr-disc-list li").allTextContents();
+    expect(rows.map((r) => r.replace(/\s+/g, "").slice(1, 3))).toEqual(["打法", "条件", "止损", "仓位"]);
+    expect(rows[2]).toContain("✓");
+    expect(await usable(page, "#practice .pr-disc-list li:nth-child(3)")).toBe(true);
     await shot(page, "5-reveal");
     await page.waitForFunction((t) => document.querySelector("#journal-list .j-item")?.textContent?.includes(t), REAL_TICKER);
     // 练习的统计在「练习」标签：1 题已揭晓
     await page.click("#tab-practice");
     expect(await page.textContent("#practice-stats")).toContain("已揭晓 1");
+    const split = await page.locator("#practice-stats .j-stats tbody th").allTextContents();
+    expect(split).toEqual(["照计划", "没照", "纪律高", "纪律低", "全部"]);
+    expect(await usable(page, "#practice-stats .pr-disc-sum")).toBe(true);
+    expect(await page.textContent("#practice-list")).toMatch(/纪律 \d\/\d/);
     await shot(page, "6-stats");
     expect(errors).toEqual([]);
     await page.close();
