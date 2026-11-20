@@ -14,10 +14,10 @@ HERE = Path(__file__).resolve().parent
 SCRIPTS = HERE.parent / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 
+pytest.importorskip("opencc")  # 没装 opencc 时整个文件跳过；要先于 import to_simplified，否则收集阶段就报错
+
 import to_simplified  # noqa: E402
 import verify_quotes  # noqa: E402
-
-pytest.importorskip("opencc")
 
 HANT = """WEBVTT
 
