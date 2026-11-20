@@ -357,6 +357,7 @@ body.offline .status-pill .dot { background: var(--bad); }
 .settings-btn { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 12px 0 9px; border: 1px solid var(--line); border-radius: 8px; background: var(--card); cursor: pointer; font-size: 13px; color: var(--fg); }
 .settings-btn svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .settings-btn:hover, .settings-btn[aria-expanded="true"] { border-color: var(--accent); color: var(--accent); }
+.practice-btn[aria-expanded="true"] { background: var(--accent-soft); }
 
 /* 左栏顶部：搜索 */
 .left .search { display: flex; align-items: center; gap: 8px; margin: 12px 12px 4px; padding: 0 10px; height: 36px; background: var(--card); border: 1px solid var(--line); border-radius: 10px; }
@@ -716,8 +717,70 @@ footer .j-close { font-size: 13px; }
 .j-yn legend { font-size: 12.5px; color: var(--muted); margin-bottom: 2px; }
 .j-outcome { font-size: 14px; }
 
-/* ===================== 盲测练习 ===================== */
-.j-tag { font: 500 10.5px var(--sans); color: var(--neutral); border: 1px solid color-mix(in srgb, var(--neutral) 50%, var(--line)); border-radius: 999px; padding: 0 6px; vertical-align: 2px; }
+/* ===================== 练习页：顶栏下面整块盖住工作台 ===================== */
+.practice-page { position: fixed; z-index: 12; top: var(--bar-h); left: 0; right: 0; bottom: 0; background: var(--bg); background-image: var(--paper); display: flex; flex-direction: column; }
+.practice-page[hidden] { display: none; }
+.pp-head { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 16px; padding: 10px 20px; border-bottom: 1px solid var(--line); background: var(--panel); }
+.pp-head h2 { margin: 0; font: 700 17px var(--heading); }
+.pp-sub { font-size: 12.5px; color: var(--muted); }
+.pp-tabs { display: flex; gap: 4px; }
+.pp-tabs button { border: 1px solid var(--line); background: var(--card); color: var(--muted); border-radius: 999px; padding: 3px 14px; font: 600 13px var(--sans); cursor: pointer; }
+.pp-tabs button[aria-selected="true"] { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+.pp-close { margin-left: auto; border: 1px solid var(--line); background: var(--card); color: var(--fg); border-radius: 8px; padding: 4px 12px; font-size: 13px; cursor: pointer; }
+.pp-close:hover { border-color: var(--accent); color: var(--accent); }
+.pp-body { flex: 1; min-height: 0; overflow-y: auto; }
+.pp-body[hidden] { display: none; }
+.pp-combo { width: min(760px, 100%); margin: 0 auto; padding: 8px 4px 20px; }
+
+/* 识别题：左边图，右边题和答案；默认视图里一屏放下，不用滚动 */
+.dr-layout { height: 100%; display: grid; grid-template-columns: minmax(0, 1fr) clamp(300px, 30vw, 400px); gap: var(--gap); padding: 12px 20px 16px; box-sizing: border-box; }
+.dr-stage { min-height: 0; display: flex; flex-direction: column; gap: 6px; background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 12px; }
+.dr-kinds { display: flex; flex-wrap: wrap; gap: 4px; }
+.dr-kinds button { border: 1px solid var(--line); background: var(--card); color: var(--muted); border-radius: 999px; padding: 2px 11px; font-size: 12.5px; cursor: pointer; }
+.dr-kinds button[aria-checked="true"] { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); font-weight: 600; }
+.dr-kinds small { margin-left: 4px; font: 11px var(--mono); color: var(--faint); }
+.dr-stats { margin: 0; font-size: 12.5px; color: var(--muted); }
+.dr-stats b { color: var(--fg); }
+.dr-readout { margin: 0; min-height: 1.4em; font-size: 12px; color: var(--muted); }
+.dr-chart { flex: 1; min-height: 240px; }
+.dr-panel { min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
+.dr-panel > div { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 14px; }
+.dr-panel > div[hidden] { display: none; }
+.dr-head { margin: 0; display: flex; align-items: center; justify-content: space-between; }
+.dr-kind { font: 700 15px var(--heading); color: var(--accent); }
+.dr-timer { font-size: 12px; color: var(--muted); }
+.dr-context { margin: 4px 0 0; font-size: 13px; color: var(--muted); }
+.dr-part { margin-top: 8px; }
+.dr-prompt { margin: 0 0 6px; font-size: 14px; font-weight: 600; }
+.dr-choices { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5px; }
+.dr-choice { display: flex; align-items: center; gap: 6px; text-align: left; border: 1px solid var(--line); background: var(--panel); color: var(--fg); border-radius: 8px; padding: 5px 8px; font: 13px var(--sans); cursor: pointer; }
+.dr-choice kbd { font: 11px var(--mono); color: var(--faint); border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; }
+.dr-choice:hover:not(:disabled), .dr-choice[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
+.dr-choice:disabled { cursor: default; opacity: .75; }
+.dr-choice.right { border-color: var(--up); color: var(--up); background: color-mix(in srgb, var(--up) 10%, var(--card)); opacity: 1; font-weight: 600; }
+.dr-choice.wrong { border-color: var(--down); color: var(--down); background: var(--bad-soft); opacity: 1; }
+.dr-keys { margin: 8px 0 0; font-size: 11.5px; color: var(--faint); }
+.answered .dr-part, .answered .dr-keys { display: none; }
+.dr-wait { margin: 0; font-size: 13px; color: var(--muted); }
+.dr-feedback { display: grid; gap: 6px; font-size: 13px; }
+.dr-verdict { margin: 0; display: flex; align-items: center; gap: 10px; font: 700 15px var(--heading); }
+.dr-verdict.ok { color: var(--up); } .dr-verdict.no { color: var(--down); }
+.dr-verdict .num { font: 12px var(--mono); color: var(--muted); }
+.dr-next { margin-left: auto; border: 1px solid var(--accent); background: var(--accent); color: var(--on-accent); border-radius: 8px; padding: 3px 12px; font: 600 13px var(--sans); cursor: pointer; }
+.dr-answers { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.dr-answers .ok { color: var(--up); } .dr-answers .no { color: var(--down); }
+.dr-answer, .dr-hint { margin: 0; }
+.dr-hint { color: var(--neutral); }
+.dr-evidence { margin: 0; padding-left: 18px; display: grid; gap: 3px; color: var(--fg); }
+.dr-rules { margin: 0; display: flex; flex-wrap: wrap; gap: 4px; }
+.dr-rule { font-size: 11.5px; border: 1px solid var(--src-bg); background: var(--src-bg); color: var(--src-fg); border-radius: 6px; padding: 1px 6px; }
+.dr-rule b { margin-right: 4px; font-family: var(--mono); }
+@media (max-width: 900px) {
+  .dr-layout { grid-template-columns: 1fr; height: auto; }
+  .dr-chart { min-height: 300px; }
+}
+
+/* ===================== 盲测练习（综合题） ===================== */
 .pr-start { margin: 8px 12px 0; display: grid; gap: 6px; }
 .pr-new { justify-self: start; border: 1px solid var(--accent); background: var(--accent); color: var(--card); border-radius: 8px; padding: 4px 14px; font: 600 13px var(--sans); cursor: pointer; }
 .pr-new:disabled { opacity: .6; cursor: default; }
@@ -755,6 +818,7 @@ body.practice-revealed #verdict, body.practice-revealed #steps, body.practice-re
 .pr-tools .pr-reveal[data-armed="1"] { border-color: var(--down); color: var(--down); }
 .pr-result { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 13.5px; }
 .pr-trades { margin: 0; padding-left: 18px; font-size: 12.5px; color: var(--muted); }
+.pr-trades button { margin-left: 8px; font-size: 12px; background: var(--card); border: 1px solid var(--line); border-radius: 999px; padding: 0 10px; cursor: pointer; color: var(--accent); }
 .pr-disc { border-top: 1px dashed var(--line); padding-top: 6px; font-size: 12.5px; }
 .pr-disc h4 { margin: 0 0 4px; font-size: 13px; }
 .pr-disc-head { margin: 4px 0 2px; color: var(--muted); }
@@ -764,5 +828,4 @@ body.practice-revealed #verdict, body.practice-revealed #steps, body.practice-re
 .pr-disc-list .pass .mark { color: var(--up); } .pr-disc-list .fail .mark { color: var(--down); } .pr-disc-list .na { color: var(--muted); }
 .pr-disc-sum { margin: 4px 0 0; font-size: 11.5px; color: var(--muted); }
 .practice p { margin: 0; font-size: 12.5px; }
-.j-tag { white-space: nowrap; }
 .journal-dialog .j-yn label { margin-right: 12px; }

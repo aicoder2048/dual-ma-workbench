@@ -107,8 +107,10 @@ export interface Solve {
 export interface ProjectionOut { dates: string[]; hurdles: HurdlePath[]; scenarios: Scenario[]; solves: Solve[] }
 /** 顶底构造（structure.py）。形成中时 next_at 是下一根要越过的价位，bars_left 是最少还差几根。 */
 export interface Construct {
-  side: "顶部构造" | "底部构造"; state: "形成中" | "已完成" | "已破坏";
+  side: "顶部构造" | "底部构造"; state: "形成中" | "已完成" | "已破坏"; extreme: boolean;
   pivot_date: string; pivot_price: number; invalidation: number;
+  /** 更低的高点（底部：更高的低点）、完成、破坏的那一根；还没有为 null。 */
+  lh_date: string | null; done_date: string | null; broken_date: string | null;
   complete_at: number | null; next_at: number | null; bars_left: number | null;
 }
 export interface StructureOut { available: boolean; top?: Construct | null; bottom?: Construct | null }

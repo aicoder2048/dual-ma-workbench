@@ -8,6 +8,7 @@ import { Analyzer, pythonRunner } from "./analyze.ts";
 import { codeFingerprint } from "./build.ts";
 import { createHandler } from "./http.ts";
 import { Journal } from "./journal.ts";
+import { DrillBank } from "./practice/drills.ts";
 import { Practice, yfinancePrices } from "./practice/service.ts";
 import { SessionStore } from "./practice/session.ts";
 import { PROJECT_ROOT, SOURCE_DOCS, SourceLibrary } from "./sources.ts";
@@ -25,7 +26,11 @@ const models = await catalog.list();
 const settings = new SettingsStore(undefined, { model: initialModel(models, piDefaultModel()) });
 const analyzer = new Analyzer(undefined, undefined, () => settings.get().dataSource);
 const journal = new Journal();
-const practice = new Practice({ store: new SessionStore(), journal, prices: yfinancePrices(), run: pythonRunner });
+const prices = yfinancePrices();
+const practice = new Practice({ store: new SessionStore(), journal, prices, run: pythonRunner });
+// 识别题库：启动就在后台补题，第一次打开练习时多半已经有题
+const drills = new DrillBank({ prices, autoFill: true });
+void drills.topUp();
 analyzer.mount(practice);
 const library = SourceLibrary.load();
 const workbench = new Workbench(analyzer, library, { settings });
@@ -34,6 +39,7 @@ const handler = createHandler({
   watchlist: new Watchlist(),
   journal,
   practice,
+  drills,
   library,
   publicDir: resolve(import.meta.dir, "../public"),
   settings,

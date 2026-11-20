@@ -1,4 +1,4 @@
-// 盲测练习：左栏「练习」出题、列出每一题和统计；中栏顶部的练习条记计划、往后放、揭晓。
+// 综合题（整笔盲测）：练习页「综合题」出题、列出每一题和统计；开始或接着做时关掉练习页，在中栏顶部的练习条记计划、往后放、揭晓。
 // 服务端只发到"现在"那根；这里只负责显示和发操作，成交、揭晓都由服务端算。
 import { appendDelta, DEFAULT_SPEED, SPEEDS, speedMs } from "./replay.js";
 
@@ -22,7 +22,7 @@ async function post(path, body) {
   return deps.api(path, { method: "POST", body: JSON.stringify(body) });
 }
 
-// ---------- 左栏：出题、列表、统计 ----------
+// ---------- 练习页「综合题」：出题、列表、统计 ----------
 
 function statsHtml(st) {
   const v = st.vsHold;
@@ -38,7 +38,7 @@ function statsHtml(st) {
       <tbody>${row("照计划", c.followed)}${row("没照", c.deviated)}${row("纪律高", st.discipline.high)}${row("纪律低", st.discipline.low)}${row("全部", c.all)}</tbody></table>
     ${st.discipline.score ? `<p class="pr-disc-sum">照打法：✓ <b class="num">${st.discipline.score.passed}/${st.discipline.score.scored}</b> 项（纪律高 = 这笔没有 ✗）</p>` : ""}
     ${c.all.n && c.all.small ? `<p class="j-small">已离场 ${c.all.n} 笔，少于 10 笔：只当参考。</p>` : ""}
-    ${c.unreviewed ? `<p class="j-small">${c.unreviewed} 笔还没复盘（在交易日志里点开填）。</p>` : ""}`;
+    ${c.unreviewed ? `<p class="j-small">${c.unreviewed} 笔还没复盘（打开那一题，揭晓页上点「复盘」）。</p>` : ""}`;
 }
 
 function cardHtml(s) {
@@ -55,7 +55,7 @@ export async function refreshList() {
     const o = await deps.api("/api/practice");
     $("practice-stats").innerHTML = statsHtml(o.stats);
     $("practice-list").innerHTML = o.sessions.length ? o.sessions.map(cardHtml).join("")
-      : `<li class="j-empty">点「出一道题」：随机一只票、随机一天，藏起代码和日期，你来判断。</li>`;
+      : `<li class="j-empty">点「出一道综合题」：随机一只票、随机一天，藏起代码和日期，你来判断。</li>`;
   } catch (err) {
     $("practice-stats").innerHTML = `<p class="j-error" role="alert">${esc(err.message)}</p>`;
   }
@@ -94,6 +94,7 @@ function labelFn(chart, t0) {
 }
 
 async function enter(view) {
+  deps.closePage();
   stop();
   cur = { view, chart: view.chart };
   document.body.classList.add("practicing");
@@ -322,7 +323,7 @@ function showReveal() {
   // 日志里记的是指数，这里换回真实价格，和图对得上
   const px = (x) => f2(x * r.priceFactor);
   const trades = v.trades.filter((e) => e.state === "closed").map((e) =>
-    `<li>${esc(e.entry.date)} 买 @ ${px(e.entry.price)} → ${esc(e.exit.date)} 卖 @ ${px(e.exit.price)}（${esc(e.exit.reason.replace(/\d+\.\d+/g, (n) => px(Number(n))))}）</li>`).join("");
+    `<li>${esc(e.entry.date)} 买 @ ${px(e.entry.price)} → ${esc(e.exit.date)} 卖 @ ${px(e.exit.price)}（${esc(e.exit.reason.replace(/\d+\.\d+/g, (n) => px(Number(n))))}）<button type="button" data-review="${esc(e.id)}">复盘</button></li>`).join("");
   $("practice").innerHTML = `
     <div class="pr-head"><b>${esc(v.label)} 揭晓：${esc(r.ticker)}</b><span class="pr-phase">揭晓</span>
       <span>开局 <b class="num">${esc(r.start)}</b>，揭晓在 <b class="num">${esc(r.at)}</b>（${tLabel(v.t)}），图上一直画到 ${esc(r.end)}</span></div>
@@ -333,8 +334,8 @@ function showReveal() {
     </div>
     ${trades ? `<ul class="pr-trades">${trades}</ul>` : `<p class="muted">这一题没有成交。</p>`}
     ${disciplineHtml(res.discipline, r.score, v.trades, px)}
-    <p class="muted">图上的价格已经换回真实价格；练习时看到的是指数（第一根收盘 = 100）。照没照计划、教训，在左栏「交易日志」点开这一笔填。</p>
-    <div class="pr-tools"><button type="button" data-act="new">再出一道题</button><button type="button" data-act="journal">去复盘</button></div>`;
+    <p class="muted">图上的价格已经换回真实价格；练习时看到的是指数（第一根收盘 = 100）。照没照计划、教训，点每一笔后面的「复盘」填。练习的单不进交易日志的列表。</p>
+    <div class="pr-tools"><button type="button" data-act="new">再出一道题</button><button type="button" data-act="list">练习页</button></div>`;
   $("center-scroll").scrollTop = 0;
   deps.refreshJournal();
   refreshList();
@@ -370,6 +371,8 @@ export function initPractice(opts) {
   $("practice-list").addEventListener("click", openItem);
   $("practice-list").addEventListener("keydown", openItem);
   $("practice").addEventListener("click", (e) => {
+    const review = e.target.closest("button[data-review]");
+    if (review) return deps.openEntry(review.dataset.review);
     const b = e.target.closest("button[data-act]");
     if (!b || !cur) return;
     switch (b.dataset.act) {
@@ -388,7 +391,7 @@ export function initPractice(opts) {
         return act({ type: "reveal" });
       case "analyze": return deps.loadAnalysis(cur.view.label, tLabel(cur.view.t));
       case "new": return start();
-      case "journal": return deps.showJournal();
+      case "list": return deps.openPage("combo");
     }
   });
   $("practice").addEventListener("change", (e) => {

@@ -6,8 +6,10 @@ import { initAsofInput, initSplitters } from "./layout.js";
 import { initSelection } from "./selection.js";
 import { initAskMenu, selectionLabel } from "./askmenu.js";
 import { collapseDrawer, initDrawer, updatePeek } from "./drawer.js";
-import { initJournal, refreshJournal, selectTab } from "./journal.js";
+import { initJournal, openEntry, refreshJournal } from "./journal.js";
+import { initDrills, onShow as showDrills } from "./drills.js";
 import * as practice from "./practice.js";
+import { closePage, initPracticePage, openPage } from "./practicepage.js";
 import { resolveTicker } from "./names.js";
 import { applyRemoteSettings, initSettings, openSettings } from "./settings.js";
 import { chartLevels, conclusionCard, forecastAnswer, holdingRow, installTips, leanName, planBody, playAnswer, pnlText, stanceOf, stepVisuals, trendAnswer } from "./viz.js";
@@ -491,12 +493,14 @@ async function main() {
       input.select();
     },
   });
+  initDrills({ api });
+  initPracticePage({ onMode: (m) => m === "drill" && showDrills() });
   const journal = initJournal({
     api, current: () => ({ data: state.data, asof: state.asof, pos: loadPosition(state.ticker) }),
     record: () => Boolean(practice.active() && (practice.planDialog(), true)),
   });
   const drills = practice.initPractice({
-    api, chart: getChart, loadAnalysis, refreshJournal, showJournal: () => selectTab("journal"),
+    api, chart: getChart, loadAnalysis, refreshJournal, openEntry, openPage, closePage,
     data: () => state.data,
     analysisDate: () => (state.data && practice.chartFor(state.data.analysis.label) ? state.data.analysis.date : null),
     setLevels: (list) => {
