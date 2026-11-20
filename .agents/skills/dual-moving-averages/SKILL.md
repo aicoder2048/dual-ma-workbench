@@ -14,7 +14,7 @@ description: 用"双均线"方法（每个周期同时看 MA 和 EMA，默认 20
 | `references/concepts.md` | 概念：MA/EMA 的方向和门槛、抵扣价、钟表方向、排列、双交叉、顶底构造和波段 |
 | `references/rules.md` | 规则：编号（A 公理、J 判定、P 动作）、IF / THEN、字幕出处，和每个阈值是视频的数、校准值还是脚本自定。回答里引用规则写编号 |
 | `references/playbooks.md` | 打法：每种类型 × 空仓 / 持仓用哪几条规则 |
-| `references/cases.md` | 案例：视频里的 TSLA 2021、SPY 2020、AAPL、GOOGL、GE / 天然气、假突破，和改造后的回放基准 |
+| `references/cases.md` | 案例：视频里的 TSLA 2021、SPY 2020、AAPL、GOOGL、GE / 天然气、假突破、NQ 2020、QQQ 2020、原油 2020、化石，和改造后的回放基准 |
 
 ## 原则
 
