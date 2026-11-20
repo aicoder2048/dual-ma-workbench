@@ -364,7 +364,10 @@ export function createChart(box, legendEl) {
     } else if (prev.mode !== "replay" || rs.index !== prev.index) {
       const r = chart.timeScale().getVisibleLogicalRange();
       show(sliceAt(data, rs.index));
-      windowAt(rs.index, r ? r.to - r.from : 120);
+      // 回退一根时，用户把图拖到别处看（回放那根不在视图里）：视图留在原处，和前进一样不拉回来
+      const away = prev.mode === "replay" && rs.index === prev.index - 1 && r && r.to < prev.index;
+      if (away) chart.timeScale().setVisibleLogicalRange(r);
+      else windowAt(rs.index, r ? r.to - r.from : 120);
     }
     if ((prev.mode === "replay") !== (rs.mode === "replay")) paintLevels();
     syncReplay();

@@ -1109,6 +1109,15 @@ describe("K 线回放", () => {
     expect(Math.abs((r1.to - r1.from) - (r0.to - r0.from))).toBeLessThan(1);
     await page.keyboard.press("Shift+ArrowLeft");
     expect(await rp(page)).toMatchObject({ index: 198, bars: 199 });
+    // 暂停时把图拖到更早的地方看：回退不把视图拉回来
+    await page.evaluate(async () => (await import("/app.js")).getChart().chart.timeScale().setVisibleLogicalRange({ from: 40, to: 120 }));
+    await lr(); // 图表库下一帧才应用新范围（真拖动不会和按键在同一帧）
+    await page.keyboard.press("Shift+ArrowLeft");
+    expect(await rp(page)).toMatchObject({ index: 197, bars: 198 });
+    const dragged = (await lr())!;
+    expect(Math.abs(dragged.from - 40)).toBeLessThan(1);
+    expect(Math.abs(dragged.to - 120)).toBeLessThan(1);
+    await page.click(".replay-forward");
     await page.click(".replay-forward");
     expect(await rp(page)).toMatchObject({ index: 199, bars: 200 });
     await page.click(".replay-start");
