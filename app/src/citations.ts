@@ -6,6 +6,8 @@
  *
  * 服务端在回答结束后调用 validateCitations，把不存在的编号标出来，前端显示成红色。
  */
+import { buildForecast, buildPlans, planLine, playKey } from "./plan.ts";
+import { recordNote } from "./record.ts";
 import type { SourceLibrary } from "./sources.ts";
 
 export type CitationKind = "S" | "D";
@@ -101,7 +103,15 @@ export interface Solve {
   status: "有临界价位" | "任何价位都成立" | "任何价位都不成立";
   level: number | null; pct: number | null; side: "以上" | "以下" | null;
 }
-export interface ProjectionOut { hurdles: HurdlePath[]; scenarios: Scenario[]; solves: Solve[] }
+/** dates：推演第 1…30 天的日期（工作日，不扣节假日）。 */
+export interface ProjectionOut { dates: string[]; hurdles: HurdlePath[]; scenarios: Scenario[]; solves: Solve[] }
+/** 顶底构造（structure.py）。形成中时 next_at 是下一根要越过的价位，bars_left 是最少还差几根。 */
+export interface Construct {
+  side: "顶部构造" | "底部构造"; state: "形成中" | "已完成" | "已破坏";
+  pivot_date: string; pivot_price: number; invalidation: number;
+  complete_at: number | null; next_at: number | null; bars_left: number | null;
+}
+export interface StructureOut { available: boolean; top?: Construct | null; bottom?: Construct | null }
 
 export interface FrameLine { period: number; ma: number; ema: number }
 export type Unavailable = { available: false; reason: string };
@@ -140,6 +150,7 @@ export interface Analysis {
   steps: PairProgress[];
   thresholds: Record<string, { value: number; source: string }>;
   projection: ProjectionOut;
+  structure: StructureOut;
   weekly: Weekly;
   hourly: Hourly;
   lean: Lean;
@@ -221,6 +232,14 @@ export function buildFacts(a: Analysis): Facts {
   put("推演.排列.MA", `价格不变 ${sc.days} 天后的 MA 排列`, `${a.arr_ma} → ${sc.end_arr_ma}`);
   put("推演.排列.EMA", `价格不变 ${sc.days} 天后的 EMA 排列`, `${a.arr_ema} → ${sc.end_arr_ema}`);
   for (const s of a.projection.solves) put(`求解.${solveKey(s)}`, `${s.days} 天内${s.happen ? "让" : "不让"}「${s.event}」发生要持平在哪`, solveText(s));
+  const plans = buildPlans(a);
+  put("结论.空仓", "空仓的做法、触发价、进场后止损", planLine(plans.flat, a.close, true));
+  put("结论.持仓", "持仓的做法、加减仓价位、止损", planLine(plans.holding, a.close, false));
+  const fc = buildForecast(a, plans);
+  put("推演.保持", `类型线 MA60、MA120 未来 ${fc.days} 天能保持多久、守在哪`, fc.hold);
+  put("推演.最早", "这套打法的条件最早哪天能齐", fc.earliest);
+  put("推演.失效", "什么价位推翻这个判断", fc.invalid.text);
+  put("回测", "这套打法的回测记录（skill 的 backtest.py）", recordNote(playKey(a)).text);
   return facts;
 }
 

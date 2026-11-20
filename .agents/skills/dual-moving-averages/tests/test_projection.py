@@ -134,6 +134,14 @@ def test_event_true_at_every_level_is_reported_not_solved():
 def test_projection_is_json_safe():
     out = projection(load_fixture("TSLA", "2021-04-14"))
     json.dumps(out, ensure_ascii=False, allow_nan=False)
-    assert set(out) == {"hurdles", "scenarios", "solves"}
+    assert set(out) == {"dates", "hurdles", "scenarios", "solves"}
     assert [h["period"] for h in out["hurdles"]] == list(dma.PERIODS)
     assert out["scenarios"][0]["name"] == "持平"
+
+
+def test_projection_is_one_30_day_horizon_with_dates():
+    out = projection(load_fixture("SPY", "2024-04-19"))
+    # 推演第 1 天是下一个工作日；30 天的求解和 30 天的情景用同一串日期
+    assert out["dates"][0] == "2024-04-22"
+    assert len(out["dates"]) == out["scenarios"][0]["days"] == 30
+    assert {s["days"] for s in out["solves"]} == {10, 20, 30}

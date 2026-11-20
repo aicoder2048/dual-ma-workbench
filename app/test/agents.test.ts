@@ -90,6 +90,11 @@ describe("提示词", () => {
     expect(p).not.toContain("网页报告");
   });
   test("鸿雁提示强调先查原文", () => expect(advisorPrompt(library)).toContain("search_sources"));
+  test("两个 agent 的提示用角色 + 名字自称，鸿雁把买卖问题转给分析师·长风", () => {
+    expect(analystPrompt(library)).toContain("你是「分析师·长风」");
+    expect(advisorPrompt(library)).toContain("你是「解语花·鸿雁」");
+    expect(advisorPrompt(library)).toContain("请他到中栏问分析师·长风");
+  });
   test("页面上下文", () => {
     expect(analystContext({ ticker: "NVDA", asof: null })).toContain("NVDA，最新行情");
     expect(analystContext({ ticker: "TSLA", asof: "2021-04-14" })).toContain("回放日期 2021-04-14");

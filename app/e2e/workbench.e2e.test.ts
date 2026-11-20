@@ -386,7 +386,7 @@ describe("取数失败", () => {
     warningNext = "今日 K 线未完成（美东 13:03，收盘 16:00）。";
     const { page, errors } = await open(undefined, "AMZN").finally(() => { warningNext = null; });
     expect(await page.isVisible("#warning")).toBe(true);
-    // 长风对话很长、滚过了总结：提示条出现
+    // 长风对话很长、滚过了结论：提示条出现
     await page.evaluate(async () => {
       const { panels } = await import("/app.js");
       panels.analyst.history([{ role: "user", text: "长对话" },
@@ -502,13 +502,15 @@ describe("K 线图工具", () => {
     await page.close();
   }, 30_000);
 
-  test("门槛线：把「改变判断」的价位画在图上，可以关掉", async () => {
+  test("价位线：结论里的价位（不买的打法是「先看」）和推翻判断的价位画在图上，可以关掉", async () => {
     const { page } = await open();
     await page.waitForSelector("#chart canvas");
     const levels = () => page.evaluate(async () => (await import("/app.js")).getChart().levels());
+    // NVDA 加速下跌：空仓不买，先看底部构造下一步 170.00；推翻判断：30 天内 20/60 双金叉的价位
     const on = await levels();
-    expect(on.length).toBeGreaterThan(0);
-    expect(on[0]).toMatchObject({ title: "站上 EMA20", price: expect.any(Number) });
+    expect(on.map((l: { kind: string; title: string }) => [l.kind, l.title])).toEqual([["trigger", "先看"], ["invalid", "判断失效"]]);
+    expect(on[0].price).toBe(170);
+    expect(on[1].price).toBeCloseTo(206.26, 2);
     await page.click(".levels-toggle");
     expect(await levels()).toEqual([]);
     await page.close();
@@ -560,26 +562,84 @@ describe("自己画水平线", () => {
 });
 
 
-describe("三步报告：每一步先给结论", () => {
-  test("看大局：第一眼就是趋势类型；类型对照表在这里，不在定策略", async () => {
+/** 元素在当前视图里看得见、没被别的东西挡住（elementFromPoint 落在它自己身上）。 */
+const notCovered = (page: Page, sel: string) => page.evaluate((sel) => {
+  const el = document.querySelector<HTMLElement>(sel)!;
+  const r = el.getBoundingClientRect();
+  const hit = document.elementFromPoint(r.x + Math.min(20, r.width / 2), r.y + r.height / 2);
+  return r.height > 0 && !!hit && el.contains(hit);
+}, sel);
+/** 像用户一样把这一块滚进中栏视野（滚到它的开头）。 */
+const scrollIntoCenter = (page: Page, sel: string) => page.evaluate(async (sel) => {
+  const s = document.getElementById("center-scroll")!;
+  const el = document.querySelector<HTMLElement>(sel)!;
+  s.scrollTop += el.getBoundingClientRect().top - s.getBoundingClientRect().top - 40;
+  await new Promise((ok) => requestAnimationFrame(() => requestAnimationFrame(ok)));
+}, sel);
+
+describe("中栏：结论 → 看大局 → 找打法 → 做推演", () => {
+  test("顺序：结论、K 线图、看大局、找打法、做推演；没有单独的规则清单卡", async () => {
     const { page, errors } = await open();
-    const step = page.locator('[data-step="big_picture"]');
-    expect(await step.locator(".answer").textContent()).toContain("加速下跌");
-    expect(await step.locator("table.trend").count()).toBe(1);
-    expect(await page.locator('[data-step="strategy"] table.trend').count()).toBe(0);
+    const order = await page.evaluate(() => [...document.querySelectorAll("#verdict, .chart-card, #steps .step")]
+      .map((e) => (e as HTMLElement).dataset.step || e.id || "chart"));
+    expect(order).toEqual(["verdict", "chart", "big_picture", "play", "forecast"]);
+    expect(await page.locator("#steps .step h2").allTextContents()).toEqual(["看大局", "找打法", "做推演"]);
     expect(errors).toEqual([]);
     await page.close();
   }, 30_000);
 
-  test("定策略：空仓 / 持仓切换，做法跟着变；看方向的「对你」也跟着变；刷新后记住", async () => {
+  test("结论：默认视图第一眼就是空仓、持仓两行，带价位；看得见、没被挡；回测照实说不买", async () => {
+    const { page, errors } = await open();
+    for (const sel of ['#verdict .concl-row[data-situation="flat"] .what b', '#verdict .concl-row[data-situation="holding"] .what b', "#verdict .record"]) {
+      expect({ sel, ok: await notCovered(page, sel) }).toEqual({ sel, ok: true });
+    }
+    const flat = (await page.textContent('#verdict .concl-row[data-situation="flat"]'))!;
+    expect(flat).toContain("不抢反弹");
+    expect(flat).toContain("先看"); // 不买的打法不叫「触发」
+    expect(flat).toContain("170.00");
+    const holding = (await page.textContent('#verdict .concl-row[data-situation="holding"]'))!;
+    expect(holding).toContain("反弹再减仓");
+    expect(holding).toContain("183.08");
+    expect(await page.textContent("#verdict .record")).toContain("空仓不买，回测没有进场");
+    expect(errors).toEqual([]);
+    await page.close();
+  }, 30_000);
+
+  test("看大局：第一眼就是趋势类型；类型对照表在这里，不在找打法", async () => {
+    const { page, errors } = await open();
+    const step = page.locator('[data-step="big_picture"]');
+    expect(await step.locator(".answer").textContent()).toContain("加速下跌");
+    expect(await step.locator("table.trend").count()).toBe(1);
+    expect(await page.locator('[data-step="play"] table.trend').count()).toBe(0);
+    expect(errors).toEqual([]);
+    await page.close();
+  }, 30_000);
+
+  test("找打法：条件清单逐条 ✓ / ✗ / 需看图，没满足的写还差什么；滚到它时看得见、没被挡", async () => {
+    const { page, errors } = await open();
+    const card = '[data-step="play"]';
+    await scrollIntoCenter(page, card);
+    expect(await notCovered(page, `${card} .checklist li`)).toBe(true);
+    const rows = await page.locator(`${card} .checklist li`).evaluateAll((els) =>
+      els.map((e) => [(e as HTMLElement).dataset.rule, e.querySelector(".mark")!.textContent]));
+    expect(rows).toEqual([["P7", "✓"], ["P8", "✓"], ["P9", "✗"], ["J19", "✗"], ["J21", "✗"]]);
+    expect(await page.textContent(`${card} .checklist li[data-rule="J21"] .need`)).toContain("170.00");
+    expect(await page.textContent(`${card} .missing`)).toContain("空仓不买");
+    expect(await page.locator(`${card} details.all-rules`).getAttribute("open")).toBeNull(); // 全部规则折叠在最下面
+    expect(errors).toEqual([]);
+    await page.close();
+  }, 30_000);
+
+  test("找打法：空仓 / 持仓切换，做法和图上的价位线跟着变；刷新后记住", async () => {
     const { page } = await open();
-    const plan = page.locator('[data-step="strategy"] .answer');
-    const forYou = page.locator('[data-step="direction"] .effect');
+    await page.waitForSelector("#chart canvas");
+    const plan = page.locator('[data-step="play"] .plan-body');
+    const titles = () => page.evaluate(async () => (await import("/app.js")).getChart().levels().map((l: { title: string }) => l.title));
     expect(await plan.textContent()).toContain("不抢反弹");
-    const flatForYou = await forYou.textContent();
+    expect(await titles()).toEqual(["先看", "判断失效"]);
     await page.click('[data-pos="holding"]');
     expect(await plan.textContent()).toContain("反弹再减仓");
-    expect(await forYou.textContent()).not.toBe(flatForYou);
+    expect(await titles()).toEqual(["盯住", "判断失效"]);
     await page.fill("#pos-cost", "200");
     expect(await page.textContent(".pnl")).toContain("-24.5%");
     await page.reload();
@@ -589,11 +649,18 @@ describe("三步报告：每一步先给结论", () => {
     await page.close();
   }, 30_000);
 
-  test("看方向：有一句结论和「最早什么时候会变」", async () => {
+  test("做推演：三问只看 30 天，推翻判断的价位写出来；只给 2–3 个求解，其余折叠", async () => {
     const { page } = await open();
-    const ans = (await page.locator('[data-step="direction"] .answer').textContent())!;
-    expect(ans).toContain("逆风");
-    expect(ans).toContain("183.08");
+    const card = '[data-step="forecast"]';
+    await scrollIntoCenter(page, card);
+    expect(await notCovered(page, `${card} .q3 li`)).toBe(true);
+    const qs = await page.locator(`${card} .q3 li .pl`).allTextContents();
+    expect(qs).toEqual(["类型线能撑多久", "条件最早哪天齐", "什么价位推翻判断"]);
+    const ans = (await page.textContent(`${card} .answer`))!;
+    expect(ans).toContain("30 天");
+    expect(ans).toContain("206.26");
+    expect(await page.locator(`${card} .answer ul.solves li`).count()).toBeLessThanOrEqual(3);
+    expect(await page.locator(`${card} details.more`).getAttribute("open")).toBeNull();
     await page.close();
   }, 30_000);
 
@@ -604,7 +671,7 @@ describe("三步报告：每一步先给结论", () => {
   }, 30_000);
 });
 
-describe("抽屉：总结和 K 线图滚上去以后还能拉回来", () => {
+describe("抽屉：结论和 K 线图滚上去以后还能拉回来", () => {
   const scrollDown = (page: Page) => page.evaluate(() => {
     const s = document.getElementById("center-scroll")!;
     s.scrollTop = s.scrollHeight;
@@ -630,7 +697,7 @@ describe("抽屉：总结和 K 线图滚上去以后还能拉回来", () => {
     await page.close();
   }, 30_000);
 
-  test("点「总结」拉出模糊判断卡片", async () => {
+  test("点「结论」拉出结论卡片", async () => {
     const { page } = await open();
     await scrollDown(page);
     await page.waitForSelector("#peek", { state: "visible" });
@@ -646,13 +713,13 @@ describe("抽屉：总结和 K 线图滚上去以后还能拉回来", () => {
 
 
 describe("修正：抽屉条件、图表缩放", () => {
-  test("总结一滚出视野就出现提示条（K 线图还露着也一样）", async () => {
+  test("结论一滚出视野就出现提示条（K 线图还露着也一样）", async () => {
     const { page } = await open();
     await page.waitForSelector("#chart canvas");
     await page.evaluate(() => {
       const s = document.getElementById("center-scroll")!;
       const v = document.getElementById("verdict")!;
-      s.scrollTop = v.offsetTop + v.offsetHeight + 10; // 刚好滚过总结
+      s.scrollTop = v.offsetTop + v.offsetHeight + 10; // 刚好滚过结论
     });
     await page.waitForSelector("#peek", { state: "visible" });
     expect(await page.evaluate(() => {
@@ -736,29 +803,29 @@ describe("抽屉：五块，滚过哪块就出现哪块的按钮", () => {
     expect(await shown(page)).toEqual(["verdict", "chart"]);
     await scrollPast(page, '[data-step="big_picture"]');
     expect(await shown(page)).toEqual(["verdict", "chart", "big_picture"]);
-    await scrollPast(page, '[data-step="strategy"]');
-    expect(await shown(page)).toEqual(["verdict", "chart", "big_picture", "strategy"]);
-    await scrollPast(page, '[data-step="direction"]');
-    expect(await shown(page)).toEqual(["verdict", "chart", "big_picture", "strategy", "direction"]);
+    await scrollPast(page, '[data-step="play"]');
+    expect(await shown(page)).toEqual(["verdict", "chart", "big_picture", "play"]);
+    await scrollPast(page, '[data-step="forecast"]');
+    expect(await shown(page)).toEqual(["verdict", "chart", "big_picture", "play", "forecast"]);
     expect(errors).toEqual([]);
     await page.close();
   }, 30_000);
 
-  test("抽屉里的定策略照样能用（切持仓），收起后放回原处", async () => {
+  test("抽屉里的找打法照样能用（切持仓），收起后放回原处", async () => {
     const { page } = await open();
-    await scrollPast(page, '[data-step="direction"]');
-    await page.click('#peek [data-peek="strategy"]');
+    await scrollPast(page, '[data-step="forecast"]');
+    await page.click('#peek [data-peek="play"]');
     await page.click('#drawer [data-pos="holding"]');
-    expect(await page.locator('#drawer [data-step="strategy"] .answer').textContent()).toContain("反弹再减仓");
+    expect(await page.locator('#drawer [data-step="play"] .plan-body').textContent()).toContain("反弹再减仓");
     await page.click("#drawer .drawer-close");
-    expect(await page.locator('#steps [data-step="strategy"]').count()).toBe(1);
+    expect(await page.locator('#steps [data-step="play"]').count()).toBe(1);
     await page.click('[data-pos="flat"]'); // 还原，别影响其他测试
     await page.close();
   }, 30_000);
 
   test("抽屉开着时换股票：抽屉收起，不留下过期的内容", async () => {
     const { page, errors } = await open();
-    await scrollPast(page, '[data-step="direction"]');
+    await scrollPast(page, '[data-step="forecast"]');
     await page.click('#peek [data-peek="big_picture"]');
     await page.evaluate(async () => (await import("/app.js")).loadAnalysis("TSLA", null));
     await page.waitForFunction(() => document.getElementById("ticker")!.textContent === "TSLA");
@@ -802,27 +869,27 @@ describe("看大局的证据：按判断顺序的五问", () => {
     expect(await row.textContent()).toContain("11-13");
     expect(await row.textContent()).toContain("4/5");
     expect(await step.locator(".check-sum").textContent()).toContain("加速下跌·延伸");
-    expect(await step.locator("table.vt th:text('MA 方向')").count()).toBe(0); // 和总结卡片重复的均线表去掉了
+    expect(await step.locator("table.vt th:text('MA 方向')").count()).toBe(0); // 和结论卡片重复的均线表去掉了
     expect(errors).toEqual([]);
     await page.close();
   }, 30_000);
 });
 
-describe("定策略：成本价决定浮盈 / 浮亏的做法", () => {
-  test("填成本：高于现价是浮亏的做法，低于现价是浮盈的做法（保本价填成本）；看方向跟着变", async () => {
+describe("成本价决定浮盈 / 浮亏的做法", () => {
+  test("结论里填成本：高于现价，持仓那行变成浮亏；低于现价变成浮盈；找打法的做法跟着变", async () => {
     const { page } = await open();
-    const plan = page.locator('[data-step="strategy"] .plan-body');
-    const effect = page.locator('[data-step="direction"] .effect');
+    const plan = page.locator('[data-step="play"] .plan-body');
+    const row = page.locator('#verdict .concl-row[data-situation="holding"]');
     await page.click('[data-pos="holding"]');
     await page.fill("#pos-cost", "200");
     expect(await plan.textContent()).toContain("不等回本");
-    expect(await effect.textContent()).toContain("涨回成本");
+    expect(await row.locator(".who").textContent()).toBe("持仓 · 浮亏");
     await page.fill("#pos-cost", "133");
     const t = (await plan.textContent())!;
     expect(t).toContain("133.00");
     expect(t).not.toContain("{cost}");
     expect(t).not.toContain("浮亏影响心情");
-    expect(await effect.textContent()).not.toContain("涨回成本");
+    expect(await row.locator(".who").textContent()).toBe("持仓 · 浮盈");
     expect(await page.evaluate(() => document.activeElement?.id)).toBe("pos-cost"); // 边打字边更新，不丢焦点
     // 填了成本再切空仓、切回持仓：还是浮盈那一版
     await page.click('[data-pos="flat"]');
@@ -1147,31 +1214,15 @@ describe("K 线回放", () => {
   }, 30_000);
 });
 
-describe("规则清单：每条规则的结论能点到 rules.md", () => {
-  /** 像用户一样把这一块滚进中栏视野，再看它的标题有没有被别的东西挡住。 */
-  const scrollIntoCenter = (page: Page, sel: string) => page.evaluate(async (sel) => {
-    const s = document.getElementById("center-scroll")!;
-    const el = document.querySelector<HTMLElement>(sel)!;
-    s.scrollTop += el.getBoundingClientRect().top - s.getBoundingClientRect().top - 40;
-    await new Promise((ok) => requestAnimationFrame(() => requestAnimationFrame(ok)));
-  }, sel);
-  const notCovered = (page: Page, sel: string) => page.evaluate((sel) => {
-    const el = document.querySelector<HTMLElement>(sel)!;
-    const r = el.getBoundingClientRect();
-    const hit = document.elementFromPoint(r.x + Math.min(20, r.width / 2), r.y + r.height / 2);
-    return r.height > 0 && !!hit && el.contains(hit);
-  }, sel);
-
-  test("默认视图往下读：规则清单卡片看得见、没被挡；改名后的类型在页面上", async () => {
+describe("规则编号都能点到 rules.md", () => {
+  test("找打法清单里点规则编号：弹出 rules.md 那一条的 IF / THEN 和出处；改名后的类型在页面上", async () => {
     const { page, errors } = await open();
-    const card = '[data-step="rules"]';
-    expect(await page.locator(`${card} h2`).textContent()).toBe("规则清单");
-    await scrollIntoCenter(page, card);
-    expect(await notCovered(page, `${card} .step-head h2`)).toBe(true);
-    expect(await notCovered(page, `${card} .rule-list.used li`)).toBe(true);
-    expect(await page.locator(`${card} .answer`).textContent()).toContain("打法用到 5 条规则");
-    const used = await page.locator(`${card} .rule-list.used li`).evaluateAll((els) => els.map((e) => (e as HTMLElement).dataset.rule));
-    expect(used).toEqual(["P7", "P8", "P9", "J19", "J21"]);
+    await scrollIntoCenter(page, '[data-step="play"]');
+    await page.click('[data-step="play"] .checklist li[data-rule="P7"] .rule-ref');
+    await page.waitForSelector("#popover .pop-body");
+    expect(await page.textContent("#popover .pop-head")).toContain("P7（动作）");
+    expect(await page.textContent("#popover .pop-body")).toContain("THEN");
+    expect(await page.textContent("#popover .pop-path")).toContain("rules.md");
     const body = (await page.textContent("#center-scroll"))!;
     expect(body).toContain("加速下跌");
     expect(body).not.toMatch(/极度超卖|极度超买|健康上涨|健康下跌/);
@@ -1179,21 +1230,9 @@ describe("规则清单：每条规则的结论能点到 rules.md", () => {
     await page.close();
   }, 30_000);
 
-  test("点规则编号：弹出 rules.md 那一条的 IF / THEN 和出处", async () => {
-    const { page, errors } = await open();
-    await scrollIntoCenter(page, '[data-step="rules"]');
-    await page.click('[data-step="rules"] .rule-list.used li[data-rule="P7"] .rule-ref');
-    await page.waitForSelector("#popover .pop-body");
-    expect(await page.textContent("#popover .pop-head")).toContain("P7（动作）");
-    expect(await page.textContent("#popover .pop-body")).toContain("THEN");
-    expect(await page.textContent("#popover .pop-path")).toContain("rules.md");
-    expect(errors).toEqual([]);
-    await page.close();
-  }, 30_000);
-
-  test("定策略的条件也带规则编号，点开是同一个弹窗", async () => {
+  test("具体做法的条件也带规则编号，点开是同一个弹窗", async () => {
     const { page } = await open();
-    const chip = page.locator('[data-step="strategy"] .plan-rules .rule-ref').first();
+    const chip = page.locator('[data-step="play"] .plan-rules .rule-ref').first();
     expect(await chip.textContent()).toBe("P7");
     await chip.click();
     await page.waitForSelector("#popover .pop-body");
@@ -1201,24 +1240,35 @@ describe("规则清单：每条规则的结论能点到 rules.md", () => {
     await page.close();
   }, 30_000);
 
-  test("看方向有门槛路径和持平情景（脚本的 projection）", async () => {
+  test("做推演默认只列 MA60、MA120 的 30 天门槛；持平情景折叠在「更多推演」里", async () => {
     const { page } = await open();
-    const dir = page.locator('[data-step="direction"]');
-    expect(await dir.locator("table.hurdles tbody tr").count()).toBe(3);
-    expect(await dir.locator("table.hurdles").textContent()).toContain("239.24"); // MA60 30 天抵扣价最高
-    expect(await dir.locator(".flow").textContent()).toContain("30 个交易日");
+    const card = page.locator('[data-step="forecast"]');
+    const first = card.locator("table.hurdles").first();
+    expect(await first.locator("tbody tr").count()).toBe(2);
+    expect(await first.textContent()).toContain("239.24"); // MA60 30 天抵扣价最高
+    expect(await card.locator("details.more .flow").textContent()).toContain("30 个交易日");
     await page.close();
   }, 30_000);
 });
 
-describe("中栏 agent 叫「长风」", () => {
-  test("默认视图下输入区的名字是长风，看得见；页面上不再出现「分析师」", async () => {
+describe("两个 agent 都写角色 + 名字", () => {
+  test("默认视图下：中栏「分析师·长风」、右栏「解语花·鸿雁」，名字完整、没被截断或挡住", async () => {
     const { page, errors } = await open();
-    const name = page.locator("#analyst-composer .role-bar b");
-    expect(await name.textContent()).toBe("长风");
-    expect(await name.isVisible()).toBe(true);
-    expect(await page.getAttribute("main.panel.center", "aria-label")).toBe("长风");
-    expect(await page.textContent("body")).not.toContain("分析师");
+    for (const [sel, full] of [["#analyst-composer .role-bar b", "分析师·长风"], ['.panel.right .role-bar b', "解语花·鸿雁"]] as const) {
+      const name = page.locator(sel);
+      expect(await name.textContent()).toBe(full);
+      expect(await name.isVisible()).toBe(true);
+      // 没被截断：内容宽度不超过元素宽度；没被挡住：元素中心点落在它自己身上
+      const ok = await name.evaluate((el) => {
+        const r = el.getBoundingClientRect();
+        const hit = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
+        return el.scrollWidth <= el.clientWidth + 1 && !!hit && el.contains(hit);
+      });
+      expect({ sel, ok }).toEqual({ sel, ok: true });
+    }
+    expect(await page.getAttribute("main.panel.center", "aria-label")).toBe("分析师·长风");
+    expect(await page.getAttribute("aside.panel.right", "aria-label")).toBe("解语花·鸿雁");
+    expect(await page.textContent(".panel.right .panel-head b")).toBe("和解语花·鸿雁的对话");
     expect(errors).toEqual([]);
     await page.close();
   }, 30_000);

@@ -64,8 +64,8 @@
 
   <div class="splitter" id="split-left" role="separator" aria-orientation="vertical" aria-label="拖动调整自选股栏宽度" tabindex="0"><span class="grip"></span></div>
 
-  <!-- 中栏：长风 -->
-  <main class="panel center" aria-label="长风">
+  <!-- 中栏：分析师·长风 -->
+  <main class="panel center" aria-label="分析师·长风">
     <div id="peek" class="peek" hidden>
       <span id="peek-text"></span>
       <span class="peek-btns"></span>
@@ -104,13 +104,13 @@
           <button type="button" class="ask-card" data-ask-card="chart" aria-haspopup="menu">问鸿雁</button></div>
         <div class="legend" id="legend"></div>
         <div id="chart" class="chart"><p class="caption">加载中……</p></div>
-        <p class="caption">小黄点：明天各条 MA 要扣掉的 K 线（抵扣价）。黄色量柱：成交量超过 50 日均量 2 倍。虚线是门槛线：价格过了它，判断才值得改。按住 ⌘（或 Ctrl）滚轮缩放，按住拖动平移。点图表上任一天，可以问鸿雁。</p>
+        <p class="caption">小黄点：明天各条 MA 要扣掉的 K 线（抵扣价）。黄色量柱：成交量超过 50 日均量 2 倍。虚线是价位线：绿色触发、红色止损、黄色推翻判断（跟结论走）。按住 ⌘（或 Ctrl）滚轮缩放，按住拖动平移。点图表上任一天，可以问鸿雁。</p>
       </section>
 
       <section class="steps" id="steps"></section>
 
       <section class="thread-wrap">
-        <div class="thread-head"><b>和长风的对话</b></div>
+        <div class="thread-head"><b>和分析师·长风的对话</b></div>
         <section class="thread" id="analyst-thread" aria-live="polite"></section>
       </section>
     </div>
@@ -118,7 +118,7 @@
     <div class="composer role-analyst" id="analyst-composer">
       <div class="role-bar">
         <span class="avatar" aria-hidden="true">风</span>
-        <b>长风</b><span class="role-desc">判断这只股票：状态、打法、何时拐头、回放练习</span>
+        <b>分析师·长风</b><span class="role-desc">判断这只股票：状态、打法、何时拐头、回放练习</span>
         <span class="model-chip" data-model-badge></span>
         <button id="analyst-reset" type="button" class="ghost">新对话</button>
       </div>
@@ -130,11 +130,11 @@
     </div>
   </main>
 
-  <div class="splitter" id="split-right" role="separator" aria-orientation="vertical" aria-label="拖动调整鸿雁栏宽度" tabindex="0"><span class="grip"></span></div>
+  <div class="splitter" id="split-right" role="separator" aria-orientation="vertical" aria-label="拖动调整解语花·鸿雁栏宽度" tabindex="0"><span class="grip"></span></div>
 
-  <!-- 右栏：鸿雁 -->
-  <aside class="panel right" aria-label="鸿雁">
-    <div class="panel-head"><b>和鸿雁的对话</b><span>讲概念、解读你划选的内容，句句有出处</span></div>
+  <!-- 右栏：解语花·鸿雁 -->
+  <aside class="panel right" aria-label="解语花·鸿雁">
+    <div class="panel-head"><b>和解语花·鸿雁的对话</b><span>讲概念、解读你划选的内容，句句有出处</span></div>
     <div class="right-scroll" id="advisor-scroll">
       <div class="empty" id="advisor-empty">
         <p>在中栏<b>划选一段文字</b>，或<b>点一下图表</b>。然后点「问鸿雁」。</p>
@@ -145,7 +145,7 @@
     <div class="composer role-advisor">
       <div class="role-bar">
         <span class="avatar" aria-hidden="true">雁</span>
-        <b>鸿雁</b><span class="role-desc">讲概念、解读划选</span>
+        <b>解语花·鸿雁</b><span class="role-desc">讲概念、解读划选</span>
         <span class="model-chip" data-model-badge></span>
         <button id="advisor-reset" type="button" class="ghost">新对话</button>
       </div>

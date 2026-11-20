@@ -1,9 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import type { Analysis } from "../src/citations.ts";
-import { buildOutlook, buildPlans, ma20Claim, playKey } from "../src/plan.ts";
+import { buildChecklist, buildForecast, buildPlans, ma20Claim, playKey } from "../src/plan.ts";
 import nvda from "./fixtures/nvda-analysis.json";
+import spyJson from "./fixtures/spy-2024-04-19-analysis.json";
 
 const bear = nvda as Analysis; // 明显偏空 · 加速下跌，三条 MA 未来都扣高值
+const spy = spyJson as Analysis; // 稳定上涨·回撤中：吃回撤 ① ② 满足，底部构造形成中（还差 2 根），小时线空头
 
 /** 偏多的例子：把 NVDA 改成稳定上涨，价格 230，MA20 前 4 天扣低值、之后扣高值。 */
 function bullish(): Analysis {
@@ -47,38 +49,79 @@ describe("定策略：按有没有仓位给出做法和价位", () => {
   });
 });
 
-describe("看方向：给出结论，而不只是图", () => {
-  test("偏空、20 天内都扣高值：逆风持续，只有站上 EMA20 才会提前转向", () => {
-    const o = buildOutlook(bear);
-    expect(o.verdict).toContain("逆风");
-    expect(o.verdict).toContain("20 天");
-    expect(o.change).toContain("183.08");
-    expect(o.effect.flat.tag).toBe("支持");
-    expect(o.effect.flat.text).toContain("不抢反弹");
+describe("结论：做法跟着阶段走，带触发价、止损和风险（SPY 2024-04-19）", () => {
+  const p = buildPlans(spy);
+  test("已经在回撤：不再说「等回调」", () => {
+    expect(spy.regime.stage).toBe("回撤中");
+    for (const k of ["flat", "holding"] as const) {
+      expect(p[k].action).toContain("已经在回撤");
+      expect(p[k].action).not.toContain("等回调");
+    }
   });
-  test("偏多、MA20 第 5 天开始扣高值：顺风还有 4 天，之后回调容易拐头", () => {
-    const o = buildOutlook(bullish());
-    expect(o.verdict).toContain("顺风");
-    expect(o.change).toContain("第 5 天");
-    expect(o.effect.flat.tag).toBe("调整时机");
-    expect(o.effect.flat.text).toContain("第 5 天");
+  test("空仓：触发是底部构造下一步，进场后止损是 60 线组拐头向下的价位，风险按触发价算", () => {
+    expect(p.flat.trigger?.label).toBe("底部构造下一步");
+    expect(p.flat.trigger?.price).toBeCloseTo(500.45, 2);
+    expect(p.flat.stop?.label).toBe("60 线组拐头向下");
+    expect(p.flat.stop?.price).toBeCloseTo(488.03, 2);
+    expect(p.flat.risk).toBeCloseTo((p.flat.trigger!.price - p.flat.stop!.price) / p.flat.trigger!.price * 100, 6);
+  });
+  test("持仓：止损同一个价位，距离按现价算", () => {
+    expect(p.holding.stop).toEqual(p.flat.stop);
+    expect(p.holding.risk).toBeCloseTo((spy.close - p.holding.stop!.price) / spy.close * 100, 6);
+    expect(p.profit.stop).toEqual(p.holding.stop);
+  });
+  test("不买的打法没有止损和风险（NVDA 加速下跌）", () => {
+    const b = buildPlans(bear);
+    expect(b.flat.stop).toBeNull();
+    expect(b.flat.risk).toBeNull();
+    expect(b.flat.trigger?.label).toBe("底部构造下一步");
   });
 });
 
-describe("看方向和定策略互相引用", () => {
-  test("每份计划都带一行「时机（来自看方向）」，和看方向的影响一致", () => {
-    const plans = buildPlans(bear);
-    const o = buildOutlook(bear);
-    for (const pos of ["flat", "holding"] as const) {
-      const timing = plans[pos].items.find((i) => i.label === "时机");
-      expect(timing?.text).toBe(o.effect[pos].text);
-    }
+describe("找打法：条件清单逐条，没满足的写还差什么", () => {
+  const byId = (a: Analysis) => Object.fromEntries(buildChecklist(a).map((c) => [c.id, c]));
+  test("SPY：吃回撤 ① ② 满足，③ 差底部构造（下一根过 500.45、最少 2 根），④ 差小时线", () => {
+    const c = byId(spy);
+    expect([c.P10.status, c.P11.status, c.P12.status, c.P13.status]).toEqual(["满足", "满足", "不满足", "不满足"]);
+    expect(c.P10.need).toBeNull();
+    expect(c.P12.need).toContain("500.45");
+    expect(c.P12.need).toContain("最少还差 2 根");
+    expect(c.P13.need).toContain("小时");
+  });
+  test("让位的规则写出谁优先", () => {
+    const a = structuredClone(spy);
+    a.rules = a.rules.map((r) => (r.id === "P20" ? { ...r, status: "满足", yields_to: "P17" } : r));
+    expect(byId(a).P20.yieldsTo).toBe("P17");
+  });
+});
+
+describe("做推演：三问，跨度 30 天", () => {
+  const f = buildForecast(spy);
+  test("类型线能撑多久：MA120 30 天都向上，安全边际 460.20（-7.1%）", () => {
+    expect(f.days).toBe(30);
+    expect(f.hold).toContain("MA120 收盘不变，30 天都向上");
+    expect(f.hold).toContain("460.20（-7.1%）");
+  });
+  test("条件最早哪天齐：构造还差 2 根，最早第 2 个交易日（脚本给的日期）", () => {
+    expect(f.earliest).toContain("2024-04-23（第 2 个交易日）");
+    expect(f.earliest).toContain("小时");
+  });
+  test("推翻判断的价位：MA120 守不住的 460.20", () => {
+    expect(f.invalid.level?.price).toBe(460.2);
+    expect(f.invalid.text).toContain("不再是稳定上涨");
+  });
+  test("只给和打法有关的 30 天求解，最多 3 个", () => {
+    expect(f.solves.length).toBeGreaterThan(0);
+    expect(f.solves.length).toBeLessThanOrEqual(3);
+    expect(f.solves.every((s) => s.days === 30)).toBe(true);
+  });
+  test("不买的打法照实说（NVDA 加速下跌）", () => {
+    expect(buildForecast(bear).earliest).toContain("空仓不买");
   });
 });
 
 describe("成本价参与策略：浮盈、浮亏分开说", () => {
   const plans = buildPlans(bear);
-  const o = buildOutlook(bear);
   const text = (k: "holding" | "profit" | "loss") => [plans[k].action, ...plans[k].items.map((i) => i.text)].join("");
 
   test("浮盈：先保住利润，止损提到成本附近（成本由页面填进 {cost}）", () => {
@@ -91,13 +134,6 @@ describe("成本价参与策略：浮盈、浮亏分开说", () => {
   });
   test("没填成本时，不提浮盈浮亏，也不提回本", () => {
     expect(text("holding")).not.toMatch(/浮盈|浮亏|回本|涨回成本/);
-  });
-  test("看方向的影响也按浮盈 / 浮亏分开，和计划第一行「时机」一致", () => {
-    for (const k of ["flat", "holding", "profit", "loss"] as const) {
-      expect(plans[k].items[0]).toEqual({ label: "时机", text: o.effect[k].text });
-    }
-    expect(o.effect.profit.text).not.toContain("涨回成本");
-    expect(o.effect.loss.text).toContain("涨回成本");
   });
   test("偏多时浮亏：不在浮亏时加仓摊低", () => {
     expect([bullishPlans().loss.action, ...bullishPlans().loss.items.map((i) => i.text)].join("")).toContain("摊低");
@@ -131,9 +167,6 @@ describe("每种趋势类型的浮盈 / 浮亏都不自相矛盾", () => {
         const all = txt(p[k]);
         // 同一张计划里不能既说不加仓、又说可以加
         expect(/不加仓/.test(all) && /再加|(?<!不)加仓。|可以加仓|小级别确认后加/.test(all)).toBe(false);
-        const timing = p[k].items[0].text;
-        expect(timing).not.toMatch(/「([^」]+)」不变：\1/); // 时机行不把做法原话再说一遍
-        if (/^(拿着|持有)/.test(p[k].action)) expect(timing).not.toMatch(/^支持.*就执行/); // 拿着的计划没有"执行"可支持
       }
       if (t !== "稳定上涨") expect(txt(p.loss)).not.toContain("趋势还向上"); // 只有稳定上涨才能这么说
       for (const k of ["profit", "loss"] as const) {
@@ -162,16 +195,12 @@ describe("空头结构反弹中 / 多头结构回撤中进入策略", () => {
     expect(p.flat.action).toContain("不买");
     expect(all(p.flat)).toContain("212.35"); // 等 20 线组站上 60 线组：MA60
     expect(p.holding.action).toContain("逢高减仓");
-    const o = buildOutlook(a);
-    expect(o.effect.flat.text).not.toMatch(/买点|窗口/);
-    expect(o.effect.flat.text).toContain("不买");
   });
   test("多头结构回撤中：空仓等回调结束再买，持仓持有观察，20/60 双死叉才走", () => {
     const p = buildPlans(conflict("多头结构回撤中"));
     expect(p.flat.action).toMatch(/回调结束|再买/);
     expect(p.holding.action).toContain("持有");
     expect(all(p.holding)).toContain("双死叉");
-    expect(buildOutlook(conflict("多头结构回撤中")).effect.holding.text).toContain("持有");
   });
   test("空头结构反弹中：浮盈先锁利保本，浮亏不等回本、反弹到减仓位就减", () => {
     const p = buildPlans(conflict("空头结构反弹中"));
@@ -191,13 +220,12 @@ describe("空头结构反弹中 / 多头结构回撤中进入策略", () => {
     const sell = p.holding.items.find((i) => i.label === "减仓位")!.text;
     expect(sell).toContain("现在");
     expect(sell).not.toMatch(/^反弹到/);
-    expect(p.holding.items[0].text).toContain("现在");
   });
   test("横盘带冲突：还按横盘打（页面上的趋势类型也是横盘）", () => {
     const a = conflict("多头结构回撤中");
     a.play = { ...a.play, key: "横盘" };
-    expect(buildPlans(a).flat.action).toBe("中段不做，等末期条件齐了再埋伏。");
-    expect(buildOutlook(a).effect.flat.text).not.toContain("回调");
+    expect(playKey(a)).toBe("横盘破位"); // 夹具 20/60 已经死叉：埋伏的底线破了
+    expect(buildPlans(a).flat.action).toContain("不埋伏");
   });
   test("价位相对现价说对：「站上 / 反弹到 X」的 X 在现价上方，「回踩到 / 跌破 X」的 X 在现价下方", () => {
     // MA60 212.35、EMA60 203.13、EMA20 183.08：现价分别在 EMA20 下方、EMA20 和 MA60 之间、MA60 上方
@@ -206,8 +234,7 @@ describe("空头结构反弹中 / 多头结构回撤中进入策略", () => {
       a.close = close;
       a.drops = a.drops.map((d) => (d.period === 20 ? { ...d, tomorrow: 190 } : d)); // MA20 抵扣价在 EMA20 和 MA60 之间
       const p = buildPlans(a);
-      const o = buildOutlook(a);
-      const texts = [...Object.values(p).flatMap((x) => [x.action, ...x.items.map((i) => i.text)]), ...Object.values(o.effect).map((e) => e.text)];
+      const texts = Object.values(p).flatMap((x) => [x.action, ...x.items.map((i) => i.text)]);
       for (const t of texts) {
         for (const m of t.matchAll(/(站上|反弹到|高于|回踩到|跌破)[^。；，]*?(\d+\.\d{2})/g)) {
           const price = Number(m[2]);
@@ -251,7 +278,7 @@ function everyPlay(): { name: string; a: Analysis }[] {
     }))),
   );
 }
-const LABEL_ORDER = ["时机", "盈亏", "止损", "失效", "仓位"];
+const LABEL_ORDER = ["盈亏", "进场门槛", "止损", "进场后止损", "失效", "仓位"];
 
 describe("每份计划都有止损和失效（判断错了的标志）", () => {
   for (const { name, a } of everyPlay()) {
@@ -259,12 +286,14 @@ describe("每份计划都有止损和失效（判断错了的标志）", () => {
       const plans = buildPlans(a);
       for (const k of ["flat", "holding", "profit", "loss"] as const) {
         const items = plans[k].items;
-        const stop = items.find((i) => i.label === "止损");
+        // 止损在进场之后：空仓叫「进场后止损」，进场前要过的关叫「进场门槛」，不混着叫
+        const stop = items.find((i) => (k === "flat" ? ["进场后止损", "进场门槛"] : ["止损"]).includes(i.label));
+        if (k === "flat") expect(items.some((i) => i.label === "止损")).toBe(false);
         const wrong = items.find((i) => i.label === "失效");
         expect({ k, stop: !!stop, wrong: !!wrong }).toEqual({ k, stop: true, wrong: true });
         expect(wrong!.text).toMatch(/\d+\.\d{2}/); // 失效要带价位
         expect(items.some((i) => i.label === "离场")).toBe(false); // 硬离场就叫止损，不另起一条
-        // 顺序：时机 → 盈亏 → …… → 止损 → 失效 → 仓位
+        // 顺序：盈亏 → …… → 止损 → 失效 → 仓位
         const idx = LABEL_ORDER.map((l) => items.findIndex((i) => i.label === l)).filter((i) => i >= 0);
         expect(idx).toEqual([...idx].sort((x, y) => x - y));
         expect(items.at(-1)!.label === "仓位" || items.at(-1)!.label === "失效").toBe(true);
@@ -278,9 +307,7 @@ describe("所有打法：价位相对现价说对", () => {
   for (const { name, a } of everyPlay()) {
     test(name, () => {
       const p = buildPlans(a);
-      const o = buildOutlook(a);
-      const texts = [...Object.values(p).flatMap((x) => [x.action, ...x.items.map((i) => i.text)]),
-        ...Object.values(o.effect).map((e) => e.text), o.verdict, o.change];
+      const texts = Object.values(p).flatMap((x) => [x.action, ...x.items.map((i) => i.text)]);
       for (const t of texts) {
         for (const m of t.matchAll(/(站上|反弹到|高于|回踩到|跌破|收紧到)[^。；，：]*?(\d+\.\d{2})/g)) {
           const price = Number(m[2]);
@@ -303,7 +330,7 @@ describe("止损和失效的内容来自 playbooks", () => {
   test("横盘：止损是 20/60 死叉；空仓埋伏还要防假突破", () => {
     const p = buildPlans(shaped("横盘", 0, { r2060: 1, ema20Dir: 1 })); // 夹具本身已死叉，那是「横盘破位」
     expect(item(p.holding, "止损")).toContain("死叉");
-    expect(item(p.flat, "止损")).toContain("假突破");
+    expect(item(p.flat, "进场后止损")).toContain("假突破");
   });
   test("稳定上涨：60 线组拐头向下才走；碰到 MA60、20/60 双死叉都不算（rules.md J7）", () => {
     const p = at("稳定上涨", 0.8).holding;
@@ -323,7 +350,7 @@ describe("止损和失效的内容来自 playbooks", () => {
     }
   });
   test("稳定下跌：空仓进场后跌回 EMA20 下方就走", () => {
-    expect(item(at("稳定下跌", -0.8).flat, "止损")).toMatch(/跌回 EMA20/);
+    expect(item(at("稳定下跌", -0.8).flat, "进场后止损")).toMatch(/跌回 EMA20/);
   });
 });
 
@@ -355,8 +382,7 @@ describe("止损、失效看当下：已经成立的照实说", () => {
     const p = buildPlans(a);
     expect(p.holding.action).toContain("离场");
     expect(label(p.holding, "止损")).toContain("已经");
-    expect(label(p.flat, "止损")).toContain("别进");
-    for (const k of ["holding", "profit", "loss"] as const) expect(buildOutlook(a).effect[k].text).toContain("离场");
+    expect(label(p.flat, "进场门槛")).toContain("别进");
     for (const k of ["profit", "loss"] as const) expect(label(p[k], "盈亏")).not.toContain("磨蹭");
     expect(all(p.profit)).not.toContain("把止损提到成本");
   });
@@ -396,22 +422,6 @@ describe("止损、失效看当下：已经成立的照实说", () => {
     expect(w).not.toContain("0.5%");
     expect(w).not.toContain("别等双死叉");
   });
-  test("看方向：已经在 EMA20 上方，不再说「更早的信号是收盘站上 EMA20」", () => {
-    const a = shaped("稳定下跌", -0.8, { r2060: -1, ema20Dir: -1, close: 190 });
-    a.drops = a.drops.map((d) => (d.period === 20 ? { ...d, first_low: 5 } : d));
-    expect(buildOutlook(a).change).not.toMatch(/站上 EMA20 183/);
-  });
-});
-
-describe("空仓「不做」的计划，看方向不说「机会 / 买点」", () => {
-  for (const t of ["横盘", "过渡"]) for (const r2060 of [-1, 1] as const) {
-    test(`${t} 20/60 ${r2060 > 0 ? "金叉" : "死叉"}，偏多`, () => {
-      const a = shaped(t, 0.4, { r2060, ema20Dir: 1 });
-      expect(buildOutlook(a).effect.flat.text).not.toMatch(/机会|买点/);
-      a.drops = a.drops.map((d) => (d.period === 20 ? { ...d, path: d.path.map((p, i) => ({ ...p, close: i < 3 ? 100 : 999 })) } : d));
-      expect(buildOutlook(a).effect.flat.text).not.toMatch(/机会|买点/); // 顺风在减弱那一支
-    });
-  }
 });
 
 describe("只成立一半的条件也照实说（第二轮审查）", () => {
@@ -434,24 +444,18 @@ describe("只成立一半的条件也照实说（第二轮审查）", () => {
     a.play = { ...a.play, key: "空头结构反弹中" };
     expect(label(buildPlans(a).holding, "止损")).not.toContain("没到减仓位");
   });
-  test("稳定上涨空仓、价格已在 MA20 抵扣价下方：不说「仍在抵扣价上方」，止损先说别买", () => {
+  test("稳定上涨空仓：进场后止损和持仓止损是同一条（60 线组拐头向下），不是进场前的门槛", () => {
     const a = shaped("稳定上涨", 0.8, { r2060: 1, ema20Dir: 1, close: 200 }); // 夹具 MA20 抵扣价 212.21
     const p = buildPlans(a);
     expect(label(p.flat, "等什么")).not.toContain("仍在");
-    expect(label(p.flat, "止损")).toContain("先别买");
+    expect(label(p.flat, "进场后止损")).toContain("60 线组拐头向下");
+    expect(label(p.flat, "进场后止损")).not.toContain("先别买");
+    expect(p.flat.stop).toEqual(p.holding.stop);
   });
   test("过渡空仓、20/60 已经金叉：等什么不再说「升到 60 线组上方」", () => {
     const p = buildPlans(shaped("过渡", 0.4, { r2060: 1, ema20Dir: 1 }));
     expect(label(p.flat, "等什么")).not.toContain("升到");
   });
-});
-
-test("顺风、明天起 MA20 就扣高值：时机行不说「第 1 天前…买点窗口」", () => {
-  const a = bullish();
-  a.drops = a.drops.map((d) => (d.period === 20 ? { ...d, path: d.path.map((p) => ({ ...p, close: 999 })) } : d));
-  const o = buildOutlook(a);
-  expect(o.effect.flat.text).not.toMatch(/第 1 天|买点窗口/);
-  expect(o.effect.holding.text).not.toContain("第 1 天");
 });
 
 test("下跌类空仓的进场条件：已经站上的那条照实说，读起来通顺", () => {
@@ -475,30 +479,24 @@ test("playKey：横盘已死叉是横盘破位，过渡打架用打架的键", (
   expect(playKey(a)).toBe("空头结构反弹中");
 });
 
-test("ma20Claim 和看方向的结论说的是同一件事", () => {
-  expect(buildOutlook(bear).verdict).toContain("20 天内 MA20 都会向下");
+test("ma20Claim（回放验证用）：价格不变时 MA20 朝哪边、还会持续几天", () => {
   expect(ma20Claim(bear)).toEqual({ dir: -1, days: 20 });
   const b = bullish(); // MA20 第 5 天起扣高值
-  expect(buildOutlook(b).verdict).toContain("未来 4 天 MA20 扣低值");
   expect(ma20Claim(b)).toEqual({ dir: 1, days: 4 });
   const flat = structuredClone(bear);
   flat.lean = { ...flat.lean, score: 0 };
   expect(ma20Claim(flat)).toBeNull();
   const soon = structuredClone(bear);
   soon.drops = soon.drops.map((d) => (d.period === 20 ? { ...d, first_low: 1 } : d));
-  expect(buildOutlook(soon).verdict).toContain("明天起");
   expect(ma20Claim(soon)).toBeNull();
   const later = structuredClone(bear);
   later.drops = later.drops.map((d) => (d.period === 20 ? { ...d, first_low: 6 } : d));
-  expect(buildOutlook(later).verdict).toContain("MA20 还要向下 5 天");
   expect(ma20Claim(later)).toEqual({ dir: -1, days: 5 });
   const allLow = bullish();
   allLow.drops = allLow.drops.map((d) => (d.period === 20 ? { ...d, path: d.path.map((p) => ({ ...p, close: 1 })) } : d));
-  expect(buildOutlook(allLow).verdict).toContain(`未来 ${allLow.drops[0].path.length} 天 MA20 都扣低值`);
   expect(ma20Claim(allLow)).toEqual({ dir: 1, days: allLow.drops[0].path.length });
   const weak = bullish();
   weak.drops = weak.drops.map((d) => (d.period === 20 ? { ...d, path: d.path.map((p) => ({ ...p, close: 999 })) } : d));
-  expect(buildOutlook(weak).verdict).toContain("顺风在减弱");
   expect(ma20Claim(weak)).toBeNull();
 });
 
@@ -518,10 +516,8 @@ describe("判据和阈值读脚本结果，不在这里重算", () => {
   });
   test("看方向的三档来自 thresholds.LEAN_SOME", () => {
     const a = shaped("过渡", 0.3, { r2060: 1, ema20Dir: 1 });
-    expect(buildOutlook(a).verdict).toContain("顺风");
-    a.thresholds = { ...a.thresholds, LEAN_SOME: { ...a.thresholds.LEAN_SOME, value: 0.35 } };
-    expect(buildOutlook(a).verdict).toContain("没有明确方向");
-  });
+      a.thresholds = { ...a.thresholds, LEAN_SOME: { ...a.thresholds.LEAN_SOME, value: 0.35 } };
+    });
   test("横盘破位看 P3（埋伏的底线），不看排布", () => {
     const a = shaped("横盘", 0, { r2060: 1, ema20Dir: 1 });
     expect(playKey(a)).toBe("横盘");

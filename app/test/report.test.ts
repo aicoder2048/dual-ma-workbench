@@ -53,27 +53,31 @@ describe("推演：用脚本的 projection，不在这里重算", () => {
     expect(f["推演.EMA20"].value).toContain(sc.end_values.EMA20.toFixed(2));
     expect(f["门槛.MA60"].value).toContain(analysis.projection.hurdles[1].max_price.toFixed(2));
   });
-  test("看方向写出门槛路径，并引用 rules.md A2", () => {
-    expect(report.steps[2].items[0]).toContain("[[S:rules#A2]]");
+  test("做推演只写 30 天的门槛路径（MA60、MA120），并引用 rules.md A2", () => {
+    const hurdles = report.steps[2].items.filter((t) => t.includes("[[S:rules#A2]]"));
+    expect(hurdles.map((t) => t.split("：")[0])).toEqual(["MA60", "MA120"]);
     expect(report.visual.scenario).toBe(sc);
   });
 });
 
-describe("规则清单", () => {
-  const rules = report.steps.find((s) => s.key === "rules")!;
-  test("打法用到的规则排在前面，每条都链到 rules.md 和它今天的状态", () => {
-    expect(rules.items.length).toBeGreaterThanOrEqual(analysis.play.rules.length);
-    analysis.play.rules.forEach((id, i) => {
-      expect(rules.items[i]).toStartWith(`${id} `);
-      expect(rules.items[i]).toContain(`[[S:rules#${id}]]`);
-      expect(rules.items[i]).toContain(`[[D:规则.${id}]]`);
-    });
+describe("找打法：规则清单并进来了", () => {
+  const play = report.steps.find((s) => s.key === "play")!;
+  test("打法用到的规则逐条写，每条都链到 rules.md 和它今天的状态", () => {
+    for (const id of analysis.play.rules) {
+      const line = play.items.find((t) => t.startsWith(`${id} `))!;
+      expect(line).toContain(`[[S:rules#${id}]]`);
+      expect(line).toContain(`[[D:规则.${id}]]`);
+    }
   });
   test("让位的规则写出谁优先", () => {
     const a = structuredClone(analysis);
     a.rules = a.rules.map((r) => (r.id === "P20" ? { ...r, status: "满足", yields_to: "P17" } : r));
-    const items = buildReport(a).steps.find((s) => s.key === "rules")!.items;
+    const items = buildReport(a).steps.find((s) => s.key === "play")!.items;
     expect(items.find((t) => t.startsWith("P20 "))).toContain("P17 优先");
+  });
+  test("结论两行和回测记录都能引用", () => {
+    expect(play.items.join("")).toContain("[[D:结论.空仓]]");
+    expect(play.items.join("")).toContain("[[D:回测]]");
   });
 });
 
@@ -106,10 +110,15 @@ describe("模糊判断在前", () => {
   test("看大局不再把「规则初判」放在最后一句", () => {
     expect(report.steps[0].items.at(-1)).not.toContain("规则初判");
   });
-  test("定策略、看方向都有结论输出", () => {
+  test("结论、找打法、做推演都有输出", () => {
     expect(report.plans.flat.action).toBeTruthy();
     expect(report.plans.holding.action).toBeTruthy();
-    expect(report.outlook.verdict).toContain("逆风");
+    expect(report.checklist.map((c) => c.id)).toEqual(analysis.play.rules);
+    expect(report.forecast.days).toBe(30);
+  });
+  test("回测记录：加速下跌空仓不买，照实说没有进场", () => {
+    expect(report.record.setup).toBeNull();
+    expect(report.record.text).toContain("空仓不买");
   });
   test("可视化数据带上模糊判断和改变判断的价位", () => {
     expect(report.visual.lean.label).toBe("明显偏空");

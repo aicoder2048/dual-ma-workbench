@@ -44,6 +44,8 @@ class Construct:
     broken_date: str | None
     invalidation: float         # 作废价位：之后最高价超过它（底部：最低价跌破它）构造作废
     complete_at: float | None   # 形成中且只差一根时：下一根最低价低于它（底部：最高价高于它）就完成
+    next_at: float | None       # 形成中：下一根最低价低于它（底部：最高价高于它）就往前走一步
+    bars_left: int | None       # 形成中：最少还要几根 K 线才完成（1 或 2）
 
 
 @dataclass(frozen=True)
@@ -153,15 +155,18 @@ def find_structure(df: pd.DataFrame) -> Structure | None:
                          extreme=r.extreme, pivot_date=dates[r.pivot], pivot_price=r.price,
                          lh_date=None if r.lh is None else dates[r.lh], done_date=dates[r.done],
                          broken_date=None if r.broken is None else dates[r.broken],
-                         invalidation=r.price, complete_at=None)
+                         invalidation=r.price, complete_at=None, next_at=None, bars_left=None)
 
     def forming(side: Side, s: _Seek) -> Construct:
         ref = s.lh if s.lh is not None else (s.pivot if s.extreme else None)
+        # 还没有更低的高点（更高的低点）：下一根先越过新高（新低）那根的低点（高点）成为它，再要一根越过它才完成
+        step = s.pivot if ref is None else ref
         return Construct(side=side, state=State.FORMING, extreme=s.extreme, pivot_date=dates[s.pivot],
                          pivot_price=price(side, s.pivot, high, low),
                          lh_date=None if s.lh is None else dates[s.lh], done_date=None, broken_date=None,
                          invalidation=price(side, s.pivot, high, low),
-                         complete_at=None if ref is None else price(side, ref, low, high))
+                         complete_at=None if ref is None else price(side, ref, low, high),
+                         next_at=price(side, step, low, high), bars_left=2 if ref is None else 1)
 
     done = [construct(r) for r in records]
     latest = {side: next((c for c in reversed(done) if c.side == side), None) for side in Side}

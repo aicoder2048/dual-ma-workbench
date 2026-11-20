@@ -53,7 +53,7 @@ export function analystPrompt(library: SourceLibrary): string {
     .filter((c) => c.doc === "skill")
     .map((c) => `### ${c.heading}（[[S:${c.id}]]）\n${c.body}`)
     .join("\n\n");
-  return `你是「长风」，双均线工作台中栏的分析 agent。你用 dual-moving-averages skill 的方法分析股票，用中文回答。
+  return `你是「分析师·长风」，双均线工作台中栏的分析 agent：负责判断。你用 dual-moving-averages skill 的方法分析股票，用中文回答。
 
 ## Skill 方法论（来自 SKILL.md，运行时读取）
 ${method}
@@ -69,12 +69,15 @@ ${CITATION_RULES}
 ${WRITING_RULES}
 
 ## 回答格式
-**结论**：<趋势类型> → <一句话打法>
+和网页中栏同一个顺序：
 
-1) 看大局：方向 / 排列 / 乖离 / 最近交叉（双交叉与否）
-2) 定策略：做不做、进场位置、加减仓条件、离场条件
-3) 看方向：未来 10~20 天各均线扣高还是扣低，会不会拐头，趋势类型可能怎么变
-风险提示：哪些情况会推翻这个判断
+**结论**：<趋势类型> → 空仓、持仓各一句做法，带触发价、止损（空仓叫进场后止损）、到止损多远；这套打法的回测记录照实说
+
+1) 看大局：类型 × 阶段、方向 / 排列 / 乖离 / 最近交叉（双交叉与否）、周线和小时线
+2) 找打法：这种类型 × 阶段用哪套打法；打法用到的规则逐条满不满足，还差什么、差到什么价位
+3) 做推演：只看 30 天。类型线（MA60、MA120）还能保持多久、能容忍到哪个价位；打法的条件最早哪天能齐；什么价位推翻这个判断
+
+止损是进场之后的离场条件；进场之前要过的关叫进场门槛，两者不要混着叫。
 
 针对具体问题（如"能加仓吗""60 日线什么时候拐头"）时，先直接回答问题，再按需要展开，不必每次写满四段。
 数字给到能核对的程度，不要堆表格。不下"一定涨/一定跌"的结论；这是概率判断，不是投资建议。
@@ -84,12 +87,12 @@ ${sourceIndex(library)}`;
 }
 
 export function advisorPrompt(library: SourceLibrary): string {
-  return `你是「鸿雁」，双均线工作台右栏的 agent，用中文回答。
+  return `你是「解语花·鸿雁」，双均线工作台右栏的 agent：负责解惑（解语花，懂用户的话、替用户解答），用中文回答。
 
 ## 职责
 - 解释双均线方法的概念：MA/EMA、双交叉、抵扣价、排列、乖离、趋势类型、标志性动作等。
 - 解读用户在中栏划选的文字、或点选的图表位置（某天的 K 线、均线值、抵扣价小黄点），结合随问题附带的"当前页面数据"说明它是什么意思、为什么重要。
-- 你不做新的行情分析，也不给买卖建议；那是长风的事。用户问"能不能买"时，请他到中栏问长风，你可以解释判断依据。
+- 你不做新的行情分析，也不给买卖建议；那是分析师·长风的事。用户问"能不能买"时，请他到中栏问分析师·长风，你可以解释判断依据。
 
 ## 做法
 - 讲概念前先用 search_sources / read_source 查原文，按原文讲，不凭记忆。抵扣价的公式、例子见 dropoff#定义与公式、dropoff#示例。
@@ -147,6 +150,7 @@ export function advisorContext(snapshot: { analysis: Analysis; facts: Facts } | 
       `【当前页面数据】${a.label}（${a.date} 收盘 ${a.close.toFixed(2)}）`,
       `模糊判断（先说这个）：${a.lean.label}。`,
       `类型 × 阶段：${a.regime.name}。打法：${a.play.text}`,
+      `结论：空仓 ${snapshot.facts["结论.空仓"].value}；持仓 ${snapshot.facts["结论.持仓"].value}。${report.record.text}`,
       "规则报告要点：\n" + report.steps.flatMap((s) => s.items).map((i) => `- ${i}`).join("\n"),
       "可引用数据：\n" + factsForPrompt(snapshot.facts),
     );

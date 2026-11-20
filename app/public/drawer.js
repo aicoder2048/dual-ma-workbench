@@ -1,16 +1,15 @@
-// 抽屉：中栏的六块（总结、K 线图、三步、规则清单）滚出视野后，中栏顶部的提示条上出现这一块的按钮；
+// 抽屉：中栏的五块（结论、K 线图、看大局、找打法、做推演）滚出视野后，中栏顶部的提示条上出现这一块的按钮；
 // 点一下把那一块拉到抽屉里看，收起放回原处。
 // 抽屉里放的是原来那个元素本身（图表的范围、画的线、空仓/持仓的选择都保持），原处留一个同样高的占位，滚动位置不变。
 const $ = (id) => document.getElementById(id);
 
 /** 抽屉分区：按页面上的先后顺序。el() 每次现取，因为三步卡片换股票时会重新生成。 */
 const SECTIONS = [
-  { key: "verdict", label: "总结", el: () => $("verdict") },
+  { key: "verdict", label: "结论", el: () => $("verdict") },
   { key: "chart", label: "K 线图", el: () => document.querySelector(".chart-card") },
   { key: "big_picture", label: "看大局", el: () => document.querySelector('#steps [data-step="big_picture"]') },
-  { key: "strategy", label: "定策略", el: () => document.querySelector('#steps [data-step="strategy"]') },
-  { key: "direction", label: "看方向", el: () => document.querySelector('#steps [data-step="direction"]') },
-  { key: "rules", label: "规则清单", el: () => document.querySelector('#steps [data-step="rules"]') },
+  { key: "play", label: "找打法", el: () => document.querySelector('#steps [data-step="play"]') },
+  { key: "forecast", label: "做推演", el: () => document.querySelector('#steps [data-step="forecast"]') },
 ];
 
 let closeDrawer = () => {};

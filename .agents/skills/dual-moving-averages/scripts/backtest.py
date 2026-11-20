@@ -17,7 +17,9 @@
 - 每天的分析：切出"当天往前 3 年"，调 dma_analyze.analyze，和 `dma_analyze.py --csv <同一段> --asof <那天>` 完全一样
   （tests/test_backtest.py 断言）。没有历史小时线，P13 一律"需看图"，按两种口径各跑一遍（trades.Chart）。
 - 每天的结果缓存在 --out/daily/<票>.jsonl，脚本或行情变了自动重算。
-- 报告写到 --out/<今天>.md，逐笔明细写到 --out/<今天>-trades.json。
+- 报告写到 --out/<今天>.md，逐笔明细写到 --out/<今天>-trades.json，回测记录（按打法汇总，app 结论卡片读它）
+  写到 --out/<今天>-record.json。`--record-from <明细.json>` 只从已有明细重算记录，不重跑分析。
+  app 读的是提交进 skill 的 references/backtest-record.json，换一次回测就把新记录复制过去。
 """
 from __future__ import annotations
 
@@ -207,17 +209,66 @@ def p0(x: float | None) -> str:
     return "—" if x is None else f"{x * 100:.0f}%"
 
 
+def trade_stats(ts: list[tr.Trade], base: dict[tuple[str, int], float | None]) -> dict:
+    """一组交易的汇总（报告的一行、回测记录的一项）。ts 不能为空。"""
+    rets = [t.ret for t in ts]
+    ex = [float(t.ret - b) for t in ts if (b := base[(t.ticker, t.bars)]) is not None]
+    ci = tr.bootstrap_ci(ex)
+    return {"trades": len(ts), "dates": len({t.entry for t in ts}), "win_rate": sum(r > 0 for r in rets) / len(rets),
+            "mean": mean(rets), "median": median(rets), "bars": mean(t.bars for t in ts), "mae": mean(t.mae for t in ts),
+            "excess": mean(ex) if ex else None, "ci": list(ci) if ci else None}
+
+
 def trade_row(name: str, ts: list[tr.Trade], base: dict[tuple[str, int], float | None]) -> str:
     if not ts:
         return f"| {name} | 0 | 0 | — | — | — | — | — | — | — |"
-    rets = [t.ret for t in ts]
-    ex = [t.ret - b for t in ts if (b := base[(t.ticker, t.bars)]) is not None]
-    ci = tr.bootstrap_ci(ex)
-    dates = len({t.entry for t in ts})
-    tag = "（日期少）" if dates < FEW else ""
-    return (f"| {name}{tag} | {len(ts)} | {dates} | {p0(sum(r > 0 for r in rets) / len(rets))} | {pc(mean(rets))} | "
-            f"{pc(median(rets))} | {mean(t.bars for t in ts):.0f} | {pc(mean(t.mae for t in ts))} | "
-            f"{pc(mean(ex)) if ex else '—'} | {f'{pc(ci[0])} ~ {pc(ci[1])}' if ci else '—'} |")
+    s = trade_stats(ts, base)
+    tag = "（日期少）" if s["dates"] < FEW else ""
+    ci = s["ci"]
+    return (f"| {name}{tag} | {s['trades']} | {s['dates']} | {p0(s['win_rate'])} | {pc(s['mean'])} | "
+            f"{pc(s['median'])} | {s['bars']:.0f} | {pc(s['mae'])} | "
+            f"{pc(s['excess'])} | {f'{pc(ci[0])} ~ {pc(ci[1])}' if ci else '—'} |")
+
+
+# ---------- 回测记录：app 结论卡片上那一句，按打法 ----------
+
+RECORD_CHART = tr.Chart.UNMET   # app 实盘有小时线：取保守口径，需看图当不满足
+
+
+def baseline(series: dict[str, tuple[pd.DataFrame, int]], ts: list[tr.Trade]) -> dict[tuple[str, int], float | None]:
+    """每笔对应的随机进场基准：同一只票、同一段时间、同样持有根数。"""
+    return {(t.ticker, t.bars): tr.random_entry(*series[t.ticker], t.bars) for t in ts}
+
+
+def build_record(series: dict[str, tuple[pd.DataFrame, int]], ts: list[tr.Trade], meta: dict) -> dict:
+    """按打法（trades.SETUPS 的 key）汇总 RECORD_CHART 口径的交易。空仓不买的打法不在 setups 里，app 照实说不买；
+    能买、但这段时间一笔没进的，trades 是 0。"""
+    base = baseline(series, ts)
+    setups = {}
+    for s in tr.SETUPS:
+        mine = [t for t in ts if t.setup == s.key]
+        setups[s.key] = {"entries": list(s.entries), "trades": 0}
+        if mine:
+            st = trade_stats(mine, base)
+            st["ci_crosses_zero"] = st["ci"] is None or st["ci"][0] <= 0 <= st["ci"][1]
+            st["few_dates"] = st["dates"] < FEW   # 报告里标"日期少"的那种
+            setups[s.key] = {"entries": list(s.entries), **st}
+    return {"variant": RECORD_CHART.value, "source_report": meta["report"], "from": meta["from"], "to": meta["to"],
+            "tickers": meta["tickers"], "generated": meta["generated"], "setups": setups}
+
+
+def record_from(trades_json: Path, data: Path, start: str, tickers: list[str], report: str, generated: str) -> dict:
+    """从一次回测的逐笔明细（<日期>-trades.json）和同一份行情缓存重算回测记录，不重跑分析。"""
+    raw = json.loads(trades_json.read_text())[RECORD_CHART.value]
+    ts = [tr.Trade(**t) for t in raw]
+    series = {}
+    for t in sorted(set(tickers) | {x.ticker for x in ts}):
+        px = load(data / f"{t}.csv")
+        series[t] = (px, int(px.index.searchsorted(pd.Timestamp(start))))
+    first = min(px.index[i] for px, i in series.values())
+    last = max(px.index[-1] for px, _ in series.values())
+    meta = {"report": report, "from": str(first.date()), "to": str(last.date()), "tickers": tickers, "generated": generated}
+    return build_record(series, ts, meta)
 
 
 TRADE_HEAD = ("| 分组 | 笔数 | 进场日期数 | 胜率 | 平均 | 中位数 | 平均持有（根） | 平均最大回撤 | 比随机进场多 | 90% 区间 |\n"
@@ -412,8 +463,19 @@ def main() -> None:
     p.add_argument("--fetch-only", action="store_true", help="只取日线，不回测")
     p.add_argument("--no-hourly", action="store_true", help="不取小时线（P13 一律需看图）")
     p.add_argument("--history-from", help="--fetch-only 时行情要从哪天起")
+    p.add_argument("--record-from", type=Path, help="只从这份逐笔明细（<日期>-trades.json）和 --data 的行情重算回测记录，不重跑分析")
+    p.add_argument("--report", help="--record-from 时记录里写的报告文件名，默认按明细文件名推")
     a = p.parse_args()
     tickers = [t.upper() for t in a.tickers] or list(WINNERS + LOSERS)
+    today = pd.Timestamp.today().strftime("%Y-%m-%d")
+    if a.record_from:
+        report = a.report or a.record_from.name.replace("-trades.json", ".md")
+        rec = record_from(a.record_from, a.data, a.start, tickers, report, today)
+        out = a.out / report.replace(".md", "-record.json")
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(json.dumps(rec, ensure_ascii=False, indent=1) + "\n")
+        print(f"回测记录：{out}", file=sys.stderr)
+        return
     need = (pd.Timestamp(a.history_from) if a.history_from
             else pd.Timestamp(a.start) - pd.DateOffset(years=dma.DAILY_YEARS) - 10 * DAY)
     csvs = {t: ensure_data(t, a.data, need, a.refresh) for t in tickers}
@@ -436,11 +498,14 @@ def main() -> None:
     computed = [d.date for _, _, ds in series.values() for d in ds if d.status["P13"] != "需看图"]
     meta = {"tickers": tickers, "from": dates[0], "to": dates[-1], "hourly_from": min(computed) if computed else "（没有）"}
     md = render(series, runs, holds, ma60s, chart_days, meta)
-    stamp = pd.Timestamp.today().strftime("%Y-%m-%d")
+    stamp = today
     a.out.mkdir(parents=True, exist_ok=True)
     (a.out / f"{stamp}.md").write_text(md)
     (a.out / f"{stamp}-trades.json").write_text(json.dumps(
         {c.value: [asdict(t) for t in ts] for c, ts in runs.items()}, ensure_ascii=False, indent=1))
+    rec = build_record({t: series[t][:2] for t in tickers}, runs[RECORD_CHART],
+                       {**meta, "report": f"{stamp}.md", "generated": stamp})
+    (a.out / f"{stamp}-record.json").write_text(json.dumps(rec, ensure_ascii=False, indent=1) + "\n")
     print(md)
     print(f"报告：{a.out / f'{stamp}.md'}", file=sys.stderr)
 

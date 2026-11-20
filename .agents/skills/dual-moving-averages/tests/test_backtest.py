@@ -147,6 +147,47 @@ def test_stable_uptrend_holds_through_20_60_double_cross_until_60_group_turns_do
     assert [(t.entry_i, t.exit_i, t.reason) for t in ts] == [(1, 4, "60 线组拐头向下")]
 
 
+def _record_inputs(tmp_path):
+    """两只票、开盘价已知的行情，加一份逐笔明细：保守口径两笔稳定上涨，另一口径一笔多头结构回撤中（记录不该读它）。"""
+    idx = pd.bdate_range("2023-01-02", periods=10)
+    opens = {"AAA": [10.0] * 10, "BBB": [20.0, 20, 22, 22, 22, 22, 22, 22, 22, 22]}
+    for t, o in opens.items():
+        pd.DataFrame({"Date": idx, "Open": o, "High": o, "Low": o, "Close": o, "Volume": 1}).to_csv(tmp_path / f"{t}.csv", index=False)
+
+    def trade(ticker, setup, e, x, ret):
+        return {"ticker": ticker, "setup": setup, "rule": "P14", "chart": False, "signal": str(idx[e - 1].date()),
+                "entry": str(idx[e].date()), "entry_px": 1.0, "exit": str(idx[x].date()), "exit_px": 1.0, "reason": "60 线组拐头向下",
+                "ret": ret, "bars": x - e, "mae": -0.01, "entry_i": e, "exit_i": x}
+    js = {tr.Chart.UNMET.value: [trade("AAA", "稳定上涨", 2, 4, 0.10), trade("BBB", "稳定上涨", 2, 4, -0.02)],
+          tr.Chart.MET.value: [trade("AAA", "多头结构回撤中", 2, 3, 0.5)]}
+    path = tmp_path / "2023-01-13-trades.json"
+    path.write_text(json.dumps(js, ensure_ascii=False))
+    return path
+
+
+def test_record_reads_the_conservative_variant_and_compares_with_random_entry(tmp_path):
+    rec = bt.record_from(_record_inputs(tmp_path), tmp_path, "2023-01-03", ["AAA", "BBB"], "x.md", "2023-01-14")
+    assert (rec["variant"], rec["from"], rec["to"]) == ("需看图当不满足", "2023-01-03", "2023-01-13")
+    # 每种能买的打法都在；这段时间没进场的笔数是 0。空仓不买的打法（例如加速上涨）不在里面
+    assert set(rec["setups"]) == {s.key for s in tr.SETUPS} and "加速上涨" not in rec["setups"]
+    assert rec["setups"]["多头结构回撤中"] == {"entries": ["P19", "P20"], "trades": 0}
+    s = rec["setups"]["稳定上涨"]
+    assert (s["trades"], s["dates"], s["win_rate"], s["entries"]) == (2, 1, 0.5, ["P14"])
+    assert s["median"] == pytest.approx(0.04) and s["few_dates"]
+    # 随机进场拿 2 根：AAA 价格不动只扣成本；BBB 从第 1 根起只有第 1 根买会赚 10%（之后都平）
+    rand = {t: tr.random_entry(bt.load(tmp_path / f"{t}.csv"), 1, 2) for t in ("AAA", "BBB")}
+    assert s["excess"] == pytest.approx(((0.10 - rand["AAA"]) + (-0.02 - rand["BBB"])) / 2)
+
+
+def test_record_cli_writes_next_to_the_report(tmp_path):
+    trades = _record_inputs(tmp_path)
+    subprocess.run([sys.executable, str(SCRIPTS / "backtest.py"), "AAA", "BBB", "--from", "2023-01-03", "--data", str(tmp_path),
+                    "--out", str(tmp_path / "out"), "--record-from", str(trades), "--report", "2023-01-13-x.md"],
+                   check=True, capture_output=True)
+    rec = json.loads((tmp_path / "out" / "2023-01-13-x-record.json").read_text())
+    assert rec["source_report"] == "2023-01-13-x.md" and rec["setups"]["稳定上涨"]["trades"] == 2
+
+
 def test_hourly_slice_equals_load_hourly_on_the_same_feed():
     """hourly_at 切出的那段，等于 load_hourly(asof=那天) 向 Polygon 请求 [那天 − 60 天, 那天] 得到的结果。"""
     utc = pd.date_range("2024-01-02 09:00", "2024-05-01 00:00", freq="30min", tz="UTC")

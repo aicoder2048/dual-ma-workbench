@@ -33,7 +33,7 @@ export function initSelection({ chart, onAttach }) {
       if (!scope) return;
       const where =
         el.closest(".step")?.querySelector("h2")?.firstChild?.textContent.trim() ??
-        (el.closest("#verdict") ? "规则初判" : el.closest("#analyst-thread") ? "长风的回答" : "");
+        (el.closest("#verdict") ? "结论" : el.closest("#analyst-thread") ? "分析师·长风的回答" : "");
       const r = s.getRangeAt(0).getBoundingClientRect();
       showAt(r.left + r.width / 2, r.top, "问鸿雁", { kind: "text", text: text.slice(0, 1200), where }, "解读一下这段话");
     }, 0);

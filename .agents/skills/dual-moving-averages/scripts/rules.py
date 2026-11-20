@@ -305,6 +305,9 @@ def _construct(c: Ctx, top: bool) -> Result:
     levels = {"作废价": k.invalidation}
     if k.complete_at is not None:
         levels["完成价"] = k.complete_at
+    if k.next_at is not None:
+        levels["下一步价"] = k.next_at
+        levels["还差几根"] = k.bars_left
     basis = f"{k.state.value}，{'新高' if top else '新低'} {k.pivot_date} {_f(k.pivot_price)}"
     return _met(k.state == State.DONE, basis, levels)
 
@@ -554,8 +557,10 @@ def p17_no_buy_bad_order(c: Ctx) -> Result:
     under = c.row["MA20"] < c.row["MA60"] and c.row["EMA20"] < c.row["EMA60"]
     if not under:
         return _met(False, "20 线组不在 60 线组下方")
-    text, levels = _align_level(c, True, 20)
-    return _met(True, f"20 线组在 60 线组下方，不买；理顺（带方向）{text}", levels)
+    short, short_levels = _align_level(c, True, 10)
+    long, long_levels = _align_level(c, True, 30)
+    return _met(True, f"20 线组在 60 线组下方，不买；理顺（带方向）{short}；{long}",
+                {**short_levels, **long_levels})
 
 
 def p18_not_in_sync(c: Ctx) -> Result:
