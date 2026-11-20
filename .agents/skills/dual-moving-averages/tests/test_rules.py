@@ -125,3 +125,12 @@ def test_tsla_second_chance_yields_to_bad_order(tsla):
     assert (p20["status"], p20["yields_to"]) == ("满足", "P17")
     assert next(r for r in tsla["rules"] if r["id"] == "P17")["yields_to"] is None
     assert "| P20 | 双线系统第 2 次机会 | 满足，P17 优先 |" in dma.render_markdown(tsla)
+
+
+def test_cases_md_baselines_spy_deep_pullback_and_googl_turn_level():
+    # cases.md 回放基准：SPY 2024-08-05 击穿 120 线组，MA120 30 天内会拐头，吃回撤② 不满足
+    spy = dma.analyze(load_fixture("SPY", "2024-08-05"), "SPY", "fixture")
+    assert status(spy, "P11") == "不满足"
+    googl = dma.analyze(load_fixture("GOOGL", "2025-04-08"), "GOOGL", "fixture")
+    turn = next(s for s in googl["projection"]["solves"] if s["event"] == "MA20 拐头向上" and s["days"] == 10)
+    assert turn["level"] == pytest.approx(160.67, abs=0.05)
