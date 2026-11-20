@@ -3,9 +3,6 @@
 from __future__ import annotations
 
 import json
-import shutil
-from dataclasses import replace
-from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -221,6 +218,7 @@ def test_inevitable_means_flat_price_makes_it_happen():
     t = ev.event_table(recs)
     assert t["inevitable"].tolist() == [True, False, True, False]
     assert t["x"].tolist()[:3] == [12.0, 8.0, 2.0]
+    assert t["key"].tolist()[:2] == ["拐头向下20/0MAK10", "拐头向下60/0MAK10"]   # 没有慢线的事件也有键
 
 
 def rec(k: int, typ: str | None, hi=None, lo=None, w="多头") -> dict:

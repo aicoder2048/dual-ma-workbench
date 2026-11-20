@@ -63,7 +63,6 @@ OHLCV = ["Open", "High", "Low", "Close", "Volume"]
 RECORD_VERSION = "1"
 HYPS = ("H1", "H2", "H3", "H4", "H5", "H6")
 CHUNK = 250
-DAY = pd.Timedelta(days=1)
 
 
 # ---------- 行情 ----------
@@ -185,7 +184,7 @@ def build_universe(cfg: dict, data: Path, refresh: bool) -> dict:
     taken |= set(b)
     groups["C"] = [t for t in (r["ticker"] for r in screened if r["ticker"] not in taken) if usable(t, "C")]
     split = {}
-    for g, ts in groups.items():
+    for ts in groups.values():
         for k, t in enumerate(sorted(ts)):
             split[t] = "dev" if k % 2 == 0 else "holdout"
     return {"snapshot": s["snapshot"], "groups": {g: sorted(ts) for g, ts in groups.items()}, "split": split,
@@ -519,7 +518,7 @@ def event_table(recs: dict[str, list[dict]]) -> pd.DataFrame:
     # 求"发生"且持平就成立，或求"不发生"且持平不成立：都是"不动就会发生，要涨（跌）|pct| 才能避免"
     ev["inevitable"] = level & np.where(ev["happen"], at_flat, ~at_flat)
     ev["x"] = ev["pct"].abs()
-    ev["key"] = ev["kind"] + ev["fast"].astype(str) + "/" + ev["slow"].astype(str) + ev["line"] + "K" + ev["K"].astype(str)
+    ev["key"] = [f"{k}{f}/{s}{ln}K{d}" for k, f, s, ln, d in zip(ev["kind"], ev["fast"], ev["slow"].fillna(0).astype(int), ev["line"], ev["K"])]
     return ev
 
 
@@ -696,11 +695,12 @@ def ci(e: es.Est, fmt=pct) -> str:
     return "区间 —" if e.lo is None else f"{fmt(e.lo)} ~ {fmt(e.hi)}"
 
 
-def fmt_est(r: dict, e: es.Est | None) -> str:
+def fmt_est(r: dict, e: es.Est | None, min_blocks: int) -> str:
     if e is None or e.n == 0:
         return "—"
     f = pct if r["unit"] == "pct" else (lambda x: "—" if not math.isfinite(x) else f"{x * 100:+.0f}pp")
-    return f"{f(e.point)}（{'—' if e.lo is None else f'{f(e.lo)} ~ {f(e.hi)}'}，{e.n}）"
+    few = "，区块少" if e.blocks < min_blocks else ""
+    return f"{f(e.point)}（{'—' if e.lo is None else f'{f(e.lo)} ~ {f(e.hi)}'}，{e.n}{few}）"
 
 
 def fmt_h3(s: dict | None) -> str:
@@ -709,8 +709,8 @@ def fmt_h3(s: dict | None) -> str:
     return f"{s['share_passed']:.0%}（分位中位 {s['median_pctl']:.0%}，MAR 差 {s['median_mar_edge']:+.2f}，{s['tickers']} 只）"
 
 
-def cell(r: dict, name: str) -> str:
-    return fmt_h3(r["summ"].get(name)) if r["id"] == "H3" else fmt_est(r, r["ests"].get(name))
+def cell(r: dict, name: str, min_blocks: int) -> str:
+    return fmt_h3(r["summ"].get(name)) if r["id"] == "H3" else fmt_est(r, r["ests"].get(name), min_blocks)
 
 
 RECOMMEND = [
@@ -750,6 +750,14 @@ def frozen_ok(cfg: dict) -> tuple[bool, str]:
     return (not bad, "规则代码和冻结提交一致" if not bad else f"规则代码和冻结提交不一致：{', '.join(bad)}")
 
 
+def last_verify(out: Path) -> str:
+    path = out / "eval" / "verify.json"
+    if not path.exists():
+        return "还没跑过"
+    v = json.loads(path.read_text())
+    return f"{v['time']} {'全部通过' if v['ok'] else '**有不通过的**'}（{len(v['lines'])} 项，门槛哈希 {v['toml']}）"
+
+
 def toml_hash() -> str:
     return hashlib.sha256(CONFIG.read_bytes()).hexdigest()[:12]
 
@@ -775,6 +783,7 @@ LIMITS = [
 
 def render(results: dict[str, dict], meta: dict, u: dict) -> str:
     out = [f"# 双均线方法评估：六条主张（{meta['mode']}）", ""]
+    mb = meta["min_blocks"]
     if not meta["frozen"][0]:
         out += [f"> [!danger] **{meta['frozen'][1]}**。这份报告的数字不能当作冻结规则的评估结果。", ""]
     if meta["holdout_runs"] > 1:
@@ -783,20 +792,24 @@ def render(results: dict[str, dict], meta: dict, u: dict) -> str:
             f"门槛文件 `evaluation.toml` 哈希 `{meta['toml']}`；评估代码 `{meta['head'][:12]}`",
             f"- 行情：yfinance 日线 {meta['data_from']} ~ {meta['data_to']}；决定点 {meta['first']} ~ {meta['last']}；"
             f"品种按 {u['snapshot']} 的市值筛",
+            f"- 校对（--verify）：{meta['verify']}",
             f"- 验证集：{'第 ' + str(meta['holdout_runs']) + ' 次运行' if meta['holdout_runs'] else '没跑'}",
-            f"- 区间：90%，日期区块自助法（{meta['block_days']} 个交易日一块，重抽 {meta['reps']} 次）",
+            f"- 区间：90%，日期区块自助法（{meta['block_days']} 个交易日一块，重抽 {meta['reps']} 次）；"
+            f"区块不到 {mb} 个的格子标\"区块少\"，区间不可靠",
             "- 读法：每格是点估计（90% 区间，样本数）。H3 一格是通过的品种占比（随机分位的中位数、MAR 差的中位数、品种数）。", ""]
     out += ["## 结论", "", "| 主张 | 结论 | 主指标 | 开发集 | 验证集 |", "|---|---|---|---|---|"]
     for r in results.values():
-        out.append(f"| {r['id']} {r['claim']} | **{r['verdict']}** | {r['metric']} | {cell(r, DEV)} | {cell(r, HO)} |")
+        out.append(f"| {r['id']} {r['claim']} | **{r['verdict']}** | {r['metric']} | {cell(r, DEV, mb)} | {cell(r, HO, mb)} |")
     out += ["", "## 分组、两半、市况", "",
             "| 主张 | " + " | ".join(meta["scopes"]) + " |", "|---|" + "---|" * len(meta["scopes"])]
     for r in results.values():
-        out.append(f"| {r['id']} | " + " | ".join(cell(r, n) for n in meta["scopes"]) + " |")
+        out.append(f"| {r['id']} | " + " | ".join(cell(r, n, mb) for n in meta["scopes"]) + " |")
     out += ["", "A 组和 B+C 组方向一致才算数；D 组（曾经的巨头）只用来量幸存者偏差，不参与判定。市况切片只报告、不判定。", ""]
     out += ["## 对工作台意味着什么（方案第 4 节，建议）", "", *[f"- {x}" for x in recommend(results)], ""]
     for r in results.values():
         out += [f"## {r['id']} {r['claim']}", "", f"**{r['verdict']}**。主指标：{r['metric']}。", ""]
+        if r["id"] != "H3" and r["ests"][DEV].excludes_zero(-r["sign"]):
+            out += ["开发集的方向和主张**相反**，而且区间不跨 0。", ""]
         out += [f"- {x}" for x in r["aux"]] + [""]
     out += ["## 品种（快照 " + u["snapshot"] + "）", "", "| 组 | 开发集 | 验证集 |", "|---|---|---|"]
     for g in ("A", "B", "C", "D"):
@@ -932,6 +945,7 @@ def main() -> None:
             "data_from": min(str(df.index[0].date()) for df in rets.values()),
             "data_to": max(str(df.index[-1].date()) for df in rets.values()), "first": min(days), "last": max(days),
             "holdout_runs": len(runs) if a.holdout else 0, "block_days": cfg["bootstrap"]["block_days"],
+            "min_blocks": cfg["bootstrap"]["min_blocks"], "verify": last_verify(a.out),
             "reps": cfg["bootstrap"]["reps"], "scopes": [s.name for s in sc if s.name != DEV and s.name != HO],
             "tickers": sorted(tickers), "seconds": {"analysis": round(t_analysis, 1), "total": round(time.time() - t0, 1)}}
     md = render(results, meta, u)
