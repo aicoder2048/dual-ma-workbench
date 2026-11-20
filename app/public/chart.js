@@ -16,6 +16,12 @@ const css = (n) => getComputedStyle(document.documentElement).getPropertyValue(n
 
 // 破线拐头着色：tone 由 Python 算好（见 html_report.bar_tones），这里只查颜色
 const TONE_TOKENS = { bull: "--bar-bull", bear: "--bar-bear", mixed: "--bar-mixed" };
+const TONE_TITLE = [
+  "破线拐头信号着色：按 20 线有没有破线拐头给 K 线上色（点击开 / 关）",
+  "绿：收盘在 MA20 上方，且高于 20 日抵扣价（MA20 向上）",
+  "黑：两样都不满足（MA20 向下）。第一根黑柱就是破线拐头信号",
+  "灰：只满足一样，过渡状态",
+].join("&#10;");
 
 export function createChart(box, legendEl) {
   if (!window.LightweightCharts) {
@@ -77,23 +83,6 @@ export function createChart(box, legendEl) {
   legendEl.appendChild(logBtn);
   applyScale();
 
-  // 着色：绿 / 黑 / 灰看 20 线破线拐头。默认开，记在本机。
-  let toneOn = true;
-  try { toneOn = localStorage.getItem("dma-tone") !== "0"; } catch { /* 隐私模式 */ }
-  const toneBtn = document.createElement("button");
-  toneBtn.type = "button";
-  toneBtn.className = "tone-toggle";
-  toneBtn.title = "绿：收盘站上 MA20 且高于 20 日抵扣价；黑：两样都不满足；灰：只满足一样";
-  toneBtn.innerHTML = Object.values(TONE_TOKENS).map((t) => `<i style="--c: var(${t})"></i>`).join("") + "着色";
-  toneBtn.setAttribute("aria-pressed", String(toneOn));
-  toneBtn.addEventListener("click", () => {
-    toneOn = !toneOn;
-    toneBtn.setAttribute("aria-pressed", String(toneOn));
-    try { localStorage.setItem("dma-tone", toneOn ? "1" : "0"); } catch { /* 忽略 */ }
-    paint();
-  });
-  logBtn.before(toneBtn);
-
   // ---------- 读数条：鼠标停在哪天显示哪天，移开显示最新一天 ----------
   const readout = document.createElement("div");
   readout.id = "chart-readout";
@@ -120,9 +109,23 @@ export function createChart(box, legendEl) {
     + `<button type="button" class="replay-toggle" aria-pressed="false" title="从过去某一天开始，一根一根往后放 K 线">回放</button>`
     + `<button type="button" class="draw-toggle" aria-pressed="false" title="点这里，再点图上任意一处，就在那个价位画一条横线">画线</button>`
     + `<button type="button" class="draw-clear" title="删掉这只股票上自己画的线">清除</button>`
+    + `<button type="button" class="tone-toggle" title="${TONE_TITLE}">`
+    + `${Object.values(TONE_TOKENS).map((t) => `<i style="--c: var(${t})"></i>`).join("")}着色</button>`
     + `<button type="button" class="levels-toggle" aria-pressed="true" title="把「什么会改变判断」的价位画成虚线">门槛线</button>`
     + `<button type="button" class="chart-help-toggle" aria-expanded="false">怎么用</button>`;
   legendEl.after(tools);
+
+  // 破线拐头信号着色：默认开，记在本机
+  let toneOn = true;
+  try { toneOn = localStorage.getItem("dma-tone") !== "0"; } catch { /* 隐私模式 */ }
+  const toneBtn = tools.querySelector(".tone-toggle");
+  toneBtn.setAttribute("aria-pressed", String(toneOn));
+  toneBtn.addEventListener("click", () => {
+    toneOn = !toneOn;
+    toneBtn.setAttribute("aria-pressed", String(toneOn));
+    try { localStorage.setItem("dma-tone", toneOn ? "1" : "0"); } catch { /* 忽略 */ }
+    paint();
+  });
   const applyRange = () => {
     tools.querySelectorAll(".range-btn").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.range === rangeKey)));
     if (!view?.candles.length) return;
@@ -184,7 +187,7 @@ export function createChart(box, legendEl) {
     <p><b>画线</b>：点「画线」，再点图上一处，就在那个价位画一条横线，刷新后还在。常画的是前高、前低、自己的成本价、"跌破就重新看"的价位。
       图上的<b>虚线门槛线</b>是自动画的：价格过了它，20 线组才会拐头（先 EMA20，后 MA20），判断才值得改。</p>
     <p><b>着色</b>：绿 = 收盘在 MA20 上方且高于 20 日抵扣价（MA20 向上）；黑 = 两样都不满足（MA20 向下）；灰 = 只满足一样。
-      第一根黑柱就是 20 线破线拐头；连续黑柱、收不回去，才说明拐头确认了。点图例里的「着色」可以关掉。</p>
+      第一根黑柱就是 20 线破线拐头；连续黑柱、收不回去，才说明拐头确认了。点工具栏里的「着色」可以关掉。</p>
     <p><b>看量</b>：底部的量柱，黄色是超过 50 日均量 2 倍的大量。看两种情况：横盘末期突然放量，是要变盘的信号；
       急涨或急跌的末端连续放量，说明多空分歧在化解，行情往往快要转向，并不代表强势。看到放量先提高警惕，动手还是要等均线拐头。</p>
     <p><b>回放</b>：点「回放」，再点图上的一天（或在「选起点」里选日期、最早一天、随机一天），图上就只剩那天及以前的 K 线，
