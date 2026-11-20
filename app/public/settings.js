@@ -9,8 +9,8 @@ let view = null; // { settings, models, thinkingLevels, effective, dataSources, 
 export const currentSettings = () => view?.settings ?? null;
 
 const PREVIEW = {
-  voiceAnalyst: "我是长风。现在六条均线都向下，明显偏空。收盘站上 EMA20，才是第一个转折信号。",
-  voiceAdvisor: "我是鸿雁。抵扣价就是均线明天要扣掉的那天收盘价。收盘价高于它，均线就往上走。",
+  voiceAnalyst: "我是分析师长风。现在六条均线都向下，明显偏空。收盘站上 EMA20，才是第一个转折信号。",
+  voiceAdvisor: "我是解语花鸿雁。抵扣价就是均线明天要扣掉的那天收盘价。收盘价高于它，均线就往上走。",
 };
 
 export const shortModel = (id) => String(id ?? "").split("/").pop();
@@ -58,7 +58,7 @@ function modelSection() {
       <div class="sp-confirm" id="sp-confirm" hidden></div>
     </fieldset>
     <fieldset><legend>思考程度 <span>越高越慢；按量计费时也越贵</span></legend>
-      ${[["thinkingAnalyst", "长风", "analyst"], ["thinkingAdvisor", "鸿雁", "advisor"]].map(([key, who, role]) => {
+      ${[["thinkingAnalyst", "分析师·长风", "analyst"], ["thinkingAdvisor", "解语花·鸿雁", "advisor"]].map(([key, who, role]) => {
         const eff = view.effective?.[role];
         const want = settings[key];
         return `<div class="voice-row">
@@ -87,7 +87,7 @@ function render() {
     </fieldset>
     <fieldset><legend>语音播报 <span>微软 Edge 在线语音，回答的文字会发到微软的服务</span></legend>
       ${!view.voices ? `<p class="bad">服务端还是旧版本，没有语音选项：请重启服务（just wildgoose）后刷新页面。</p>` : `
-      ${[["voiceAnalyst", "长风"], ["voiceAdvisor", "鸿雁"]].map(([key, who]) => `
+      ${[["voiceAnalyst", "分析师·长风"], ["voiceAdvisor", "解语花·鸿雁"]].map(([key, who]) => `
         <div class="voice-row">
           <label for="sp-${key}">${who}</label>
           <select id="sp-${key}" name="${key}">

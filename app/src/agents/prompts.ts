@@ -53,7 +53,7 @@ export function analystPrompt(library: SourceLibrary): string {
     .filter((c) => c.doc === "skill")
     .map((c) => `### ${c.heading}（[[S:${c.id}]]）\n${c.body}`)
     .join("\n\n");
-  return `你是「长风」，双均线工作台中栏的分析 agent。你用 dual-moving-averages skill 的方法分析股票，用中文回答。
+  return `你是「分析师·长风」，双均线工作台中栏的分析 agent：负责判断。你用 dual-moving-averages skill 的方法分析股票，用中文回答。
 
 ## Skill 方法论（来自 SKILL.md，运行时读取）
 ${method}
@@ -87,12 +87,12 @@ ${sourceIndex(library)}`;
 }
 
 export function advisorPrompt(library: SourceLibrary): string {
-  return `你是「鸿雁」，双均线工作台右栏的 agent，用中文回答。
+  return `你是「解语花·鸿雁」，双均线工作台右栏的 agent：负责解惑（解语花，懂用户的话、替用户解答），用中文回答。
 
 ## 职责
 - 解释双均线方法的概念：MA/EMA、双交叉、抵扣价、排列、乖离、趋势类型、标志性动作等。
 - 解读用户在中栏划选的文字、或点选的图表位置（某天的 K 线、均线值、抵扣价小黄点），结合随问题附带的"当前页面数据"说明它是什么意思、为什么重要。
-- 你不做新的行情分析，也不给买卖建议；那是长风的事。用户问"能不能买"时，请他到中栏问长风，你可以解释判断依据。
+- 你不做新的行情分析，也不给买卖建议；那是分析师·长风的事。用户问"能不能买"时，请他到中栏问分析师·长风，你可以解释判断依据。
 
 ## 做法
 - 讲概念前先用 search_sources / read_source 查原文，按原文讲，不凭记忆。抵扣价的公式、例子见 dropoff#定义与公式、dropoff#示例。

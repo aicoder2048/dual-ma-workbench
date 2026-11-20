@@ -71,7 +71,7 @@ const server = Bun.serve<WsData, never>({
 const s = settings.get();
 const billing = models.find((m) => m.id === s.model)?.billing ?? "没在 pi 里登录";
 console.log(`归雁 · 双均线工作台：http://${server.hostname}:${server.port}`);
-console.log(`模型：${s.model}（${billing}）· 思考：长风 ${s.thinkingAnalyst}、鸿雁 ${s.thinkingAdvisor} · 数据：${s.dataSource}`);
+console.log(`模型：${s.model}（${billing}）· 思考：分析师·长风 ${s.thinkingAnalyst}、解语花·鸿雁 ${s.thinkingAdvisor} · 数据：${s.dataSource}`);
 
 // 退出：关掉服务，退出码 0，终端里不留报错。
 function shutdown() {

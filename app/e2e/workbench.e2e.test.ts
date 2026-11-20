@@ -1251,14 +1251,24 @@ describe("规则编号都能点到 rules.md", () => {
   }, 30_000);
 });
 
-describe("中栏 agent 叫「长风」", () => {
-  test("默认视图下输入区的名字是长风，看得见；页面上不再出现「分析师」", async () => {
+describe("两个 agent 都写角色 + 名字", () => {
+  test("默认视图下：中栏「分析师·长风」、右栏「解语花·鸿雁」，名字完整、没被截断或挡住", async () => {
     const { page, errors } = await open();
-    const name = page.locator("#analyst-composer .role-bar b");
-    expect(await name.textContent()).toBe("长风");
-    expect(await name.isVisible()).toBe(true);
-    expect(await page.getAttribute("main.panel.center", "aria-label")).toBe("长风");
-    expect(await page.textContent("body")).not.toContain("分析师");
+    for (const [sel, full] of [["#analyst-composer .role-bar b", "分析师·长风"], ['.panel.right .role-bar b', "解语花·鸿雁"]] as const) {
+      const name = page.locator(sel);
+      expect(await name.textContent()).toBe(full);
+      expect(await name.isVisible()).toBe(true);
+      // 没被截断：内容宽度不超过元素宽度；没被挡住：元素中心点落在它自己身上
+      const ok = await name.evaluate((el) => {
+        const r = el.getBoundingClientRect();
+        const hit = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
+        return el.scrollWidth <= el.clientWidth + 1 && !!hit && el.contains(hit);
+      });
+      expect({ sel, ok }).toEqual({ sel, ok: true });
+    }
+    expect(await page.getAttribute("main.panel.center", "aria-label")).toBe("分析师·长风");
+    expect(await page.getAttribute("aside.panel.right", "aria-label")).toBe("解语花·鸿雁");
+    expect(await page.textContent(".panel.right .panel-head b")).toBe("和解语花·鸿雁的对话");
     expect(errors).toEqual([]);
     await page.close();
   }, 30_000);
