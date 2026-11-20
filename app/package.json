@@ -2,7 +2,7 @@
   "name": "dma-workbench",
   "version": "0.1.0",
   "private": true,
-  "description": "双均线工作台：自选股 / 分析师 / 鸿雁，基于 Pi SDK",
+  "description": "双均线工作台：自选股 / 长风 / 鸿雁，基于 Pi SDK",
   "type": "module",
   "scripts": {
     "start": "bun src/server.ts",

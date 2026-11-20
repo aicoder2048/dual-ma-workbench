@@ -6,6 +6,7 @@ export const CARD_NAMES = {
   big_picture: "1. 看大局",
   strategy: "2. 定策略",
   direction: "3. 看方向",
+  rules: "4. 规则清单",
 };
 
 const fmt = (x, d = 1) => `${x >= 0 ? "+" : ""}${Number(x).toFixed(d)}`;
@@ -16,10 +17,10 @@ export function cardQuestions(card, analysis, visual) {
   const qs = [];
   const add = (cond, text) => cond && qs.push({ text });
   const pctl = Math.round(a.bias_pctl * 100);
-  const extremeBias = a.bias_pctl <= 0.05 || a.bias_pctl >= 0.95;
+  const extremeBias = a.bias_pctl <= 1 - v.bias.extreme || a.bias_pctl >= v.bias.extreme;
   const mixedCross = v.crosses.find((c) => c.verdict === "不一致");
   const doubleCross = v.crosses.find((c) => c.verdict.startsWith("双"));
-  const p = v.projection;
+  const sc = v.scenario;
 
   if (card === "chart") {
     add(true, "图上的三个小黄点分别是什么意思？");
@@ -44,10 +45,17 @@ export function cardQuestions(card, analysis, visual) {
     const worst = [...a.drops].sort((x, y) => x.ma_flat_change_pct - y.ma_flat_change_pct)[0];
     const kind = worst.below === 0 ? "都扣高值" : worst.below === worst.count ? "都扣低值" : `扣低 ${worst.below} 天`;
     add(true, `MA${worst.period} 未来 ${worst.count} 天${kind}，意味着什么？`);
-    add(p.arrNow.ma !== p.arrAfter.ma, `价格不变 ${p.days} 天，MA 排列为什么会从${p.arrNow.ma}变成${p.arrAfter.ma}？`);
-    add(p.arrNow.ma === p.arrAfter.ma, `价格不变 ${p.days} 天，MA 排列为什么还是${p.arrAfter.ma}？`);
+    add(a.arr_ma !== sc.end_arr_ma, `价格不变 ${sc.days} 天，MA 排列为什么会从${a.arr_ma}变成${sc.end_arr_ma}？`);
+    add(a.arr_ma === sc.end_arr_ma, `价格不变 ${sc.days} 天，MA 排列为什么还是${sc.end_arr_ma}？`);
+    add(true, "门槛路径的最高、最低抵扣价怎么读？");
     add(true, "棒棒糖图怎么读？在现价上方和下方有什么区别？");
     add(true, "EMA 没有抵扣价，推演公式是什么？");
+  } else if (card === "rules") {
+    const yielded = a.rules.find((r) => r.yields_to);
+    add(Boolean(yielded), yielded && `${yielded.id} 满足，为什么还是按 ${yielded.yields_to} 做？`);
+    add(a.rules.some((r) => r.id === "P13" && r.status === "需看图"), "小时线那条为什么要看图？");
+    add(true, "规则里的公理、判定、动作有什么区别？");
+    add(true, `打法用到的 ${a.play.rules.join("、")} 各说了什么？`);
   }
   return qs.slice(0, 5);
 }

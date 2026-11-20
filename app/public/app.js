@@ -8,7 +8,7 @@ import { initAskMenu, selectionLabel } from "./askmenu.js";
 import { collapseDrawer, initDrawer, updatePeek } from "./drawer.js";
 import { resolveTicker } from "./names.js";
 import { applyRemoteSettings, initSettings, openSettings } from "./settings.js";
-import { effectLine, installTips, leanCard, leanName, outlookAnswer, planAnswer, planBody, pnlText, stanceOf, stepVisuals, trendAnswer } from "./viz.js";
+import { effectLine, installTips, leanCard, leanName, outlookAnswer, planAnswer, planBody, pnlText, rulesAnswer, stanceOf, stepVisuals, trendAnswer } from "./viz.js";
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -171,7 +171,7 @@ function showLoadError(ticker, asof, message) {
   showPane(false);
   document.querySelectorAll(".wl-item").forEach((li) =>
     li.classList.toggle("active", li.dataset.ticker === ticker && !asof));
-  send({ type: "view", ticker, asof, error: message }); // 分析师、鸿雁据此不再用上一只票
+  send({ type: "view", ticker, asof, error: message }); // 长风、鸿雁据此不再用上一只票
 }
 $("load-error-retry").addEventListener("click", async (e) => {
   if (!state.ticker) return;
@@ -182,7 +182,7 @@ $("load-error-retry").addEventListener("click", async (e) => {
   $("load-error-retry").textContent = "重试";
 });
 
-/** 渲染一份分析结果（HTTP 拿到的，或分析师工具推过来的）。 */
+/** 渲染一份分析结果（HTTP 拿到的，或长风工具推过来的）。 */
 export function showAnalysis(data, asof = null) {
   collapseDrawer(); // 下面要重新渲染三步卡片：抽屉里不能留着旧的
   const a = data.analysis;
@@ -214,7 +214,7 @@ export function showAnalysis(data, asof = null) {
   const v = $("verdict");
   v.hidden = false;
   v.style.setProperty("--stance", `var(--${r.stance === "bullish" ? "up" : r.stance === "bearish" ? "down" : "neutral"})`);
-  v.innerHTML = leanCard(r.visual.lean, a.close, a.regime.name);
+  v.innerHTML = leanCard(r.visual.lean, a.close, a.regime.name, a.thresholds.ORDER_TIE_PCT.value);
   renderInline(v.querySelector(".lean-play"), `${a.play.text} [[D:打法]] [[S:skill#模糊判断]]`, data.facts);
 
   chartApi?.setData(data.chart, a.label);
@@ -263,6 +263,7 @@ function paintAnswers(r, a, p) {
   box("big_picture").innerHTML = trendAnswer(r.trend);
   box("strategy").innerHTML = planAnswer(r.plans, p, a.close);
   box("direction").innerHTML = outlookAnswer(r.outlook, p, a.close);
+  box("rules").innerHTML = rulesAnswer(r.visual);
   const plan = box("strategy");
   plan.querySelectorAll("[data-pos]").forEach((b) => b.addEventListener("click", () => {
     const next = { ...p, pos: b.dataset.pos };

@@ -92,3 +92,34 @@ describe("公开版：转载内容不在仓库里", () => {
     expect(publicLib.index().some((e) => e.id === "article#2.3" && e.aliasOf === "concepts#抵扣价")).toBe(true);
   });
 });
+
+describe("规则表：每条规则一个片段", () => {
+  const RULES: SourceDoc = { code: "r", title: "规则", path: "r.md", ruleRows: true };
+  const md = [
+    "# 规则", "导语",
+    "## 判定", "先判类型。", "",
+    "| 编号 | 种类 | IF | THEN | 来源 | 由哪个计算判断 |", "|---|---|---|---|---|---|",
+    "| J5 | 判定 | 60 线 \\|角度\\| < 15° | 横盘 | 视频 B | `rules.j5_range` |",
+    "| J16 | 判定 | 同一对周期的 MA 和 EMA 都交叉 | 双交叉 | 视频 A | `rules.j16_double_cross` |",
+  ].join("\n");
+  const chunks = chunkMarkdown(RULES, md);
+
+  test("编号就是规则编号，转义的竖线还原", () => {
+    expect(chunks.map((c) => c.id)).toEqual(["r#规则", "r#J5", "r#J16", "r#判定"]);
+    expect(chunks.find((c) => c.id === "r#J5")!.body).toContain("60 线 |角度| < 15°");
+  });
+  test("章节片段里不再重复表头和规则行", () => {
+    expect(chunks.find((c) => c.id === "r#判定")!.body).toBe("先判类型。");
+  });
+});
+
+describe("公开版的规则库", () => {
+  const lib = SourceLibrary.load(undefined, SOURCE_DOCS.filter((d) => d.path.startsWith(".agents/")));
+
+  test("搜「双交叉」命中 rules.md 的 J16", () => {
+    expect(lib.search("双交叉").map((r) => r.chunk.id)).toContain("rules#J16");
+  });
+  test("每条规则都能按编号引用", () => {
+    for (const id of ["rules#A1", "rules#J16", "rules#P13", "rules#P17", "rules#P20"]) expect(lib.has(id), id).toBe(true);
+  });
+});

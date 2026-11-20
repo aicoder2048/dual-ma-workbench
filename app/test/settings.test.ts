@@ -8,7 +8,7 @@ import { DEFAULT_SETTINGS, SettingsStore, sourceArg, VOICE_OPTIONS } from "../sr
 const tmp = () => mkdtempSync(join(tmpdir(), "dma-set-"));
 
 describe("模型和思考程度", () => {
-  test("默认 Codex；分析师、鸿雁的思考程度都是 medium", () => {
+  test("默认 Codex；长风、鸿雁的思考程度都是 medium", () => {
     expect(DEFAULT_SETTINGS.model).toBe("openai-codex/gpt-6.1-sol");
     expect(DEFAULT_SETTINGS.thinkingAnalyst).toBe("medium");
     expect(DEFAULT_SETTINGS.thinkingAdvisor).toBe("medium");
@@ -80,7 +80,7 @@ describe("数据源", () => {
 });
 
 describe("语音设置", () => {
-  test("默认：分析师年轻男声云希，鸿雁年轻女声晓晓，不自动朗读", () => {
+  test("默认：长风年轻男声云希，鸿雁年轻女声晓晓，不自动朗读", () => {
     expect(DEFAULT_SETTINGS.voiceAnalyst).toBe("zh-CN-YunxiNeural");
     expect(DEFAULT_SETTINGS.voiceAdvisor).toBe("zh-CN-XiaoxiaoNeural");
     expect(DEFAULT_SETTINGS.autoSpeak).toBe(false);

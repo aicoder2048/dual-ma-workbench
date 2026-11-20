@@ -64,7 +64,7 @@ export function suggestTool(agent: AgentName, emit: (e: ServerEvent) => void): T
   } as unknown as ToolDefinition;
 }
 
-/** 分析师会话里拿到过的数据：按股票代码存最新一份，供引用校验。 */
+/** 长风会话里拿到过的数据：按股票代码存最新一份，供引用校验。 */
 export class FactsRegistry {
   byTicker: Record<string, Facts> = {};
   current: string | null = null;

@@ -53,6 +53,7 @@ class Ctx:
     p60: PairProgress
     structure: Structure | None
     weekly: dict
+    hourly: dict | None = None
 
     @property
     def close(self) -> float:
@@ -507,12 +508,24 @@ def p12_pullback_construct(c: Ctx) -> Result:
     return _met(ok, k.basis + tail, k.levels)
 
 
+def p13_hourly_arrangement(c: Ctx) -> Result:
+    h = c.hourly or {}
+    if not h.get("available"):
+        return Result(Status.CHART, f"没有小时线（{h.get('reason', '没有取')}），看图")
+    want = "空头" if (_pullback_dir(c) or c.regime.direction) < 0 else "多头"
+    ok = h["arr_ma"] == want and h["arr_ema"] == want
+    return _met(ok, f"小时线（{h['source']}，到 {h['last']}）MA {h['arr_ma']}、EMA {h['arr_ema']}，要{want}排列",
+                {f"小时 {k}{line['period']}": line[k.lower()] for line in h["lines"] for k in ("MA", "EMA")})
+
+
 def p14_pullback_entry(c: Ctx) -> Result:
-    conds = [p10_parallel(c), p11_pullback_reach(c), p12_pullback_construct(c)]
-    marks = "；".join(f"{i} {r.status.value}" for i, r in zip(("①", "②", "③"), conds))
+    conds = [p10_parallel(c), p11_pullback_reach(c), p12_pullback_construct(c), p13_hourly_arrangement(c)]
+    marks = "；".join(f"{i} {r.status.value}" for i, r in zip(("①", "②", "③", "④"), conds))
     if any(r.status == Status.UNMET for r in conds):
-        return _met(False, marks + "；④ 小时线需看图")
-    return Result(Status.CHART, marks + "；④ 小时线需看图")
+        return _met(False, marks)
+    if any(r.status == Status.CHART for r in conds):
+        return Result(Status.CHART, marks)
+    return _met(True, marks)
 
 
 def p16_bounce_exit(c: Ctx) -> Result:
@@ -604,7 +617,7 @@ RULES: tuple[Rule, ...] = (
     Rule("P10", Kind.ACTION, "吃回撤①：中长期均线平行", p10_parallel),
     Rule("P11", Kind.ACTION, "吃回撤②：回撤到 60/120 线组，MA 方向不变", p11_pullback_reach),
     Rule("P12", Kind.ACTION, "吃回撤③：底部构造", p12_pullback_construct),
-    Rule("P13", Kind.ACTION, "吃回撤④：小时级别多头排列", None),
+    Rule("P13", Kind.ACTION, "吃回撤④：小时级别多头排列", p13_hourly_arrangement),
     Rule("P14", Kind.ACTION, "吃回撤：条件齐了进场", p14_pullback_entry),
     Rule("P15", Kind.ACTION, "第一次回撤到线组是好入场点", None),
     Rule("P16", Kind.ACTION, "解除不了双交叉，反弹是离场机会", p16_bounce_exit),
@@ -615,14 +628,21 @@ RULES: tuple[Rule, ...] = (
 )
 BY_ID = {r.id: r for r in RULES}
 
+# 两条规则同时满足、结论相反时谁说了算：键让位给值里第一条满足的规则（rules.md P17、P16）
+YIELDS_TO = {"P19": ("P17", "P16"), "P20": ("P17", "P16")}
+
 
 def evaluate(ctx: Ctx) -> list[dict]:
-    out = []
-    for r in RULES:
-        res = r.evaluate(ctx) if r.evaluate else Result(Status.CHART, "脚本算不了")
-        out.append({"id": r.id, "kind": r.kind.value, "name": r.name, "status": res.status.value,
-                    "basis": res.basis, "levels": res.levels})
-    return out
+    results = {r.id: (r.evaluate(ctx) if r.evaluate else Result(Status.CHART, "脚本算不了")) for r in RULES}
+
+    def yields_to(rid: str) -> str | None:
+        if results[rid].status != Status.MET:
+            return None
+        return next((o for o in YIELDS_TO.get(rid, ()) if results[o].status == Status.MET), None)
+
+    return [{"id": r.id, "kind": r.kind.value, "name": r.name, "status": results[r.id].status.value,
+             "basis": results[r.id].basis, "levels": results[r.id].levels, "yields_to": yields_to(r.id)}
+            for r in RULES]
 
 
 # ---------- 打法：唯一出口 ----------
@@ -656,17 +676,22 @@ def build_play(regime: Regime, results: list[dict]) -> dict:
             ids = ["P1", "J12", "J13", "J14", "J11"]
     elif key in ("稳定上涨", "稳定下跌"):
         up = key == "稳定上涨"
-        conds = f"① {s('P10')}，② {s('P11')}，③ {s('P12')}，④ 小时线需看图"
+        conds = f"① {s('P10')}，② {s('P11')}，③ {s('P12')}，④ {s('P13')}"
+        entry = st["P14"]["status"]
         if regime.stage == Stage.EXTEND:
             text = (f"{regime.name}：持有，不追高。等回撤：到 60 线组、MA120 方向不变、出现底部构造、小时线多头排列，再加仓。"
                     if up else
                     f"{regime.name}：不抄底。等反弹：到 60 线组、MA120 方向不变、出现顶部构造、小时线空头排列，再减仓或离场。")
         elif up:
-            text = (f"{regime.name}：持有，不追高。吃回撤：{conds}。"
-                    + ("前三条都满足，小时线走出多头排列就加仓。" if st["P14"]["status"] == "需看图" else "条件没齐，先不加仓。"))
+            text = f"{regime.name}：持有，不追高。吃回撤：{conds}。" + {
+                "满足": "四个条件齐了，可以结构性加仓。",
+                "需看图": "前三条都满足，看图确认小时线走出多头排列就加仓。",
+            }.get(entry, "条件没齐，先不加仓。")
         else:
-            text = (f"{regime.name}：不抄底。反弹卖出：{conds}。"
-                    + ("前三条都满足，小时线走出空头排列就减仓或离场。" if st["P14"]["status"] == "需看图" else "条件没齐，有仓位等反弹到线组附近再减。"))
+            text = f"{regime.name}：不抄底。反弹卖出：{conds}。" + {
+                "满足": "四个条件齐了，有仓位减仓或离场。",
+                "需看图": "前三条都满足，看图确认小时线走出空头排列就减仓或离场。",
+            }.get(entry, "条件没齐，有仓位等反弹到线组附近再减。")
         ids = ["P10", "P11", "P12", "P13", "P14"]
     elif key in ("加速上涨", "加速下跌"):
         up = key == "加速上涨"

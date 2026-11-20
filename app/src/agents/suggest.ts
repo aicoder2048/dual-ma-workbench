@@ -1,5 +1,5 @@
 /**
- * 动态问法：每次切换股票时，给中栏（分析师）和右栏（鸿雁）各生成几条可点的问题。
+ * 动态问法：每次切换股票时，给中栏（长风）和右栏（鸿雁）各生成几条可点的问题。
  *
  * - ruleSuggestions：从分析数据直接拼，立刻可用，作为占位和兜底。
  * - Suggester：独立的轻量 Pi 会话（无工具、低思考），按当前数据生成问题，替换规则版。
@@ -51,7 +51,8 @@ export function ruleSuggestions(a: Analysis, asof: string | null = null): Sugges
       : { text: "什么叫双交叉？为什么只看一组不够？", intent: "复习概念" },
     { text: `「${a.regime.name}」是什么意思，该怎么做？`, intent: "复习概念" },
   ];
-  if (a.bias_pctl <= 0.05 || a.bias_pctl >= 0.95) {
+  const extreme = a.thresholds.EXTREME_PCTL.value;
+  if (a.bias_pctl <= 1 - extreme || a.bias_pctl >= extreme) {
     advisor.push({ text: `乖离率在历史 ${Math.round(a.bias_pctl * 100)}% 分位说明什么？`, intent: "复习概念" });
   }
   return { analyst, advisor };
@@ -79,7 +80,7 @@ const PROMPT = `你为"双均线工作台"生成可点击的问题按钮。只�
 {"analyst":[{"text":"…","intent":"看状态|要不要动手|何时拐头|回放练习"}, …4 条],
  "advisor":[{"text":"…","intent":"复习概念"}, …3 条]}
 要求：
-- analyst 是问"分析师"的：围绕这只股票当前最值得关心的点（例如即将发生的交叉、哪条均线快拐头、扣高值还是扣低值、能不能加仓/抄底），四种 intent 各一条，回放练习可以用这只股票的历史日期或视频案例 "回放 TSLA 2021-04-14"。
+- analyst 是问"长风"的：围绕这只股票当前最值得关心的点（例如即将发生的交叉、哪条均线快拐头、扣高值还是扣低值、能不能加仓/抄底），四种 intent 各一条，回放练习可以用这只股票的历史日期或视频案例 "回放 TSLA 2021-04-14"。
 - advisor 是问"鸿雁"的概念题：从当前数据里挑出用户最可能看不懂的概念（例如抵扣价、双交叉、乖离分位、排列混乱），用当前数据举例。
 - 每条不超过 30 个字，口语化，具体，不要重复，不要出现"投资建议"。`;
 

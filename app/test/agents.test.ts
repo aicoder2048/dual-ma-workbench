@@ -37,7 +37,7 @@ describe("模型", () => {
 });
 
 describe("动态问法", () => {
-  test("规则版：分析师四种意图齐全，鸿雁都是概念题", () => {
+  test("规则版：长风四种意图齐全，鸿雁都是概念题", () => {
     const s = ruleSuggestions(analysis);
     expect(s.analyst.map((x) => x.intent)).toEqual(["看状态", "要不要动手", "何时拐头", "回放练习"]);
     expect(s.advisor.every((x) => x.intent === "复习概念")).toBe(true);
@@ -83,7 +83,7 @@ describe("工具", () => {
 });
 
 describe("提示词", () => {
-  test("分析师提示里有 skill 方法论和引用库目录", () => {
+  test("长风提示里有 skill 方法论和引用库目录", () => {
     const p = analystPrompt(library);
     expect(p).toContain("[[S:skill#原则]]");
     expect(p).toContain("- concepts#抵扣价：");

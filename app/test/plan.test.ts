@@ -37,10 +37,13 @@ describe("定策略：按有没有仓位给出做法和价位", () => {
     expect(plans.holding.action).toMatch(/减仓|离场/);
     expect(plans.holding.items.some((i) => i.label === "仓位")).toBe(true);
   });
-  test("偏多时空仓等回调，给出回踩的价位", () => {
+  test("偏多时空仓等回调，给出回撤到 60 线组的价位和吃回撤四个条件的状态", () => {
     const p = buildPlans(bullish());
     expect(p.flat.action).toMatch(/回调/);
-    expect(p.flat.items.map((i) => i.text).join("")).toContain("220.00");
+    const wait = p.flat.items.find((i) => i.label === "等什么")!;
+    expect(wait.text).toContain("205.00"); // MA60
+    expect(wait.text).toContain("（P11）");
+    expect(wait.rules).toEqual(["P10", "P11", "P12", "P13"]);
   });
 });
 
@@ -193,7 +196,7 @@ describe("空头结构反弹中 / 多头结构回撤中进入策略", () => {
   test("横盘带冲突：还按横盘打（页面上的趋势类型也是横盘）", () => {
     const a = conflict("多头结构回撤中");
     a.play = { ...a.play, key: "横盘" };
-    expect(buildPlans(a).flat.action).toBe("基本不做，等埋伏信号。");
+    expect(buildPlans(a).flat.action).toBe("中段不做，等末期条件齐了再埋伏。");
     expect(buildOutlook(a).effect.flat.text).not.toContain("回调");
   });
   test("价位相对现价说对：「站上 / 反弹到 X」的 X 在现价上方，「回踩到 / 跌破 X」的 X 在现价下方", () => {
@@ -315,14 +318,24 @@ describe("止损和失效的内容来自 playbooks", () => {
   });
 });
 
-/** 改均线排布和方向：20/60 两对的上下（1 在上、-1 在下）、EMA20 方向。 */
+/**
+ * 改 20/60 的状态和 EMA20 方向，照脚本的输出改：MA、EMA 两对的上下（1 在上、-1 在下、0 贴着）。
+ * 两对都在下方才算双死叉（steps 的 side 换成空头）；任一对已在下方，埋伏的底线 P3 就满足。
+ */
 function shaped(trend: string, score: number, o: { r2060: -1 | 0 | 1; ema20Dir: -1 | 0 | 1; close?: number; emaRel?: -1 | 0 | 1 }): Analysis {
   const a = structuredClone(bear);
+  const emaRel = o.emaRel ?? o.r2060;
   a.play = { ...a.play, key: trend };
   a.close = o.close ?? a.close;
   a.lean = { ...a.lean, score,
-    pairs: a.lean.pairs.map((x) => (x.pair === "MA20/MA60" ? { ...x, rel: o.r2060 } : x.pair === "EMA20/EMA60" ? { ...x, rel: o.emaRel ?? o.r2060 } : x)),
+    pairs: a.lean.pairs.map((x) => (x.pair === "MA20/MA60" ? { ...x, rel: o.r2060 } : x.pair === "EMA20/EMA60" ? { ...x, rel: emaRel } : x)),
     dirs: { ...a.lean.dirs, EMA20: o.ema20Dir } };
+  const side = o.r2060 < 0 && emaRel < 0 ? "空头" : "多头";
+  const broken = o.r2060 < 0 || emaRel < 0;
+  a.steps = a.steps.map((p) => (p.pair === "20/60" ? { ...p, side } : p));
+  a.rules = a.rules.map((r) => (r.id !== "P3" ? r : broken
+    ? { ...r, status: "满足", basis: "20/60 已经出现第一个交叉" }
+    : { ...r, status: "不满足", basis: "5 天内避免 20/60 双死叉要持平在 140.00（-7.3%）以上" }));
   return a;
 }
 const label = (p: { items: { label: string; text: string }[] }, l: string) => p.items.find((i) => i.label === l)!.text;
@@ -478,4 +491,51 @@ test("ma20Claim 和看方向的结论说的是同一件事", () => {
   weak.drops = weak.drops.map((d) => (d.period === 20 ? { ...d, path: d.path.map((p) => ({ ...p, close: 999 })) } : d));
   expect(buildOutlook(weak).verdict).toContain("顺风在减弱");
   expect(ma20Claim(weak)).toBeNull();
+});
+
+describe("判据和阈值读脚本结果，不在这里重算", () => {
+  const withThreshold = (trend: string, key: string, value: number) => {
+    const a = shaped(trend, 0.4, { r2060: 1, ema20Dir: 1 });
+    a.thresholds = { ...a.thresholds, [key]: { ...a.thresholds[key], value } };
+    return buildPlans(a);
+  };
+  test("横盘末期的 2% 来自 thresholds.DENSE_PCT，三个条件的状态来自 J12–J14", () => {
+    const wait = label(withThreshold("横盘", "DENSE_PCT", 3).flat, "等什么");
+    expect(wait).toContain("< 3%");
+    expect(wait).toMatch(/（J12）.*（J13）.*（J14）/);
+  });
+  test("过渡的失效门槛来自 thresholds.LEAN_CLEAR", () => {
+    expect(label(withThreshold("过渡", "LEAN_CLEAR", 0.7).holding, "失效")).toContain("升到 0.7 以上");
+  });
+  test("看方向的三档来自 thresholds.LEAN_SOME", () => {
+    const a = shaped("过渡", 0.3, { r2060: 1, ema20Dir: 1 });
+    expect(buildOutlook(a).verdict).toContain("顺风");
+    a.thresholds = { ...a.thresholds, LEAN_SOME: { ...a.thresholds.LEAN_SOME, value: 0.35 } };
+    expect(buildOutlook(a).verdict).toContain("没有明确方向");
+  });
+  test("横盘破位看 P3（埋伏的底线），不看排布", () => {
+    const a = shaped("横盘", 0, { r2060: 1, ema20Dir: 1 });
+    expect(playKey(a)).toBe("横盘");
+    a.rules = a.rules.map((r) => (r.id === "P3" ? { ...r, status: "满足" } : r));
+    expect(playKey(a)).toBe("横盘破位");
+  });
+});
+
+describe("加速上涨有仓位：没见顶部构造不下车，见了也只是提醒（playbooks 0.5 改正）", () => {
+  const accel = (p8: "满足" | "不满足") => {
+    const a = shaped("加速上涨", 0.8, { r2060: 1, ema20Dir: 1, close: 230 });
+    a.rules = a.rules.map((r) => (r.id === "P8" ? { ...r, status: p8 } : r));
+    return buildPlans(a);
+  };
+  test("顶部构造没出现：拿着不下车，不提分批止盈", () => {
+    const p = accel("满足");
+    expect(p.holding.action).toContain("不下车");
+    for (const k of ["holding", "profit"] as const) expect(all(p[k])).not.toMatch(/分批止盈|先止盈/);
+  });
+  test("顶部构造出现了：只是提醒，等 20 线组拐头（关键性波动）", () => {
+    const p = accel("不满足");
+    expect(p.holding.action).toContain("只是提醒");
+    expect(label(p.holding, "止损")).toContain("关键性波动");
+    expect(p.holding.items.find((i) => i.label === "构造")!.rules).toContain("P9");
+  });
 });

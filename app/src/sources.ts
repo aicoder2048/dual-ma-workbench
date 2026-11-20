@@ -2,6 +2,7 @@
  * 引用库：把项目里的方法论资料切成带稳定编号的片段，供两个 agent 搜索、读取和引用。
  *
  * 片段编号 = `<文档代号>#<章节号或压缩标题>`，例如 `article#2.3`、`skill#原则`。
+ * rules.md 每条规则单独一个片段，编号就是规则编号，例如 `rules#P17`。
  * 回答里用 `[[S:article#2.3]]` 引用；citations.ts 负责校验。
  *
  * 命令行：`bun src/sources.ts` 列出全部片段编号（检查切片结果用）。
@@ -21,6 +22,8 @@ export interface SourceDoc {
   path: string;
   /** 不收录的章节（标题包含这些文字就跳过）。 */
   skip?: string[];
+  /** 规则表：每一行规则（`| P17 | 动作 | IF | THEN | 来源 | 计算 |`）单独成片段，编号 `<代号>#P17`。 */
+  ruleRows?: boolean;
 }
 
 export const SOURCE_DOCS: SourceDoc[] = [
@@ -31,7 +34,8 @@ export const SOURCE_DOCS: SourceDoc[] = [
   },
   { code: "concepts", title: "概念速查", path: `${SKILL}/references/concepts.md` },
   { code: "cases", title: "视频案例", path: `${SKILL}/references/cases.md` },
-  { code: "playbook", title: "打法细则", path: `${SKILL}/references/playbooks.md` },
+  { code: "playbook", title: "打法（类型 × 仓位）", path: `${SKILL}/references/playbooks.md` },
+  { code: "rules", title: "规则", path: `${SKILL}/references/rules.md`, ruleRows: true },
   { code: "dropoff", title: "抵扣价学习笔记", path: "study-notes/261118-ma-drop-off-price.md" },
   { code: "ta01", title: "TA01 均线实战要点", path: "docs/moving-averages/TA01-MA-Practical-Essentials.md" },
   { code: "ta15", title: "TA15 用均线判断趋势与震荡", path: "docs/moving-averages/TA15-Trend-Summary-from-MA.md" },
@@ -71,6 +75,19 @@ const HEADING = /^(#{1,3})\s+(.+?)\s*$/;
 // "2.3 抵扣价" 或 "1. 双均线是干什么的"；不匹配 "2020 年的例子"
 const SECTION_NO = /^(\d+\.\d+(?:\.\d+)*|\d+)\.?\s+(?=\D)/;
 const DOTTED_OR_DOT = /^(\d+\.\d+(?:\.\d+)*\s|\d+\.\s)/;
+const RULE_ROW = /^\| ([AJP]\d+) \| (公理|判定|动作) \|/;
+const RULE_HEAD = /^\| 编号 \||^\|---/;
+const HEADING_PART_CHARS = 16;
+const clip = (t: string) => (t.length > HEADING_PART_CHARS ? `${t.slice(0, HEADING_PART_CHARS)}…` : t);
+
+/** 规则表的一行 → 片段。单元格里的 `\|` 是转义的竖线。 */
+function ruleChunk(doc: SourceDoc, line: string, lineNo: number): Chunk {
+  const [id, kind, cond, then, source, compute] = line.split(/(?<!\\)\|/).slice(1, -1).map((c) => c.trim().replaceAll("\\|", "|"));
+  return {
+    id: `${doc.code}#${id}`, doc: doc.code, docTitle: doc.title, heading: `${id}（${kind}）${clip(cond)} → ${clip(then)}`,
+    path: doc.path, line: lineNo, body: `**IF** ${cond}\n\n**THEN** ${then}\n\n来源：${source}\n\n由哪个计算判断：${compute}`,
+  };
+}
 
 function stripFrontmatter(lines: string[]): number {
   if (lines[0]?.trim() !== "---") return 0;
@@ -112,6 +129,11 @@ export function chunkMarkdown(doc: SourceDoc, text: string): Chunk[] {
   };
 
   for (let i = start; i < lines.length; i++) {
+    if (doc.ruleRows && RULE_ROW.test(lines[i])) {
+      chunks.push(ruleChunk(doc, lines[i], i + 1));
+      continue;
+    }
+    if (doc.ruleRows && RULE_HEAD.test(lines[i]) && (lines[i].startsWith("| 编号") || lines[i - 1]?.startsWith("| 编号"))) continue;
     const m = lines[i].match(HEADING);
     if (m) {
       flush();

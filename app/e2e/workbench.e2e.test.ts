@@ -114,7 +114,7 @@ async function addAdvisorAnswer(page: Page, text: string) {
 }
 
 describe("设置", () => {
-  test("能打开，默认分析师云希、鸿雁晓晓", async () => {
+  test("能打开，默认长风云希、鸿雁晓晓", async () => {
     const { page, errors } = await open();
     await page.click("#settings-btn");
     await expect(page.isVisible("#settings-panel")).resolves.toBe(true);
@@ -193,7 +193,7 @@ describe("设置", () => {
     await page.close();
   }, 30_000);
 
-  test("分析师的思考程度改成 high：保存，刷新后还是 high", async () => {
+  test("长风的思考程度改成 high：保存，刷新后还是 high", async () => {
     const { page, errors } = await open();
     await page.click("#settings-btn");
     await page.selectOption("select[name=thinkingAnalyst]", "high");
@@ -386,7 +386,7 @@ describe("取数失败", () => {
     warningNext = "今日 K 线未完成（美东 13:03，收盘 16:00）。";
     const { page, errors } = await open(undefined, "AMZN").finally(() => { warningNext = null; });
     expect(await page.isVisible("#warning")).toBe(true);
-    // 分析师对话很长、滚过了总结：提示条出现
+    // 长风对话很长、滚过了总结：提示条出现
     await page.evaluate(async () => {
       const { panels } = await import("/app.js");
       panels.analyst.history([{ role: "user", text: "长对话" },
@@ -413,7 +413,7 @@ describe("取数失败", () => {
     await page.waitForSelector("#analyst-chips.dim", { state: "attached" });
     expect(await page.$$("#analyst-chips .chip, #advisor-chips .chip")).toHaveLength(0);
     expect(page.url()).toEndWith("#ANT");
-    // 告诉服务端：页面现在是 ANT，取数失败（分析师、鸿雁据此不再用上一只票）
+    // 告诉服务端：页面现在是 ANT，取数失败（长风、鸿雁据此不再用上一只票）
     expect(wsSent.filter((m) => m.type === "view").at(-1)).toEqual({ type: "view", ticker: "ANT", asof: null, error: "取不到 ANT 的行情" });
     expect(await page.textContent("#data-status-v")).not.toContain("盘中");
     expect(await page.isVisible("#peek")).toBe(false);
@@ -782,19 +782,25 @@ describe("十字线日期", () => {
   }, 30_000);
 });
 
-describe("看大局的证据：按判断顺序的四问", () => {
-  // 四问改成脚本的判断顺序（rules.md J1–J7）：类型看 60/120 线组和钟表，加速看钟表或乖离，阶段看 20 线组
-  test("四问依次是：60/120 排好没有、60 线几点钟、是不是加速、20 线组走到哪一步；每问先给判断；最后接回结论", async () => {
+describe("看大局的证据：按判断顺序的五问", () => {
+  // 按脚本的判断顺序（rules.md J1–J7）：类型看 60/120 线组和钟表，加速看钟表或乖离，阶段看 20 线组；最后看大一级、小一级
+  test("五问依次是：60/120 排好没有、60 线几点钟、是不是加速、20 线组走到哪一步、周线和小时线；每问先给判断；最后接回结论", async () => {
     const { page, errors } = await open();
     const step = page.locator('[data-step="big_picture"]');
     const qs = await step.locator(".check h3").allTextContents();
-    expect(qs.map((q) => q.replace(/\s+/g, ""))).toEqual(["①60/120线组排好了吗？", "②60线几点钟？", "③是不是加速？", "④20线组走到哪一步？"]);
+    expect(qs.map((q) => q.replace(/\s+/g, ""))).toEqual(["①60/120线组排好了吗？", "②60线几点钟？", "③是不是加速？", "④20线组走到哪一步？", "⑤周线、小时线怎么排？"]);
     for (const q of await step.locator(".check h3").all()) expect(await q.isVisible()).toBe(true);
     const verdicts = await step.locator(".check .judge").allTextContents();
     expect(verdicts[0]).toContain("有类型");
     expect(verdicts[1]).toContain("点");
     expect(verdicts[2]).toContain("加速起点");
     expect(verdicts[3]).toContain("延伸");
+    expect(verdicts[4]).toContain("周线 MA 多头");
+    expect(verdicts[4]).toContain("小时线 MA 空头");
+    // 五步进度：60/120 这一轮向下走到第一个交叉，日期写出来
+    const row = step.locator("table.steps5 tbody tr").nth(1);
+    expect(await row.textContent()).toContain("11-13");
+    expect(await row.textContent()).toContain("4/5");
     expect(await step.locator(".check-sum").textContent()).toContain("加速下跌·延伸");
     expect(await step.locator("table.vt th:text('MA 方向')").count()).toBe(0); // 和总结卡片重复的均线表去掉了
     expect(errors).toEqual([]);
@@ -1015,7 +1021,7 @@ describe("K 线回放", () => {
     await page.close();
   }, 30_000);
 
-  test("回放中同一只票被重新载入（分析师调了取数）：停在原来那天，不露出后面的 K 线；换票才退出", async () => {
+  test("回放中同一只票被重新载入（长风调了取数）：停在原来那天，不露出后面的 K 线；换票才退出", async () => {
     const { page, errors } = await start("RPLH");
     await page.click(".replay-toggle");
     await page.click(".replay-start");
@@ -1023,7 +1029,7 @@ describe("K 线回放", () => {
     await page.dispatchEvent(".replay-menu input[type=date]", "change");
     await waitRp(page, (r) => r.mode === "replay" && r.index === 150);
     expect((await rp(page)).playing).toBe(true);
-    // 分析师工具推来同一只票的最新分析 → showAnalysis → setData
+    // 长风工具推来同一只票的最新分析 → showAnalysis → setData
     await page.evaluate(async () => {
       const app = await import("/app.js");
       const data = await (await fetch("/api/analyze?ticker=RPLH")).json();
@@ -1137,6 +1143,83 @@ describe("K 线回放", () => {
     await page.click(".chart-help-toggle");
     const text = (await page.textContent(".chart-help"))!;
     for (const k of ["回放", "Shift+↓", "Shift+→", "Shift+←"]) expect(text).toContain(k);
+    await page.close();
+  }, 30_000);
+});
+
+describe("规则清单：每条规则的结论能点到 rules.md", () => {
+  /** 像用户一样把这一块滚进中栏视野，再看它的标题有没有被别的东西挡住。 */
+  const scrollIntoCenter = (page: Page, sel: string) => page.evaluate(async (sel) => {
+    const s = document.getElementById("center-scroll")!;
+    const el = document.querySelector<HTMLElement>(sel)!;
+    s.scrollTop += el.getBoundingClientRect().top - s.getBoundingClientRect().top - 40;
+    await new Promise((ok) => requestAnimationFrame(() => requestAnimationFrame(ok)));
+  }, sel);
+  const notCovered = (page: Page, sel: string) => page.evaluate((sel) => {
+    const el = document.querySelector<HTMLElement>(sel)!;
+    const r = el.getBoundingClientRect();
+    const hit = document.elementFromPoint(r.x + Math.min(20, r.width / 2), r.y + r.height / 2);
+    return r.height > 0 && !!hit && el.contains(hit);
+  }, sel);
+
+  test("默认视图往下读：规则清单卡片看得见、没被挡；改名后的类型在页面上", async () => {
+    const { page, errors } = await open();
+    const card = '[data-step="rules"]';
+    expect(await page.locator(`${card} h2`).textContent()).toBe("规则清单");
+    await scrollIntoCenter(page, card);
+    expect(await notCovered(page, `${card} .step-head h2`)).toBe(true);
+    expect(await notCovered(page, `${card} .rule-list.used li`)).toBe(true);
+    expect(await page.locator(`${card} .answer`).textContent()).toContain("打法用到 5 条规则");
+    const used = await page.locator(`${card} .rule-list.used li`).evaluateAll((els) => els.map((e) => (e as HTMLElement).dataset.rule));
+    expect(used).toEqual(["P7", "P8", "P9", "J19", "J21"]);
+    const body = (await page.textContent("#center-scroll"))!;
+    expect(body).toContain("加速下跌");
+    expect(body).not.toMatch(/极度超卖|极度超买|健康上涨|健康下跌/);
+    expect(errors).toEqual([]);
+    await page.close();
+  }, 30_000);
+
+  test("点规则编号：弹出 rules.md 那一条的 IF / THEN 和出处", async () => {
+    const { page, errors } = await open();
+    await scrollIntoCenter(page, '[data-step="rules"]');
+    await page.click('[data-step="rules"] .rule-list.used li[data-rule="P7"] .rule-ref');
+    await page.waitForSelector("#popover .pop-body");
+    expect(await page.textContent("#popover .pop-head")).toContain("P7（动作）");
+    expect(await page.textContent("#popover .pop-body")).toContain("THEN");
+    expect(await page.textContent("#popover .pop-path")).toContain("rules.md");
+    expect(errors).toEqual([]);
+    await page.close();
+  }, 30_000);
+
+  test("定策略的条件也带规则编号，点开是同一个弹窗", async () => {
+    const { page } = await open();
+    const chip = page.locator('[data-step="strategy"] .plan-rules .rule-ref').first();
+    expect(await chip.textContent()).toBe("P7");
+    await chip.click();
+    await page.waitForSelector("#popover .pop-body");
+    expect(await page.textContent("#popover .pop-head")).toContain("P7");
+    await page.close();
+  }, 30_000);
+
+  test("看方向有门槛路径和持平情景（脚本的 projection）", async () => {
+    const { page } = await open();
+    const dir = page.locator('[data-step="direction"]');
+    expect(await dir.locator("table.hurdles tbody tr").count()).toBe(3);
+    expect(await dir.locator("table.hurdles").textContent()).toContain("239.24"); // MA60 30 天抵扣价最高
+    expect(await dir.locator(".flow").textContent()).toContain("30 个交易日");
+    await page.close();
+  }, 30_000);
+});
+
+describe("中栏 agent 叫「长风」", () => {
+  test("默认视图下输入区的名字是长风，看得见；页面上不再出现「分析师」", async () => {
+    const { page, errors } = await open();
+    const name = page.locator("#analyst-composer .role-bar b");
+    expect(await name.textContent()).toBe("长风");
+    expect(await name.isVisible()).toBe(true);
+    expect(await page.getAttribute("main.panel.center", "aria-label")).toBe("长风");
+    expect(await page.textContent("body")).not.toContain("分析师");
+    expect(errors).toEqual([]);
     await page.close();
   }, 30_000);
 });

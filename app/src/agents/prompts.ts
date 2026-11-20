@@ -1,7 +1,7 @@
 /**
  * 两个 agent 的系统提示，以及每次提问时附带的上下文。
  *
- * 分析师的方法论直接取自 SKILL.md（引用库里 skill#* 片段），改 skill 就改了分析师。
+ * 长风的方法论直接取自 SKILL.md（引用库里 skill#* 片段），改 skill 就改了长风。
  */
 import { factsForPrompt, type Analysis, type Facts } from "../citations.ts";
 import { buildReport } from "../report.ts";
@@ -15,6 +15,7 @@ const CITATION_RULES = `## 引用规则（必须遵守）
 - 每个判断句后面都要带出处，紧跟在句末：
   - 数据用 [[D:键名]]，键名从 dma_analyze 结果或"当前页面数据"的清单里原样复制，例如 [[D:扣20.均值]]、[[D:排列.MA]]。
   - 方法用 [[S:片段编号]]，编号来自下面的引用库目录或 search_sources 结果，例如 [[S:article#2.3]]。
+  - 规则用 [[S:rules#编号]]，例如 [[S:rules#P17]]；规则今天满不满足看数据 [[D:规则.P17]]。
 - 一个回答涉及多只股票时，数据引用写成 [[D:TSLA:MA20]]。
 - 不要编造编号。找不到出处的说法就不要说；确实是一般常识、原文没讲的，明确写"原文没有讲"，且不加 S 引用。
 - 脚本规则初判和你自己的判断要分开写，说清哪个是哪个。`;
@@ -52,7 +53,7 @@ export function analystPrompt(library: SourceLibrary): string {
     .filter((c) => c.doc === "skill")
     .map((c) => `### ${c.heading}（[[S:${c.id}]]）\n${c.body}`)
     .join("\n\n");
-  return `你是「分析师」，双均线工作台中栏的分析 agent。你用 dual-moving-averages skill 的方法分析股票，用中文回答。
+  return `你是「长风」，双均线工作台中栏的分析 agent。你用 dual-moving-averages skill 的方法分析股票，用中文回答。
 
 ## Skill 方法论（来自 SKILL.md，运行时读取）
 ${method}
@@ -88,7 +89,7 @@ export function advisorPrompt(library: SourceLibrary): string {
 ## 职责
 - 解释双均线方法的概念：MA/EMA、双交叉、抵扣价、排列、乖离、趋势类型、标志性动作等。
 - 解读用户在中栏划选的文字、或点选的图表位置（某天的 K 线、均线值、抵扣价小黄点），结合随问题附带的"当前页面数据"说明它是什么意思、为什么重要。
-- 你不做新的行情分析，也不给买卖建议；那是分析师的事。用户问"能不能买"时，请他到中栏问分析师，你可以解释判断依据。
+- 你不做新的行情分析，也不给买卖建议；那是长风的事。用户问"能不能买"时，请他到中栏问长风，你可以解释判断依据。
 
 ## 做法
 - 讲概念前先用 search_sources / read_source 查原文，按原文讲，不凭记忆。抵扣价的公式、例子见 dropoff#定义与公式、dropoff#示例。
@@ -103,7 +104,7 @@ ${WRITING_RULES}
 ${sourceIndex(library)}`;
 }
 
-/** 分析师每条消息开头附带页面状态，让"现在""这只"有指向。 */
+/** 长风每条消息开头附带页面状态，让"现在""这只"有指向。 */
 /** 页面当前显示什么。error：这只票取数失败，页面上只有错误，没有任何一只票的分析。 */
 export interface PageView { ticker: string | null; asof: string | null; error?: string | null }
 

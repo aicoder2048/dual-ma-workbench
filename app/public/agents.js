@@ -1,4 +1,4 @@
-// 两个 agent 面板（中栏分析师、右栏鸿雁）+ WebSocket 连接。
+// 两个 agent 面板（中栏长风、右栏鸿雁）+ WebSocket 连接。
 import { installAttachments } from "./attach.js";
 import { enhance } from "./blocks.js";
 import { renderRich } from "./cite.js";
@@ -7,7 +7,7 @@ import { pauseSpeaking, resumeSpeaking, speak, speakingId, speechState, stopSpea
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-const WHO = { analyst: "分析师", advisor: "鸿雁" };
+const WHO = { analyst: "长风", advisor: "鸿雁" };
 
 // ---------- WebSocket ----------
 let ws = null;

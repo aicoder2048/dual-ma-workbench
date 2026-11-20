@@ -327,7 +327,7 @@ export function createChart(box, legendEl) {
     <span class="replay-label" aria-live="polite"></span>
     <button type="button" class="replay-analyze" title="退出回放，载入只用这一天及以前数据的完整分析">按这一天分析</button>
     <button type="button" class="replay-exit" aria-label="退出回放" title="退出回放">×</button>`;
-  tools.after(bar); // 紧挨着「回放」按钮，在图上方：图下方会被分析师输入框挡住
+  tools.after(bar); // 紧挨着「回放」按钮，在图上方：图下方会被长风输入框挡住
   const $r = (sel) => bar.querySelector(sel);
   const menu = $r(".replay-menu");
   const speedSel = $r(".replay-speed");
@@ -490,7 +490,7 @@ export function createChart(box, legendEl) {
     chart,
     /** key：股票代码（自己画的线按它分开存）。 */
     setData(d, key = null) {
-      // 同一只票重新载入（分析师调了取数、换了数据源）：停在原来回放到的那天，免得露出后面的 K 线；换票才退出回放
+      // 同一只票重新载入（长风调了取数、换了数据源）：停在原来回放到的那天，免得露出后面的 K 线；换票才退出回放
       const sameTicker = key === drawKey;
       const at = sameTicker && rs.mode === "replay" ? data.candles[rs.index].time : null;
       const r = at ? chart.timeScale().getVisibleLogicalRange() : null;

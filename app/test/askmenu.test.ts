@@ -24,7 +24,7 @@ describe("卡片问题", () => {
   });
   test("看方向：排列推演有变化时问为什么变", () => {
     const qs = cardQuestions("direction", a, v).map((q) => q.text).join("\n");
-    expect(qs).toContain(`从${v.projection.arrNow.ma}变成${v.projection.arrAfter.ma}`);
+    expect(qs).toContain(`从${a.arr_ma}变成${v.scenario.end_arr_ma}`);
   });
   test("上下文说明用户在看哪张卡", () => {
     expect(cardContext("direction", a)).toEqual({ kind: "view", what: "3. 看方向", detail: "NVDA 2026-11-18" });

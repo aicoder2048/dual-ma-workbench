@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { buildFacts, type Analysis } from "../src/citations.ts";
-import { buildReport, crossVerdict, parseCross, project, stanceOf } from "../src/report.ts";
+import { buildReport, crossVerdict, parseCross, parseTypeTable, stanceOf, TYPE_TABLE } from "../src/report.ts";
 import nvda from "./fixtures/nvda-analysis.json";
 
 const analysis = nvda as Analysis;
@@ -45,32 +45,52 @@ describe("交叉", () => {
   });
 });
 
-describe("推演", () => {
-  const p = project(analysis);
-
-  test("EMA 精确解与逐日递推一致", () => {
-    const c = analysis.close;
-    for (const ln of analysis.lines) {
-      const alpha = 2 / (ln.period + 1);
-      let e = ln.ema;
-      for (let i = 0; i < 10; i++) e = alpha * c + (1 - alpha) * e;
-      expect(p.ema[`EMA${ln.period}`].after).toBeCloseTo(e, 8);
-    }
-  });
-  test("MA 推演与脚本的价平变化一致", () => {
-    expect(p.ma.MA20.after).toBeCloseTo(189.04 * (1 - 0.1561), 1);
-  });
-  test("推演进入可引用数据", () => {
+describe("推演：用脚本的 projection，不在这里重算", () => {
+  const sc = analysis.projection.scenarios[0];
+  test("可引用数据里的推演就是脚本的持平情景", () => {
     const f = buildFacts(analysis);
-    expect(f["推演.排列.MA"].value).toBe(`${p.arrNow.ma} → ${p.arrAfter.ma}`);
-    expect(f["推演.EMA20"]).toBeDefined();
+    expect(f["推演.排列.MA"].value).toBe(`${analysis.arr_ma} → ${sc.end_arr_ma}`);
+    expect(f["推演.EMA20"].value).toContain(sc.end_values.EMA20.toFixed(2));
+    expect(f["门槛.MA60"].value).toContain(analysis.projection.hurdles[1].max_price.toFixed(2));
+  });
+  test("看方向写出门槛路径，并引用 rules.md A2", () => {
+    expect(report.steps[2].items[0]).toContain("[[S:rules#A2]]");
+    expect(report.visual.scenario).toBe(sc);
+  });
+});
+
+describe("规则清单", () => {
+  const rules = report.steps.find((s) => s.key === "rules")!;
+  test("打法用到的规则排在前面，每条都链到 rules.md 和它今天的状态", () => {
+    expect(rules.items.length).toBeGreaterThanOrEqual(analysis.play.rules.length);
+    analysis.play.rules.forEach((id, i) => {
+      expect(rules.items[i]).toStartWith(`${id} `);
+      expect(rules.items[i]).toContain(`[[S:rules#${id}]]`);
+      expect(rules.items[i]).toContain(`[[D:规则.${id}]]`);
+    });
+  });
+  test("让位的规则写出谁优先", () => {
+    const a = structuredClone(analysis);
+    a.rules = a.rules.map((r) => (r.id === "P20" ? { ...r, status: "满足", yields_to: "P17" } : r));
+    const items = buildReport(a).steps.find((s) => s.key === "rules")!.items;
+    expect(items.find((t) => t.startsWith("P20 "))).toContain("P17 优先");
+  });
+});
+
+describe("类型总表只有一份：读 SKILL.md", () => {
+  test("八行，第一列以脚本的打法键开头", () => {
+    const keys = ["横盘", "稳定上涨", "加速上涨", "稳定下跌", "加速下跌", "空头结构反弹中", "多头结构回撤中", "过渡"];
+    expect(TYPE_TABLE.map((r) => keys.find((k) => r.type.startsWith(k)))).toEqual(keys);
+  });
+  test("表头不对就报错，不悄悄给空表", () => {
+    expect(() => parseTypeTable("# 没有表")).toThrow();
   });
 });
 
 describe("可视化数据", () => {
   test("趋势判定表只高亮当前类型", () => {
     const cur = report.visual.trendTable.filter((r) => r.current).map((r) => r.type);
-    expect(cur).toEqual(["加速下跌"]); // 改名：极度超卖 → 加速下跌；表的键是脚本的 play.key
+    expect(cur).toEqual(["加速下跌"]);
   });
   test("抵扣价路径每条 10 天", () => {
     expect(report.visual.drops.map((d) => d.path.length)).toEqual([10, 10, 10]);
@@ -98,10 +118,11 @@ describe("模糊判断在前", () => {
 });
 
 describe("立场", () => {
-  // 打架（反弹受压 / 回调有撑）移到了类型 × 阶段（空头结构反弹中 / 多头结构回撤中），立场只跟模糊判断的分数走
-  test("立场按分数分三档", () => {
-    expect(stanceOf({ score: 0.4 })).toBe("bullish");
-    expect(stanceOf({ score: 0 })).toBe("neutral");
-    expect(stanceOf({ score: -0.4 })).toBe("bearish");
+  // 立场跟脚本给的档位走，不在这里再写一遍 0.25
+  test("立场按模糊判断的档位分三档", () => {
+    expect(stanceOf({ label: "偏多" })).toBe("bullish");
+    expect(stanceOf({ label: "明显偏多" })).toBe("bullish");
+    expect(stanceOf({ label: "不明" })).toBe("neutral");
+    expect(stanceOf({ label: "明显偏空" })).toBe("bearish");
   });
 });

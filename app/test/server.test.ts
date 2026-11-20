@@ -37,7 +37,7 @@ describe("规则报告", () => {
   test("每一条要点都至少有一个引用", () => {
     for (const item of report.steps.flatMap((s) => s.items)) expect(item).toMatch(/\[\[(S|D):/);
   });
-  test("三步齐全", () => expect(report.steps.map((s) => s.key)).toEqual(["big_picture", "strategy", "direction"]));
+  test("三步齐全", () => expect(report.steps.map((s) => s.key)).toEqual(["big_picture", "strategy", "direction", "rules"]));
 });
 
 describe("输入校验", () => {
@@ -188,7 +188,7 @@ describe("HTTP 设置", () => {
     expect(error).toContain("没有");
     expect(error).not.toContain("没在 pi 里登录");
   });
-  test("分析师、鸿雁的思考程度分开设；非法档位拒绝", async () => {
+  test("长风、鸿雁的思考程度分开设；非法档位拒绝", async () => {
     const h = handler();
     const b = await (await call(h, "PUT", { thinkingAnalyst: "high", thinkingAdvisor: "low" })).json();
     expect(b.settings).toMatchObject({ thinkingAnalyst: "high", thinkingAdvisor: "low" });
