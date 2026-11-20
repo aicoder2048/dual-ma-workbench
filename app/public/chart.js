@@ -1,5 +1,5 @@
 // K 线 + 6 条均线 + 抵扣价小黄点 + 成交量（TradingView lightweight-charts 4.2.0）。
-import { DEFAULT_SPEED, OFF, SPEEDS, earliestIndex, indexOnOrBefore, randomIndex, sliceAt, speedMs, step } from "./replay.js";
+import { DEFAULT_SPEED, OFF, SPEEDS, appendDelta, earliestIndex, indexOnOrBefore, randomIndex, sliceAt, speedMs, step } from "./replay.js";
 
 const SPECS = [];
 [20, 60, 120].forEach((n) => ["MA", "EMA"].forEach((k) =>
@@ -29,12 +29,16 @@ export function createChart(box, legendEl) {
     return null;
   }
   box.innerHTML = "";
+  // 盲测练习：时间键是挪过的日期，显示时换成 T+n（setTimeLabel）；平时原样
+  let timeLabel = null;
+  const showTime = (t) => (timeLabel ? timeLabel(isoDate(t)) ?? isoDate(t) : isoDate(t));
   const chart = LightweightCharts.createChart(box, {
     autoSize: true,
     rightPriceScale: { scaleMargins: { top: 0.06, bottom: 0.24 } },
-    timeScale: { rightOffset: 4 },
+    // 练习时坐标轴的刻度也写 T+n；返回 null 用默认刻度
+    timeScale: { rightOffset: 4, tickMarkFormatter: (t) => (timeLabel ? showTime(t) : null) },
     // 十字线底部的日期统一写成 2026-10-22（默认按浏览器语言写成 "22 10月 '26"，不好读）
-    localization: { timeFormatter: isoDate },
+    localization: { timeFormatter: showTime },
     crosshair: { mode: 0 },
     // 滚轮只滚页面，不缩放图表（误触太多）；缩放用 ⌘/Ctrl + 滚轮（见下方 wheel 处理），按住拖动平移
     handleScroll: { mouseWheel: false, pressedMouseMove: true, horzTouchDrag: true, vertTouchDrag: false },
@@ -93,7 +97,7 @@ export function createChart(box, legendEl) {
     if (!view?.candles.length) { readout.textContent = ""; return; }
     const c = view.candles.find((x) => x.time === time) ?? view.candles.at(-1);
     const at = (k) => (view.lines[k] || []).find((p) => p.time === c.time)?.value;
-    readout.innerHTML = `<b>${c.time}</b><span>收 <b>${f2(c.close)}</b></span>`
+    readout.innerHTML = `<b>${showTime(c.time)}</b><span>收 <b>${f2(c.close)}</b></span>`
       + SPECS.map((sp) => `<span><i class="${sp.dashed ? "dash" : ""}" style="--c: var(${sp.token})"></i>${sp.key} ${f2(at(sp.key))}</span>`).join("");
   };
   chart.subscribeCrosshairMove((param) => showReadout(param.time));
@@ -511,6 +515,32 @@ export function createChart(box, legendEl) {
       paintLevels();
       syncReplay();
     },
+    /** 盲测练习：往后多了一根（服务端只发到现在那根）。只追加，视图不跳。 */
+    extend(delta) {
+      if (!data) return;
+      data = appendDelta(data, delta);
+      view = data;
+      candles.update(candleBar(delta.candle));
+      for (const v of delta.volume) vol.update(volBar(v));
+      for (const s of SPECS) for (const p of delta.lines[s.key] ?? []) series[s.key].update({ ...p });
+      paintMarkers();
+      showReadout(null);
+      // 最新一根跑出右边时跟上
+      const r = chart.timeScale().getVisibleLogicalRange();
+      const last = data.candles.length - 1;
+      if (r && last > r.to - 2) chart.timeScale().setVisibleLogicalRange({ from: r.from + 1, to: r.to + 1 });
+    },
+    /** 时间键 → 显示的文字（练习里是 T+n）；null 恢复原样。 */
+    setTimeLabel(fn) {
+      timeLabel = fn;
+      chart.applyOptions({ timeScale: { tickMarkFormatter: (t) => (timeLabel ? showTime(t) : null) } });
+      showReadout(null);
+    },
+    /** 练习时收起「回放」：数据本来就只到现在那根，自己的回放会和练习的推进混在一起。 */
+    setPractice(on) {
+      if (on) dispatch({ type: "exit" });
+      replayBtn.hidden = on;
+    },
     /** 停止回放、回到完整数据（取数失败、中栏收起图表时用）。 */
     stopReplay() { dispatch({ type: "exit" }); },
     /** 价位线：[{ kind: trigger | stop | invalid, price, title }]，来自 viz.js 的 chartLevels。 */
@@ -534,7 +564,7 @@ export function createChart(box, legendEl) {
         if (!candle) return; // 回放时右边空白处
         const lines = Object.fromEntries(SPECS.map((s) => [s.key, (view.lines[s.key] || []).find((p) => p.time === param.time)?.value]));
         const drops = view.drops.filter((d) => d.time === param.time).map((d) => d.period);
-        cb({ time: param.time, candle, lines, drops, point: param.point });
+        cb({ time: showTime(param.time), candle, lines, drops, point: param.point });
       });
     },
   };

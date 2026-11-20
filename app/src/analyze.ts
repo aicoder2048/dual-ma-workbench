@@ -47,7 +47,8 @@ export function normalizeAsof(raw: string | null | undefined): string | null {
 
 export type Runner = (args: string[]) => Promise<string>;
 
-const defaultRunner: Runner = async (args) => {
+/** 跑 dma_analyze.py，args 接在脚本后面。 */
+export const pythonRunner: Runner = async (args) => {
   const { stdout } = await pexec("uv", ["run", "--quiet", "--script", SCRIPT, ...args], {
     cwd: PROJECT_ROOT, // 让脚本找到项目根目录的 .env
     encoding: "utf8",
@@ -57,20 +58,33 @@ const defaultRunner: Runner = async (args) => {
   return stdout;
 };
 
+/** 不是真股票的代码（盲测练习的「练习 #3」）：分析交给它，日期写成 T+5。 */
+export interface VirtualSource {
+  owns(ticker: string): boolean;
+  analyze(ticker: string, asof: string | null): Promise<AnalyzeResult>;
+}
+
 /** 最新行情缓存 10 分钟；回放历史日期的结果不会变，一直缓存。 */
 const LATEST_TTL_MS = 10 * 60 * 1000;
 
 export class Analyzer {
   private cache = new Map<string, { at: number; value: Promise<AnalyzeResult> }>();
+  private virtual: VirtualSource | null = null;
 
   constructor(
-    private run: Runner = defaultRunner,
+    private run: Runner = pythonRunner,
     private now: () => number = Date.now,
     /** 当前设置的数据源；切换后缓存按新数据源重新取。 */
     private source: () => DataSource = () => "polygon",
   ) {}
 
+  /** 接上盲测练习：页面、长风、鸿雁、推荐问法都经过这里取数，练习的票只会拿到蒙过眼的数据。 */
+  mount(v: VirtualSource) {
+    this.virtual = v;
+  }
+
   analyze(tickerRaw: string, asofRaw?: string | null): Promise<AnalyzeResult> {
+    if (this.virtual?.owns(tickerRaw)) return this.virtual.analyze(tickerRaw.trim(), asofRaw?.trim() || null);
     const ticker = normalizeTicker(tickerRaw);
     const asof = normalizeAsof(asofRaw);
     const src = sourceArg(this.source());

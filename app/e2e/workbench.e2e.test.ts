@@ -7,10 +7,14 @@ import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { chromium, type Browser, type Page } from "playwright";
-import { Analyzer } from "../src/analyze.ts";
+import { Analyzer, pythonRunner } from "../src/analyze.ts";
 import type { Analysis } from "../src/citations.ts";
 import { createHandler } from "../src/http.ts";
 import { Journal } from "../src/journal.ts";
+import { seeded } from "../src/practice/pool.ts";
+import { Practice } from "../src/practice/service.ts";
+import { SessionStore } from "../src/practice/session.ts";
+import { prices, REAL, REAL_TICKER } from "../test/fixtures/practice-prices.ts";
 import { SettingsStore } from "../src/settings.ts";
 import { SourceLibrary } from "../src/sources.ts";
 import { Speaker } from "../src/tts.ts";
@@ -44,17 +48,25 @@ const lastPrompt = () => wsSent.filter((m) => m.type === "prompt").at(-1);
 let server: ReturnType<typeof Bun.serve>;
 let browser: Browser;
 let base = "";
+let practiceDir = "";
 
 beforeAll(async () => {
   const dir = mkdtempSync(join(tmpdir(), "dma-e2e-"));
-  const handler = createHandler({
-    analyzer: new Analyzer(async (args) => {
+  // 盲测练习：假的"真实"行情（代码 ZQXT，价格 3000 ~ 6000），真的 dma_analyze.py
+  practiceDir = join(dir, "practice");
+  const journal = new Journal(join(dir, "journal.json"));
+  const practice = new Practice({ store: new SessionStore(join(dir, "sessions.json")), journal, prices, run: pythonRunner,
+    dir: practiceDir, pool: [{ ticker: REAL_TICKER }], random: seeded(3) }); // 和单元测试同一道题：之后 40 根会碰到止损
+  const analyzer = new Analyzer(async (args) => {
       if (args[0] === "ANT") throw new Error("取不到 ANT 的行情");
       if (args[0] === "SLOW") { await Bun.sleep(1500); throw new Error("SLOW 超时"); }
       if (args[0] === "SPY") return JSON.stringify({ analysis: spy, chart: CHART }); // 稳定上涨·回撤中：交易日志用
       return JSON.stringify({ analysis: { ...(nvda as Analysis), label: args[0], warning: warningNext ?? nvda.warning }, chart: CHART });
-    }),
-    watchlist: new Watchlist(join(dir, "w.json")), journal: new Journal(join(dir, "journal.json")),
+  });
+  analyzer.mount(practice);
+  const handler = createHandler({
+    analyzer, practice,
+    watchlist: new Watchlist(join(dir, "w.json")), journal,
     library: SourceLibrary.load(),
     publicDir: resolve(import.meta.dir, "../public"),
     settings: new SettingsStore(join(dir, "s.json")),
@@ -1389,4 +1401,108 @@ describe("交易日志", () => {
     expect(res.status).toBe(409);
     await page.close();
   }, 30_000);
+});
+
+describe("盲测练习", () => {
+  /** 控件在当前视图里看得见、没被挡住（不先滚动，照用户看到的样子）。 */
+  const usable = (page: Page, sel: string) => page.locator(sel).first().evaluate((el) => {
+    const r = el.getBoundingClientRect();
+    const hit = document.elementFromPoint(r.x + Math.min(20, r.width / 2), r.y + r.height / 2);
+    return r.height > 0 && r.top >= 0 && r.bottom <= innerHeight && r.right <= innerWidth && !!hit && el.contains(hit);
+  });
+  const shot = (page: Page, name: string) => process.env.PRACTICE_SHOTS
+    ? page.screenshot({ path: join(process.env.PRACTICE_SHOTS, `${name}.png`) }) : Promise.resolve();
+  /** 页面上看得到的文字里有没有真实代码、这段真实行情里的日期、真实价位（3000 ~ 6000）。回测记录的区间是固定文字，不算。 */
+  const visibleLeaks = (page: Page) => page.evaluate(([ticker, from, to]) => {
+    const text = document.body.innerText + " " + document.title + " " + location.hash;
+    const out: string[] = [];
+    if (text.includes(ticker)) out.push(ticker);
+    for (const d of text.match(/\b\d{4}-\d{2}-\d{2}\b/g) ?? []) if (d >= from && d <= to) out.push(d);
+    for (const n of text.match(/\b\d{4}\.\d{1,2}\b/g) ?? []) if (Number(n) >= 2500 && Number(n) <= 7000) out.push(n);
+    return out;
+  }, [REAL_TICKER, REAL[0].date, REAL.at(-1)!.date]);
+
+  test("出题 → 记计划 → 往后放到进场、止损 → 揭晓；控件都在默认视图里，揭晓前看不到真实信息", async () => {
+    const { page, errors } = await open();
+    await page.click("#tab-practice");
+    expect(await usable(page, "#practice-new")).toBe(true);
+    await page.click("#practice-new");
+    await page.waitForSelector("#practice .pr-tools");
+    await page.waitForFunction(() => document.getElementById("ticker")?.textContent === "练习 #1" && document.querySelector(".lean-label"));
+    await page.waitForFunction(() => document.getElementById("meta-line")?.textContent?.includes("T0"));
+    await shot(page, "1-question");
+    expect(await visibleLeaks(page)).toEqual([]);
+    expect(await page.evaluate(() => location.hash)).toMatch(/^#practice:/);
+    // 回放日期、自选、图表自己的回放都收起来了
+    expect(await page.isVisible(".asof")).toBe(false);
+    expect(await page.isVisible("#star")).toBe(false);
+    expect(await page.isVisible(".replay-toggle")).toBe(false);
+    // 图上的时间写成 T+n
+    expect(await page.textContent("#chart-readout")).toContain("T0");
+    for (const sel of ['[data-act="plan"]', '[data-act="step"]', '[data-act="play"]', '[data-act="reveal"]']) {
+      expect({ sel, ok: await usable(page, `#practice ${sel}`) }).toEqual({ sel, ok: true });
+    }
+
+    // 记计划：下一根开盘买；止损放在之后 40 根最低收盘上方一点（测试能读到服务端的练习数据，保证会碰到）
+    const id = await page.evaluate(() => location.hash.slice("#practice:".length));
+    const csv = readFileSync(join(practiceDir, `${id}.csv`), "utf8").trim().split("\n").slice(1).map((r) => r.split(","));
+    const view = await (await fetch(`${base}/api/practice/${id}`)).json();
+    const start = csv.findIndex((r) => r[0] === view.t0);
+    const stop = Math.min(...csv.slice(start + 1, start + 41).map((r) => Number(r[4]))) + 0.01;
+    expect(stop).toBeLessThan(Number(csv[start][4]));
+    await page.click('#practice [data-act="plan"]');
+    const dlg = page.locator("#practice-plan");
+    await dlg.waitFor();
+    expect(await dlg.locator("h2").textContent()).toBe("记下计划：练习 #1 T0");
+    await dlg.locator('input[value="now"]').check();
+    await dlg.locator("input[name=stop]").fill(stop.toFixed(2));
+    await dlg.locator("textarea[name=reason]").fill("试试止损");
+    expect(await usable(page, "#practice-save")).toBe(true);
+    await shot(page, "2-plan");
+    await page.click("#practice-save");
+    await page.waitForSelector("#practice-plan", { state: "hidden" });
+    expect(await page.textContent("#practice .pr-order")).toContain("下一根开盘买入");
+
+    // 往后一根：进场
+    await page.click('#practice [data-act="step"]');
+    await page.waitForFunction(() => document.getElementById("practice-msg")?.textContent?.includes("开盘买入"));
+    expect(await page.textContent("#practice .pr-order")).toContain("已进场 T+1");
+    expect(await page.textContent("#chart-readout")).toContain("T+1");
+    await shot(page, "3-filled");
+    // 一根一根往后，直到止损卖出（控件一直在默认视图里）
+    for (let i = 0; i < 41; i++) {
+      if ((await page.textContent("#practice-msg"))?.includes("卖出")) break;
+      expect(await usable(page, '#practice [data-act="step"]')).toBe(true);
+      await page.click('#practice [data-act="step"]');
+      await page.waitForFunction((t) => document.querySelector("#practice .num")?.textContent?.startsWith(`T+${t} `), i + 2);
+    }
+    expect(await page.textContent("#practice-msg")).toContain("跌破止损");
+    expect(await page.textContent("#practice .pr-phase")).toBe("决策中");
+    await shot(page, "4-stopped");
+    expect(await visibleLeaks(page)).toEqual([]);
+    // 交易日志里是「练习 #1」，日期是 T+n
+    await page.click("#tab-journal");
+    const item = page.locator("#journal-list .j-item").first();
+    expect(await item.textContent()).toContain("练习 #1");
+    expect(await item.textContent()).toContain("练习");
+    expect(await visibleLeaks(page)).toEqual([]);
+
+    // 揭晓：点两下
+    await page.click('#practice [data-act="reveal"]');
+    expect(await page.textContent('#practice [data-act="reveal"]')).toContain("再点一次");
+    await page.click('#practice [data-act="reveal"]');
+    await page.waitForFunction((t) => document.getElementById("practice")?.textContent?.includes(t), REAL_TICKER);
+    expect(await page.textContent("#ticker")).toBe(`练习 #1 · ${REAL_TICKER}`);
+    expect(await page.textContent("#practice .pr-result")).toContain("同期买入持有");
+    expect(await page.textContent("#chart-readout")).toMatch(/20\d\d-\d\d-\d\d/); // 图上换回真实日期
+    expect(await usable(page, '#practice [data-act="new"]')).toBe(true);
+    await shot(page, "5-reveal");
+    await page.waitForFunction((t) => document.querySelector("#journal-list .j-item")?.textContent?.includes(t), REAL_TICKER);
+    // 练习的统计在「练习」标签：1 题已揭晓
+    await page.click("#tab-practice");
+    expect(await page.textContent("#practice-stats")).toContain("已揭晓 1");
+    await shot(page, "6-stats");
+    expect(errors).toEqual([]);
+    await page.close();
+  }, 120_000);
 });

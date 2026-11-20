@@ -105,7 +105,8 @@ export function typeRow(key: string, table = TYPE_TABLE): TypeRow {
 }
 
 export function parseCross(text: string): CrossInfo {
-  const m = text.match(/^(金叉|死叉) (\d{4}-\d{2}-\d{2})（(\d+) 根前）/);
+  // 日期一般是 2024-04-19；盲测练习里是 T-15
+  const m = text.match(/^(金叉|死叉) (\S+?)（(\d+) 根前）/);
   return m ? { kind: m[1] as "金叉" | "死叉", date: m[2], barsAgo: Number(m[3]) } : { kind: null, date: null, barsAgo: null };
 }
 

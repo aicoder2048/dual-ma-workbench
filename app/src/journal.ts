@@ -57,6 +57,20 @@ export type Fill = Static<typeof Fill>;
 export type Exit = Static<typeof Exit>;
 export type Review = Static<typeof Review>;
 
+/**
+ * 盲测练习下的单：等触发（收盘站上 / 跌到触发价，下一根开盘买）、下一根开盘直接买、只记判断不下单；
+ * 止损：收盘跌破，下一根开盘卖。价格是练习里的指数。
+ */
+const OrderT = Type.Object({
+  mode: Type.Union([Type.Literal("trigger"), Type.Literal("now"), Type.Literal("none")]),
+  trigger: Type.Union([Type.Object({ price: Price, side: Type.Union([Type.Literal("above"), Type.Literal("below")]) }, Strict), Type.Null()]),
+  stop: Type.Union([Price, Type.Null()]),
+}, Strict);
+export type Order = Static<typeof OrderT>;
+/** 练习记的日志：哪一题、下的什么单。进出场由回放自动成交，页面不能改。 */
+const PracticeTag = Type.Object({ session: Type.String(), order: OrderT }, Strict);
+export type PracticeTag = Static<typeof PracticeTag>;
+
 const base = {
   id: Type.String({ pattern: "^[A-Za-z0-9-]{8,64}$" }),
   createdAt: Type.String(),
@@ -66,6 +80,7 @@ const base = {
   size: Type.String(),
   /** 自己的理由。 */
   reason: Type.String(),
+  practice: Type.Optional(PracticeTag),
 };
 const Entry = Type.Union([
   Type.Object({ ...base, state: Type.Literal("planned") }),
@@ -165,8 +180,9 @@ export function captureSnapshot(a: Analysis, r: Report, input: Pick<CreateInput,
   };
 }
 
-export function createEntry(input: CreateInput, snapshot: Snapshot, now: string): JournalEntry {
-  return { id: input.id, createdAt: now, updatedAt: now, snapshot, size: input.size.trim(), reason: input.reason.trim(), state: "planned" };
+export function createEntry(input: Pick<CreateInput, "id" | "size" | "reason">, snapshot: Snapshot, now: string, practice?: PracticeTag): JournalEntry {
+  return { id: input.id, createdAt: now, updatedAt: now, snapshot, size: input.size.trim(), reason: input.reason.trim(), state: "planned",
+    ...(practice ? { practice } : {}) };
 }
 
 const illegal = (e: JournalEntry, what: string) =>
@@ -182,8 +198,8 @@ export function transition(e: JournalEntry, a: Action, now: string): JournalEntr
       if (!isRealDay(a.date)) throw new JournalError(`进场日期不合法：${a.date}`, 400);
       const entry = { date: a.date, price: a.price };
       if (e.state === "planned" || e.state === "open") {
-        const { id, createdAt, snapshot, size, reason } = e;
-        return { id, createdAt, updatedAt: now, snapshot, size, reason, state: "open", entry };
+        const { id, createdAt, snapshot, size, reason, practice } = e;
+        return { id, createdAt, updatedAt: now, snapshot, size, reason, ...(practice ? { practice } : {}), state: "open", entry };
       }
       if (e.state === "closed") {
         if (e.exit.date < a.date) throw new JournalError(`进场日期 ${a.date} 晚于离场日期 ${e.exit.date}`, 400);
@@ -200,8 +216,8 @@ export function transition(e: JournalEntry, a: Action, now: string): JournalEntr
     }
     case "cancel": {
       if (e.state !== "planned" && e.state !== "cancelled") throw illegal(e, "放弃（已经进场了，要走就填离场）");
-      const { id, createdAt, snapshot, size, reason } = e;
-      return { id, createdAt, updatedAt: now, snapshot, size, reason, state: "cancelled", note: a.note.trim() };
+      const { id, createdAt, snapshot, size, reason, practice } = e;
+      return { id, createdAt, updatedAt: now, snapshot, size, reason, ...(practice ? { practice } : {}), state: "cancelled", note: a.note.trim() };
     }
     case "review": {
       if (e.state !== "closed") throw illegal(e, "复盘（离场以后才复盘）");
@@ -282,21 +298,33 @@ export class Journal {
     return data.entries;
   }
 
-  /** 同一个编号记两次：返回第一次的，不改。 */
-  create(input: CreateInput, snapshot: Snapshot, now = new Date().toISOString()): JournalEntry {
+  get(id: string): JournalEntry {
+    const e = this.list().find((x) => x.id === id);
+    if (!e) throw new JournalError(`没有这笔日志：${id}`, 404);
+    return e;
+  }
+
+  /** 同一个编号记两次：返回第一次的，不改。practice：练习下的单。 */
+  create(input: Pick<CreateInput, "id" | "size" | "reason">, snapshot: Snapshot, now = new Date().toISOString(), practice?: PracticeTag): JournalEntry {
     const entries = this.list();
     const found = entries.find((e) => e.id === input.id);
     if (found) return found;
-    const entry = createEntry(input, snapshot, now);
+    const entry = createEntry(input, snapshot, now, practice);
     this.save([...entries, entry]);
     return entry;
   }
 
-  /** 做完和原来一样（同一个操作做两次）：不写文件，更新时间也不变。 */
-  apply(id: string, action: Action, now = new Date().toISOString()): JournalEntry {
+  /**
+   * 做完和原来一样（同一个操作做两次）：不写文件，更新时间也不变。
+   * by：谁在操作。练习的日志只有回放（practice）能进出场、放弃；页面只能复盘。
+   */
+  apply(id: string, action: Action, now = new Date().toISOString(), by: "user" | "practice" = "user"): JournalEntry {
     const entries = this.list();
     const i = entries.findIndex((e) => e.id === id);
     if (i < 0) throw new JournalError(`没有这笔日志：${id}`, 404);
+    if (entries[i].practice && by === "user" && action.type !== "review") {
+      throw new JournalError("这是练习记的日志：进场、离场由回放按计划自动成交，要操作请回到那一题", 409);
+    }
     const next = transition(entries[i], action, now);
     if (Bun.deepEquals({ ...next, updatedAt: "" }, { ...entries[i], updatedAt: "" })) return entries[i];
     this.save(entries.map((e, k) => (k === i ? next : e)));
@@ -311,11 +339,15 @@ export class Journal {
   }
 }
 
-/** 给页面的：每笔带上结果，加汇总。最新的在前。 */
-export function journalView(entries: JournalEntry[]) {
+/**
+ * 给页面的：每笔带上结果，加汇总。最新的在前。实盘和练习分开汇总，互不混算。
+ * display：练习的日志在揭晓前换成相对交易日（由练习模块提供），实盘的原样。
+ */
+export function journalView(entries: JournalEntry[], display: (e: JournalEntry) => JournalEntry = (e) => e) {
   return {
-    entries: entries.map((e) => ({ ...e, outcome: outcomeOf(e) })).reverse(),
-    summary: summarize(entries),
+    entries: entries.map((e) => ({ ...display(e), outcome: outcomeOf(e) })).reverse(),
+    summary: summarize(entries.filter((e) => !e.practice)),
+    practice: summarize(entries.filter((e) => e.practice)),
     smallSample: SMALL_SAMPLE,
   };
 }

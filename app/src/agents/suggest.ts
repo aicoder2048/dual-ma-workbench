@@ -17,6 +17,7 @@ import { assistantText, type Suggestion } from "./host.ts";
 import { DEFAULT_SETTINGS } from "../settings.ts";
 import { resolveModel, thinkingFor } from "./model.ts";
 import { INTENTS } from "./tools.ts";
+import { isPracticeLabel } from "../practice/blind.ts";
 
 export interface SuggestionSet {
   analyst: Suggestion[];
@@ -38,7 +39,9 @@ export function ruleSuggestions(a: Analysis, asof: string | null = null): Sugges
     { text: `用双均线看看 ${T}`, intent: "看状态" },
     { text: act, intent: "要不要动手" },
     { text: `${T} 的 60 日线什么时候能拐${s60 < 0 ? "上来" : "下去"}？`, intent: "何时拐头" },
-    asof
+    isPracticeLabel(T)
+      ? { text: "如果现在空仓，按计划该在哪里进场、止损放哪里？", intent: "回放练习" }
+      : asof
       ? { text: `回放 ${T} ${asof} 之后 20 个交易日，当时的判断对吗？`, intent: "回放练习" }
       : { text: "回放 TSLA 2021-04-14，用双均线分析", intent: "回放练习" },
   ];

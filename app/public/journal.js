@@ -14,9 +14,10 @@ let view = { entries: [], summary: null, smallSample: 10 };
 let api;
 let current;
 
-/** 左栏的两个标签：自选股、交易日志。选哪个记在本机。 */
-function selectTab(name) {
-  for (const [tab, pane] of [["tab-watch", "watch-pane"], ["tab-journal", "journal-pane"]]) {
+const TABS = ["watch", "journal", "practice"];
+/** 左栏的三个标签：自选股、交易日志、练习。选哪个记在本机。 */
+export function selectTab(name) {
+  for (const [tab, pane] of TABS.map((t) => [`tab-${t}`, `${t}-pane`])) {
     const on = tab === `tab-${name}`;
     $(tab).setAttribute("aria-selected", String(on));
     $(pane).hidden = !on;
@@ -36,10 +37,12 @@ function summaryHtml(s) {
   const c = s.closed;
   const small = !c.all.n ? `<p class="j-small">还没有已离场的。离场、复盘后，这里按照没照计划分开算。</p>`
     : c.all.small ? `<p class="j-small">已离场 ${c.all.n} 笔，少于 ${view.smallSample} 笔：数字只当参考，别据此下结论。</p>` : "";
+  const practiced = view.entries.filter((e) => e.practice).length;
   return `<div class="j-counts">${counts}</div>${small}
     <table class="j-stats"><thead><tr><th></th><th>笔</th><th>胜率</th><th>均值</th><th>中位</th><th>天</th></tr></thead>
       <tbody>${groupRow("照计划", c.followed)}${groupRow("没照", c.deviated)}${groupRow("全部", c.all)}</tbody></table>
-    ${c.unreviewed ? `<p class="j-small">${c.unreviewed} 笔已离场还没复盘，不算进照没照计划。</p>` : ""}`;
+    ${c.unreviewed ? `<p class="j-small">${c.unreviewed} 笔已离场还没复盘，不算进照没照计划。</p>` : ""}
+    ${practiced ? `<p class="j-small">上面只算实盘。标「练习」的 ${practiced} 笔另算，见「练习」标签。</p>` : ""}`;
 }
 
 function itemHtml(e) {
@@ -53,7 +56,7 @@ function itemHtml(e) {
     line = `进场 ${esc(e.entry.date)} @ <span class="num">${f2(e.entry.price)}</span>`;
   }
   return `<li class="j-item" data-id="${esc(e.id)}" tabindex="0">
-      <span class="sym">${esc(s.ticker)}</span><span class="j-state ${e.state}">${STATE_LABEL[e.state]}</span>
+      <span class="sym">${esc(s.ticker)}${e.practice ? ` <span class="j-tag">练习</span>` : ""}</span><span class="j-state ${e.state}">${STATE_LABEL[e.state]}</span>
       <span class="j-date">${esc(s.date)} · ${SITUATION_LABEL[s.situation]}</span>
       <span class="j-line">${line}</span></li>`;
 }
@@ -164,7 +167,20 @@ const dateField = (label, v) => `<label class="j-field"><span>${label}</span><in
 const priceField = (label, v, hint) =>
   `<label class="j-field"><span>${label}</span><input name="price" inputmode="decimal" required value="${v ?? ""}" placeholder="${esc(hint ?? "")}"></label>`;
 
+const MODE_TEXT = { trigger: "等触发", now: "下一根开盘买", none: "只记判断，不下单" };
+
+/** 练习下的单：进出场由回放按单自动成交，这里只显示。 */
+function practiceOrderHtml(e) {
+  const o = e.practice.order;
+  const t = o.trigger ? `；收盘${o.trigger.side === "above" ? "站上" : "跌到"} <b class="num">${f2(o.trigger.price)}</b> 后下一根开盘买` : "";
+  const stop = o.stop ? `；收盘跌破 <b class="num">${f2(o.stop)}</b> 下一根开盘卖` : "；没设止损";
+  const fill = e.entry ? `<br>进场 ${esc(e.entry.date)} @ <span class="num">${f2(e.entry.price)}</span>${e.exit ? `，离场 ${esc(e.exit.date)} @ <span class="num">${f2(e.exit.price)}</span>（${esc(e.exit.reason)}）` : ""}` : "";
+  return `<section class="j-plan"><h3>练习下的单 <span class="muted">价格是指数，回放自动成交</span></h3>
+    <p class="j-meta">${MODE_TEXT[o.mode]}${t}${stop}${fill}</p>${e.state === "cancelled" ? `<p class="j-note">已放弃${e.note ? `：${esc(e.note)}` : "。"}</p>` : ""}</section>`;
+}
+
 function executionHtml(e) {
+  if (e.practice) return practiceOrderHtml(e);
   const s = e.snapshot;
   const parts = [];
   if (e.state === "planned" || e.state === "open" || e.state === "closed") {
@@ -228,14 +244,16 @@ function detailDialog(id) {
   }));
 }
 
+export const refreshJournal = () => refresh();
+
+/** opts.record：结论卡片上点「记入日志」时先问它，返回 true 表示已经处理（练习里改记练习的计划）。 */
 export async function initJournal(opts) {
   api = opts.api;
   current = opts.current;
   let tab = "watch";
-  try { tab = localStorage.getItem("dma-left-tab") === "journal" ? "journal" : "watch"; } catch { /* 隐私模式 */ }
+  try { tab = TABS.find((t) => t === localStorage.getItem("dma-left-tab")) ?? "watch"; } catch { /* 隐私模式 */ }
   selectTab(tab);
-  $("tab-watch").addEventListener("click", () => selectTab("watch"));
-  $("tab-journal").addEventListener("click", () => selectTab("journal"));
+  for (const t of TABS) $(`tab-${t}`).addEventListener("click", () => selectTab(t));
   const open = (ev) => {
     const li = ev.target.closest(".j-item");
     if (li && (ev.type === "click" || ev.key === "Enter")) detailDialog(li.dataset.id);
@@ -245,6 +263,7 @@ export async function initJournal(opts) {
   // 结论卡片会随换票重画，按钮的点击在外层接
   $("verdict").addEventListener("click", (ev) => {
     if (!ev.target.closest("#journal-add") || !current().data) return;
+    if (opts.record?.()) return;
     const { data, pos } = current();
     recordDialog(situationOf(pos, data.analysis.close));
   });

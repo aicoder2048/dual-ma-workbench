@@ -480,6 +480,8 @@ def main() -> None:
     p.add_argument("--no-hourly", action="store_true", help="不取小时线（P13 吃回撤④ 保持需看图）")
     p.add_argument("--html", help="另外生成网页报告到这个路径（.html）")
     p.add_argument("--commentary", help="点评 JSON（格式见 html_report.py），放进网页报告")
+    p.add_argument("--chart-bars", type=int, default=None,
+                   help="--json 的图表数据取最近多少根（默认和网页报告一样）；盲测练习要整段")
     p.add_argument("--json", action="store_true",
                    help="改为输出 JSON：{analysis, chart}，给网页工作台和 agent 工具用")
     a = p.parse_args()
@@ -496,9 +498,10 @@ def main() -> None:
         hourly = {"available": False, "reason": "CSV 模式不取小时线"}
     result = analyze(df, a.ticker.upper() if a.ticker else a.csv, src, history, hourly)
     if a.json:
-        from html_report import chart_data
+        from html_report import CHART_BARS, chart_data
 
-        print(json.dumps({"analysis": result, "chart": chart_data(df, result)},
+        chart = chart_data(df, result, a.chart_bars or CHART_BARS)
+        print(json.dumps({"analysis": result, "chart": chart},
                          ensure_ascii=False, allow_nan=False))
         return
     print(render_markdown(result))

@@ -6,6 +6,7 @@
 import { factsForPrompt, type Analysis, type Facts } from "../citations.ts";
 import { buildReport } from "../report.ts";
 import type { SourceLibrary } from "../sources.ts";
+import { isPracticeLabel } from "../practice/blind.ts";
 
 function sourceIndex(library: SourceLibrary): string {
   return library.chunks.map((c) => `- ${c.id}：${c.docTitle} · ${c.heading}`).join("\n");
@@ -114,9 +115,15 @@ export interface PageView { ticker: string | null; asof: string | null; error?: 
 const failedNote = (page: PageView) =>
   `${page.ticker}${page.asof ? `（回放 ${page.asof}）` : ""}取数失败：${page.error}。页面上没有它的数据，之前看过的票也已经不在页面上了。不要拿之前那只票的数据回答；先告诉用户取不到数据和原因。`;
 
+/** 盲测练习：不知道是哪只票、哪一天，只看得到"现在"及以前。 */
+const practiceNote = (page: PageView) =>
+  `当前是盲测练习「${page.ticker}」，现在在 ${page.asof ?? "最新一根"}（T0 是开局那天，日期都写成 T+n，价格换算成了指数：第一根收盘 = 100）。` +
+  `用户在练自己的判断：不要猜这是哪只股票、哪一年，也不要说之后会怎么走；数据只到现在这一根，取数时 ticker 原样传「${page.ticker}」、asof 传 T+n。`;
+
 export function analystContext(page: PageView): string {
   if (!page.ticker) return "【页面】还没有选股票。";
   if (page.error) return `【页面】${failedNote(page)}`;
+  if (isPracticeLabel(page.ticker)) return `【页面】${practiceNote(page)}`;
   return `【页面】当前显示 ${page.ticker}${page.asof ? `，回放日期 ${page.asof}` : "，最新行情"}。`;
 }
 
@@ -159,6 +166,7 @@ export function advisorContext(snapshot: { analysis: Analysis; facts: Facts } | 
   } else {
     parts.push("【当前页面数据】无（用户还没选股票）。");
   }
+  if (page && isPracticeLabel(page.ticker) && !page.error) parts.push(`【练习】${practiceNote(page)}`);
   if (sel) parts.push("【划选内容】\n" + describeSelection(sel));
   return parts.join("\n\n");
 }
