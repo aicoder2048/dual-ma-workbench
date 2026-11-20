@@ -1592,8 +1592,9 @@ describe("盲测练习", () => {
     const kinds = [["chart", "看图"], ["signal", "看信号"], ["dropoff", "看抵扣价"], ["construct", "看构造和 2B"], ["play", "看打法"]];
     for (const [kind, label] of kinds) {
       expect({ kind, chip: await usable(page, `.dr-kinds [data-kind="${kind}"]`) }).toEqual({ kind, chip: true });
+      const shown = await page.getAttribute("#dr-question", "data-drill");
       await page.click(`.dr-kinds [data-kind="${kind}"]`);
-      await page.waitForFunction((t) => document.querySelector(".dr-kind")?.textContent === t && !document.querySelector(".dr-verdict"), label);
+      await page.waitForFunction(([t, was]) => document.querySelector(".dr-kind")?.textContent === t && document.getElementById("dr-question")?.dataset.drill !== was, [label, shown]);
       expect(await page.locator("#dr-chart canvas").count()).toBeGreaterThan(0);
       expect(await page.textContent("#dr-readout")).toContain("T0");
       const parts = await page.locator(".dr-part").count();
@@ -1615,9 +1616,16 @@ describe("盲测练习", () => {
       expect(await visibleLeaks(page)).toEqual([]);
       await shot(page, `drill-${kind}-feedback`);
     }
+    // 统计：答了 5 题，每种题的正确率和答题时间写在题型按钮上
+    expect(await usable(page, "#dr-stats")).toBe(true);
+    expect(await page.textContent("#dr-stats")).toMatch(/共 5 题，答对 \d+% · 连对 \d+（最长 \d+）/);
+    expect(await page.textContent('.dr-kinds [data-kind="signal"] small')).toMatch(/\d+% · \d+\.\d 秒/);
+    expect(await (await fetch(`${base}/api/drills`)).json()).toMatchObject({ stats: { total: { n: 5 } } });
+    await shot(page, "drill-stats");
     // 键盘：Enter 下一题，数字键选
+    const last = await page.getAttribute("#dr-question", "data-drill");
     await page.keyboard.press("Enter");
-    await page.waitForFunction(() => document.querySelector(".dr-choice") && !document.querySelector(".dr-verdict"));
+    await page.waitForFunction((was) => document.getElementById("dr-question")?.dataset.drill !== was && !document.querySelector(".dr-verdict"), last);
     const parts = await page.locator(".dr-part").count();
     for (let i = 0; i < parts; i++) await page.keyboard.press("1");
     await page.waitForSelector(".dr-verdict");

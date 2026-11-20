@@ -738,6 +738,9 @@ footer .j-close { font-size: 13px; }
 .dr-kinds { display: flex; flex-wrap: wrap; gap: 4px; }
 .dr-kinds button { border: 1px solid var(--line); background: var(--card); color: var(--muted); border-radius: 999px; padding: 2px 11px; font-size: 12.5px; cursor: pointer; }
 .dr-kinds button[aria-checked="true"] { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); font-weight: 600; }
+.dr-kinds small { margin-left: 4px; font: 11px var(--mono); color: var(--faint); }
+.dr-stats { margin: 0; font-size: 12.5px; color: var(--muted); }
+.dr-stats b { color: var(--fg); }
 .dr-readout { margin: 0; min-height: 1.4em; font-size: 12px; color: var(--muted); }
 .dr-chart { flex: 1; min-height: 240px; }
 .dr-panel { min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }

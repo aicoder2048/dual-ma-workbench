@@ -23,7 +23,8 @@ function shell() {
   $("pp-drill").innerHTML = `<div class="dr-layout">
       <section class="dr-stage">
         <div class="dr-kinds" role="radiogroup" aria-label="题型">${KINDS.map(([k, name]) =>
-          `<button type="button" role="radio" data-kind="${k}" aria-checked="${k === kind}">${name}</button>`).join("")}</div>
+          `<button type="button" role="radio" data-kind="${k}" aria-checked="${k === kind}"${k ? "" : ' title="错得多的题型出得多：按每种最近 20 题的错误率挑"'}>${name}<small data-kind-stat="${k}"></small></button>`).join("")}</div>
+        <p class="dr-stats" id="dr-stats" aria-live="polite"></p>
         <p class="dr-readout num" id="dr-readout"></p>
         <div id="dr-chart" class="dr-chart"></div>
       </section>
@@ -40,6 +41,28 @@ function setKind(k) {
   try { localStorage.setItem("dma-drill-kind", k); } catch { /* 隐私模式 */ }
   document.querySelectorAll(".dr-kinds [data-kind]").forEach((b) => b.setAttribute("aria-checked", String(b.dataset.kind === k)));
   next();
+}
+
+// ---------- 统计：每种题的正确率和答题时间、连对、错得最多的 ----------
+
+const pc = (x) => `${Math.round(x * 100)}%`;
+const sec = (ms) => `${(ms / 1000).toFixed(1)} 秒`;
+const LABEL = Object.fromEntries(KINDS);
+
+function renderStats(st) {
+  for (const k of st.kinds) {
+    const el = document.querySelector(`[data-kind-stat="${k.kind}"]`);
+    if (el) el.textContent = k.n ? ` ${pc(k.accuracy)} · ${sec(k.medianMs)}` : "";
+  }
+  const el = $("dr-stats");
+  if (!st.total.n) { el.textContent = "还没答过。几秒一题，答多了这里显示每种题的正确率、答题时间中位数和弱项。"; return; }
+  const weak = st.weakest.length ? ` · 弱项：${st.weakest.map((k) => LABEL[k]).join("、")}` : "";
+  const missed = st.missed[0] ? ` · 错得最多：${LABEL[st.missed[0].kind]}「${esc(st.missed[0].cls.replace(/^[^:]+:/, ""))}」${st.missed[0].misses}/${st.missed[0].n}` : "";
+  el.innerHTML = `共 <b class="num">${st.total.n}</b> 题，答对 <b class="num">${pc(st.total.accuracy)}</b> · 连对 <b class="num">${st.streak.current}</b>（最长 ${st.streak.best}）${weak}${missed}`;
+}
+
+async function refreshStats() {
+  try { renderStats((await api("/api/drills")).stats); } catch { /* 下次答题再刷新 */ }
 }
 
 // ---------- 出题 ----------
@@ -73,6 +96,7 @@ function renderQuestion() {
   $("dr-feedback").hidden = true;
   $("dr-feedback").innerHTML = "";
   $("dr-question").classList.remove("answered");
+  $("dr-question").dataset.drill = d.id;
   $("dr-question").innerHTML = `
     <p class="dr-head"><span class="dr-kind">${esc(d.label)}</span><span class="dr-timer num" id="dr-timer">0.0 秒</span></p>
     ${d.context ? `<p class="dr-context">${esc(d.context)}</p>` : ""}
@@ -101,6 +125,7 @@ async function choose(part, choice) {
     cur.feedback = await api(`/api/drills/${encodeURIComponent(cur.drill.id)}/answer`, { method: "POST", body: JSON.stringify({ picks: cur.picks, ms }) });
     clearInterval(tick);
     renderFeedback();
+    renderStats(cur.feedback.stats);
   } catch (err) {
     $("dr-feedback").hidden = false;
     $("dr-feedback").innerHTML = `<p class="j-error" role="alert">${esc(err.message)}</p><button type="button" class="dr-next" data-act="next">下一题</button>`;
@@ -161,5 +186,6 @@ export function initDrills(opts) {
 
 /** 练习页切到识别题：还没有题就取一题。 */
 export function onShow() {
+  refreshStats();
   if (!cur) next();
 }
