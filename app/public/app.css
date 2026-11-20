@@ -3,7 +3,7 @@
   --bg: #eef1f5; --panel: #f8f9fb; --card: #ffffff; --fg: #18202c; --muted: #5a6577; --faint: #8a94a6; --line: #dde2ea; --grid: #eef1f5;
   --accent: #1f5fbf; --accent-soft: #e6eefb; --on-accent: #ffffff;
   --up: #17855a; --down: #c2372c; --neutral: #a8700f; --drop: #e0a100;
-  --ma20: #1c2430; --ema20: #8a94a6; --ma60: #d62828; --ema60: #f08a8a; --ma120: #1f5fbf; --ema120: #86aee8;
+  --ma20: #1c2430; --ema20: #8a94a6; --ma60: #d62828; --ema60: #f08a8a; --ma120: #1f5fbf; --ema120: #86aee8; --ma200: #7a52b3;
   --bar-bull: #17855a; --bar-bear: #1c2430; --bar-mixed: #9aa2b1;
   --warn-bg: #fff4d6; --warn-fg: #6b4a00; --bad: #c2372c; --bad-soft: #fde8e6;
   --data-bg: #fff6d9; --data-fg: #6b4a00; --src-bg: #e6eefb; --src-fg: #1f4f99;
@@ -20,7 +20,7 @@
   --bg: #0b1016; --panel: #111821; --card: #151d28; --fg: #e5e9f0; --muted: #94a0b4; --faint: #6b778b; --line: #243042; --grid: #1b2430;
   --accent: #5b9bff; --accent-soft: #1b2a42; --on-accent: #0b1016;
   --up: #3cc48a; --down: #ff6b5e; --neutral: #e3a93b; --drop: #ffc531;
-  --ma20: #e5e9f0; --ema20: #7d889b; --ma60: #e84545; --ema60: #f29a9a; --ma120: #4385ea; --ema120: #93b8f2;
+  --ma20: #e5e9f0; --ema20: #7d889b; --ma60: #e84545; --ema60: #f29a9a; --ma120: #4385ea; --ema120: #93b8f2; --ma200: #b79cf0;
   --bar-bull: #3cc48a; --bar-bear: #e5e9f0; --bar-mixed: #6b778b;
   --warn-bg: #3a2e10; --warn-fg: #ffd98a; --bad: #ff6b5e; --bad-soft: #3a1b19;
   --data-bg: #3a2e10; --data-fg: #ffd98a; --src-bg: #1b2a42; --src-fg: #a9c6ff;
@@ -32,7 +32,7 @@
   --bg: #0b1016; --panel: #111821; --card: #151d28; --fg: #e5e9f0; --muted: #94a0b4; --faint: #6b778b; --line: #243042; --grid: #1b2430;
   --accent: #5b9bff; --accent-soft: #1b2a42; --on-accent: #0b1016;
   --up: #3cc48a; --down: #ff6b5e; --neutral: #e3a93b; --drop: #ffc531;
-  --ma20: #e5e9f0; --ema20: #7d889b; --ma60: #e84545; --ema60: #f29a9a; --ma120: #4385ea; --ema120: #93b8f2;
+  --ma20: #e5e9f0; --ema20: #7d889b; --ma60: #e84545; --ema60: #f29a9a; --ma120: #4385ea; --ema120: #93b8f2; --ma200: #b79cf0;
   --bar-bull: #3cc48a; --bar-bear: #e5e9f0; --bar-mixed: #6b778b;
   --warn-bg: #3a2e10; --warn-fg: #ffd98a; --bad: #ff6b5e; --bad-soft: #3a1b19;
   --data-bg: #3a2e10; --data-fg: #ffd98a; --src-bg: #1b2a42; --src-fg: #a9c6ff;
@@ -45,7 +45,7 @@
   --bg: #ebe4d6; --panel: #f3eee3; --card: #fbf8f1; --fg: #1f1c18; --muted: #6e665a; --faint: #9a917f; --line: #d6cdbb; --grid: #ebe4d5;
   --accent: #9e2b20; --accent-soft: #f1e1d8; --on-accent: #fbf8f1;
   --up: #3f6b4f; --down: #9e2b20; --neutral: #8a6a2c; --drop: #c99a2e;
-  --ma20: #1f1c18; --ema20: #8f877a; --ma60: #a8322a; --ema60: #d49a8e; --ma120: #285d86; --ema120: #8eabc2;
+  --ma20: #1f1c18; --ema20: #8f877a; --ma60: #a8322a; --ema60: #d49a8e; --ma120: #285d86; --ema120: #8eabc2; --ma200: #7a52b3;
   --bar-bull: #3f6b4f; --bar-bear: #1f1c18; --bar-mixed: #a59c8a;
   --warn-bg: #f3e6c8; --warn-fg: #5e4512; --bad: #9e2b20; --bad-soft: #f2dcd5;
   --data-bg: #f3e8cc; --data-fg: #5e4512; --src-bg: #e3e8e6; --src-fg: #2f4a5c;
@@ -627,8 +627,11 @@ ul.solves li { display: flex; justify-content: space-between; gap: 12px; padding
 .pchip.stop { border-color: color-mix(in srgb, var(--down) 45%, var(--line)); }
 .pchip .muted { color: var(--muted); font-size: 11.5px; }
 .verdict .pos-cost { padding-left: calc(5.5em + 10px); }
-.verdict .record { margin: 0; font-size: 12.5px; color: var(--muted); border-top: 1px dashed var(--line); padding-top: 6px; }
-.verdict .record .pl, .answer .missing .pl { display: inline-block; font-size: 11.5px; color: var(--muted); border: 1px solid var(--line); border-radius: 6px; padding: 0 6px; margin-right: 8px; }
+.verdict .record, .verdict .naive { margin: 0; font-size: 12.5px; color: var(--muted); border-top: 1px dashed var(--line); padding-top: 6px; }
+.verdict .naive-agree { margin-left: 4px; font-weight: 600; white-space: nowrap; } .naive-agree.same { color: var(--up); } .naive-agree.differ { color: var(--neutral); }
+.verdict .naive { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } /* 只占一行：窄屏截掉的部分悬停看整句 */
+.verdict .naive-ev { font-size: 11.5px; margin-left: 8px; }
+.verdict .record .pl, .verdict .naive .pl, .answer .missing .pl { display: inline-block; font-size: 11.5px; color: var(--muted); border: 1px solid var(--line); border-radius: 6px; padding: 0 6px; margin-right: 8px; }
 
 /* 找打法：条件清单 */
 .checklist { list-style: none; padding: 0; margin: 2px 0; font-size: 13.5px; }

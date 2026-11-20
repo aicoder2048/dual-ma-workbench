@@ -34,6 +34,11 @@ def rising() -> pd.DataFrame:
     return make_df([float(i) for i in range(1, 201)])
 
 
+@pytest.fixture
+def rising_long() -> pd.DataFrame:
+    return make_df([float(i) for i in range(1, 301)])
+
+
 def test_drop_off_tomorrow_is_close_n_bars_back(rising):
     # close = 1..200；MA20 明天要扣的是倒数第 20 根 = 181
     assert dma.drop_off(rising, 20)["tomorrow"] == 181.0
@@ -81,7 +86,7 @@ def json_out(tmp_path) -> dict:
 def test_json_has_analysis_and_chart(json_out):
     assert set(json_out) >= {"analysis", "chart"}
     assert set(json_out["chart"]) >= {"candles", "volume", "lines", "drops"}
-    assert set(json_out["chart"]["lines"]) == {f"{k}{n}" for n in dma.PERIODS for k in ("MA", "EMA")}
+    assert set(json_out["chart"]["lines"]) == {f"{k}{n}" for n in dma.PERIODS for k in ("MA", "EMA")} | {"MA200"}
 
 
 def test_json_analysis_matches_markdown_numbers(json_out, tmp_path):
@@ -234,3 +239,55 @@ def test_csv_mode_without_asof_ends_at_the_last_row():
     daily, history, _ = dma.load_prices(None, str(FIXTURES / "TSLA.csv"), None, None, "auto")
     assert daily.index[-1] == history.index[-1] == pd.Timestamp("2021-05-14")
     assert daily.index[0] >= pd.Timestamp("2018-05-14")
+
+
+# ---------- MA200 朴素规则对照：只是对照，不进规则 ----------
+
+def test_ma200_compare_follows_the_evaluated_naive_rule_and_hold_types():
+    """对照的定义和评估 H3 是同一份：朴素规则用 MA200，照方向持有的类型取 evaluation.toml。"""
+    import tomllib
+    h3 = tomllib.loads((SCRIPTS.parent / "references" / "evaluation.toml").read_text(encoding="utf-8"))["H3"]
+    assert dma.NAIVE_MA in h3["naive_ma"]
+    assert list(dma.HOLD_TYPES) == h3["hold_types"]
+
+
+def test_ma200_above_and_rising_means_hold(rising_long):
+    m = dma.analyze(rising_long, "TEST", "synthetic")["ma200"]
+    assert (m["value"], m["close_above"], m["direction"], m["stance"]) == (200.5, True, "上", "持有")
+    assert m["distance_pct"] == pytest.approx((300 / 200.5 - 1) * 100)
+    assert m["last_cross"] is None
+
+
+def test_ma200_below_and_falling_means_flat():
+    m = dma.analyze(make_df([float(i) for i in range(400, 100, -1)]), "TEST", "synthetic")["ma200"]
+    assert (m["close_above"], m["direction"], m["stance"]) == (False, "下", "空仓")
+
+
+def test_ma200_last_cross_counts_bars_since_close_crossed():
+    # 240 根收在 100（不在 MA200 之上），第 241 根起收在 120：上穿发生在第 241 根，最后一根是第 260 根
+    df = make_df([100.0] * 240 + [120.0] * 20)
+    m = dma.analyze(df, "TEST", "synthetic")["ma200"]
+    assert m["last_cross"] == {"kind": "上穿", "date": str(df.index[240].date()), "bars_ago": 19}
+
+
+def test_ma200_disagrees_when_dual_ma_type_is_not_an_uptrend():
+    """TSLA 2021-05-14：收盘刚站上 MA200（朴素规则持有），双均线不是稳定 / 加速上涨（照方向持有空仓）。"""
+    daily, history, _ = dma.load_prices(None, str(FIXTURES / "TSLA.csv"), None, None, "auto")
+    a = dma.analyze(dma.add_indicators(daily), "TSLA", "CSV", history)
+    m = a["ma200"]
+    assert a["regime"]["type"] not in dma.HOLD_TYPES
+    assert (m["stance"], m["dual_ma_stance"], m["agrees"]) == ("持有", "空仓", False)
+    assert m["last_cross"]["bars_ago"] == 0
+    assert "不一致" in dma.render_markdown(a)
+
+
+def test_ma200_needs_200_bars_plus_the_slope_lookback(rising):
+    m = dma.analyze(rising, "TEST", "synthetic")["ma200"]   # 只有 200 根
+    assert m["available"] is False and "200 根" in m["reason"]
+
+
+def test_chart_has_ma200_line_only_where_200_bars_exist(rising_long):
+    from html_report import chart_data
+    a = dma.analyze(rising_long, "TEST", "synthetic")
+    line = chart_data(rising_long, a, 300)["lines"]["MA200"]
+    assert len(line) == 101 and line[0]["value"] == 100.5 and line[-1]["value"] == 200.5

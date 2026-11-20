@@ -47,7 +47,7 @@ def run(cut: pd.DataFrame) -> dict:
 
 def verdict(a: dict) -> dict:
     """不随价格水平和日期变的部分：工作台的结论、打法、清单都只读这些。"""
-    r = a["regime"]
+    r, m = a["regime"], a["ma200"]
     return {
         "regime": (r["name"], r["type"], r["stage"], r["transition"], r["depth"]),
         "play": a["play"]["key"],
@@ -60,6 +60,9 @@ def verdict(a: dict) -> dict:
         # "死叉 2024-08-13（4 根前）"：日期跟着平移，叉的种类和几根前不变
         "crosses": [(c["pair"], c["ma"].split(" ")[0], c["ma"].split("（")[-1], c["ema"].split(" ")[0], c["ema"].split("（")[-1])
                     for c in a["crosses"]],
+        # MA200 对照：站上 / 跌破、方向、几根前穿过、和双均线一不一致都不随价格水平变
+        "ma200": (m["close_above"], m["direction"], m["stance"], m["dual_ma_stance"], m["agrees"], round(m["distance_pct"], 9),
+                  m["last_cross"] and (m["last_cross"]["kind"], m["last_cross"]["bars_ago"])),
     }
 
 
@@ -87,6 +90,7 @@ def test_rebasing_scales_every_level_by_the_same_factor(name):
         for k in (k for k in x["levels"] if k != "还差几根"):   # 唯一不是价位的一项：K 线根数
             assert y["levels"][k] == pytest.approx(x["levels"][k] * factor), (x["id"], k)
     assert b["bias20"] == pytest.approx(a["bias20"]) and b["spread_pct"] == pytest.approx(a["spread_pct"])
+    assert b["ma200"]["value"] == pytest.approx(a["ma200"]["value"] * factor)
 
 
 def test_chart_bars_flag_returns_the_whole_series(tmp_path):

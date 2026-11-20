@@ -1820,5 +1820,22 @@
   ],
   "arr_ma": "空头",
   "arr_ema": "空头"
+ },
+ "ma200": {
+  "available": true,
+  "period": 200,
+  "value": 466.2153,
+  "close_above": true,
+  "distance_pct": 6.208440606732557,
+  "slope": 0.06423399758242798,
+  "direction": "上",
+  "last_cross": {
+   "kind": "上穿",
+   "date": "2023-11-02",
+   "bars_ago": 115
+  },
+  "stance": "持有",
+  "dual_ma_stance": "持有",
+  "agrees": true
  }
 }

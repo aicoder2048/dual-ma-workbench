@@ -43,7 +43,7 @@ import pandas as pd
 
 import regime as rg
 import rules as rl
-from indicators import PERIODS, add_indicators, arrangement
+from indicators import NAIVE_MA, PERIODS, add_indicators, arrangement
 from projection import HURDLE_DAYS, extend, hurdle_path, projection
 from hourly import load_hourly
 from structure import find_structure, structure_json
@@ -57,6 +57,8 @@ LEAN_LINES = (60, 120)      # 模糊判断看类型线组的两条 MA
 LEAN_CLEAR = 0.6            # 脚本自定：|分数| ≥ 0.6 明显偏多 / 偏空
 LEAN_SOME = 0.25            # 脚本自定：|分数| ≥ 0.25 偏多 / 偏空，否则不明
 LEAN_LABELS = ("明显偏多", "偏多", "不明", "偏空", "明显偏空")
+# 评估 H3 的"照方向持有"：类型是这两种才持有（references/evaluation.toml 的 H3.hold_types）。只给 MA200 对照用
+HOLD_TYPES = ("稳定上涨", "加速上涨")
 
 # JSON 的 thresholds：规则用到的每个数和它的性质（视频 / 校准值 / 脚本自定），rules.md 末尾有同一张表
 THRESHOLDS = {
@@ -337,6 +339,31 @@ def partial_bar_warning(last_bar: pd.Timestamp, now: datetime | None = None) -> 
             "抵扣价比较、均线方向、交叉都可能在收盘前变化，下结论请等美东 16:15 后重跑。")
 
 
+def ma200_of(df: pd.DataFrame, regime: rg.Regime) -> dict:
+    """MA200 朴素规则的对照：收盘在 MA200 上方持有、否则空仓，和双均线照方向持有（HOLD_TYPES）一不一致。
+
+    只是对照，不进任何规则。日线窗口 3 年（约 756 根），够算 MA200；历史太短的票返回 available=False。
+    """
+    close = df["Close"]
+    if len(close) < NAIVE_MA + SLOPE_LOOKBACK:
+        return {"available": False, "reason": f"日线只有 {len(close)} 根，MA{NAIVE_MA} 对照要 {NAIVE_MA + SLOPE_LOOKBACK} 根"}
+    ma = close.rolling(NAIVE_MA).mean()
+    c, v = float(close.iloc[-1]), float(ma.iloc[-1])
+    above = (close > ma)[ma.notna()]
+    flips = above.ne(above.shift()).iloc[1:]
+    cross = None
+    if flips.any():
+        when = flips[flips].index[-1]
+        cross = {"kind": "上穿" if above.loc[when] else "下穿", "date": str(when.date()),
+                 "bars_ago": len(above) - 1 - above.index.get_loc(when)}
+    slope = float(slope_pct(ma))
+    stance = "持有" if c > v else "空仓"
+    dual = "持有" if regime.type is not None and regime.type.value in HOLD_TYPES else "空仓"
+    return {"available": True, "period": NAIVE_MA, "value": v, "close_above": c > v, "distance_pct": (c / v - 1) * 100,
+            "slope": slope, "direction": {1: "上", -1: "下", 0: "平"}[sign(slope, FLAT_SLOPE_PCT)],
+            "last_cross": cross, "stance": stance, "dual_ma_stance": dual, "agrees": stance == dual}
+
+
 def lean_after(df: pd.DataFrame) -> dict:
     """价格停在现价 PROJECT_DAYS 天后的模糊判断：把持平的收盘价接上去，用同一套算法再算一次。"""
     c = float(df["Close"].iloc[-1])
@@ -396,7 +423,7 @@ def analyze(df: pd.DataFrame, label: str, src: str, history: pd.DataFrame | None
         "thresholds": {k: {"value": v, "source": s} for k, (v, s) in THRESHOLDS.items()},
         "drops": drops, "lean": lean,
         "projection": projection(df), "structure": structure_json(df), "weekly": weekly,
-        "hourly": hourly,
+        "hourly": hourly, "ma200": ma200_of(df, regime),
     }
 
 
@@ -405,6 +432,18 @@ def _turn_cell(t: dict | None) -> str:
         return "—"
     done = [f"{s['step']} {s['date'][5:]}" for s in t["steps"] if s["date"]]
     return f"{t['direction']} {t['progress']}/5" + (f"：{'，'.join(done)}" if done else "")
+
+
+def ma200_line(m: dict) -> str:
+    """报告最后一节"5) 对照"：MA200 朴素规则怎么说，和双均线照方向持有一不一致。"""
+    if not m["available"]:
+        return f"算不了：{m['reason']}。"
+    x = m["last_cross"]
+    cross = f"，{x['date']} {x['kind']}（{x['bars_ago']} 根前）" if x else "，窗口内没穿过"
+    return (f"收盘在上方持有，否则空仓（只是对照，不进规则）。收盘在 MA{m['period']} {m['value']:.2f} "
+            f"{'上方' if m['close_above'] else '下方'}（{m['distance_pct']:+.1f}%），{m['stance']}；MA{m['period']} 向{m['direction']}{cross}。"
+            f"双均线照方向持有（稳定 / 加速上涨才持有）：{m['dual_ma_stance']}，{'一致' if m['agrees'] else '不一致'}。"
+            "评估里 MA200 的收益/回撤（MAR 0.26）高于照方向持有（0.14），见 SKILL.md 评估结论。")
 
 
 def render_markdown(a: dict) -> str:
@@ -471,6 +510,7 @@ def render_markdown(a: dict) -> str:
         lv = "；".join(f"{k} {v:.2f}" for k, v in x["levels"].items())
         state = x["status"] + (f"，{x['yields_to']} 优先" if x["yields_to"] else "")
         out.append(f"| {x['id']} | {x['name']} | {state} | {x['basis']} | {lv} |")
+    out += ["", "## 5) 对照：MA200 朴素规则", "", ma200_line(a["ma200"])]
     return "\n".join(out)
 
 

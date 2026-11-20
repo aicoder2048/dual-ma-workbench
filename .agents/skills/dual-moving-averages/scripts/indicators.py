@@ -4,6 +4,8 @@ from __future__ import annotations
 import pandas as pd
 
 PERIODS = (20, 60, 120)
+# 对照用的朴素规则：收盘在 MA200 上方持有、否则空仓（评估 references/evaluation.toml 的 H3.naive_ma）。不进任何规则
+NAIVE_MA = 200
 
 
 def add_indicators(df: pd.DataFrame) -> pd.DataFrame:

@@ -72,7 +72,7 @@ ${WRITING_RULES}
 ## 回答格式
 和网页中栏同一个顺序：
 
-**结论**：<趋势类型> → 空仓、持仓各一句做法，带触发价、止损（空仓叫进场后止损）、到止损多远；这套打法的回测记录照实说
+**结论**：<趋势类型> → 空仓、持仓各一句做法，带触发价、止损（空仓叫进场后止损）、到止损多远；这套打法的回测记录照实说；再一句 MA200 朴素规则的对照：持有还是空仓、和双均线一致不一致 [[D:MA200.对照]]
 
 1) 看大局：类型 × 阶段、方向 / 排列 / 乖离 / 最近交叉（双交叉与否）、周线和小时线
 2) 找打法：这种类型 × 阶段用哪套打法；打法用到的规则逐条满不满足，还差什么、差到什么价位
@@ -158,6 +158,7 @@ export function advisorContext(snapshot: { analysis: Analysis; facts: Facts } | 
       `模糊判断（先说这个）：${a.lean.label}。`,
       `类型 × 阶段：${a.regime.name}。打法：${a.play.text}`,
       `结论：空仓 ${snapshot.facts["结论.空仓"].value}；持仓 ${snapshot.facts["结论.持仓"].value}。${report.record.text}`,
+      `对照：${snapshot.facts["MA200.对照"].value}`,
       "规则报告要点：\n" + report.steps.flatMap((s) => s.items).map((i) => `- ${i}`).join("\n"),
       "可引用数据：\n" + factsForPrompt(snapshot.facts),
     );

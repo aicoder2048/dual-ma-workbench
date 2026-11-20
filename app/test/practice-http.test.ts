@@ -8,7 +8,7 @@ import { Analyzer, pythonRunner } from "../src/analyze.ts";
 import { buildFacts } from "../src/citations.ts";
 import { createHandler } from "../src/http.ts";
 import { Journal, type JournalEntry } from "../src/journal.ts";
-import { DATE_RE, parseCsv } from "../src/practice/blind.ts";
+import { DATE_RE, parseCsv, tLabel } from "../src/practice/blind.ts";
 import { HORIZON } from "../src/practice/pool.ts";
 import { Practice } from "../src/practice/service.ts";
 import { SessionStore } from "../src/practice/session.ts";
@@ -86,8 +86,14 @@ describe("练习的接口", () => {
     expect(JSON.stringify(a.analysis)).not.toMatch(DATE_RE);
     expect(leaks(a.raw)).toEqual([]);
     expect((await call(`/api/analyze?ticker=${encodeURIComponent("练习 #1")}&asof=T%2B1`)).status).toBe(400);
+    // MA200 对照也蒙眼：值是指数（最近 200 根练习收盘的均值），图上那条线一样，穿过的那天写成 T-n
+    const ma200 = bars.slice(t0 - 199, t0 + 1).reduce((s, b) => s + b.close, 0) / 200;
+    expect(a.analysis.ma200.value).toBeCloseTo(ma200, 3);
+    expect(a.chart.lines.MA200.at(-1).value).toBeCloseTo(ma200, 3);
+    if (a.analysis.ma200.last_cross) expect(a.analysis.ma200.last_cross.date).toBe(tLabel(-a.analysis.ma200.last_cross.bars_ago));
     const r = await analyzer.analyze("练习#1", null);
     const facts = buildFacts(r.analysis);
+    expect(analysisForModel(r, facts)).toContain("MA200 朴素规则");
     const page = { ticker: "练习 #1", asof: "T0" };
     for (const text of [analysisForModel(r, facts), advisorContext({ analysis: r.analysis, facts }, null, page), analystContext(page)]) {
       expect(leaks(text)).toEqual([]);
@@ -140,6 +146,8 @@ describe("练习的接口", () => {
     expect(real).toBeGreaterThan(0);
     expect(shown.reveal.chart.candles.find((c: { time: string }) => c.time === shown.reveal.start).close).toBeCloseTo(REAL[real].close, 1);
     expect(shown.reveal.chart.candles.at(-1).time).toBe(shown.reveal.end);
+    const realCloses = shown.reveal.chart.candles.slice(-200).map((c: { close: number }) => c.close);
+    expect(shown.reveal.chart.lines.MA200.at(-1).value).toBeCloseTo(realCloses.reduce((s: number, x: number) => s + x, 0) / 200, 1);
     expect(shown.reveal.result.hold).toBeCloseTo((bars[t0 + view.t].close / bars[t0 + 1].open - 1) * 100, 6);
     const after = (await json("/api/journal")).entries.find((e: JournalEntry) => e.id === "jrnl-0001");
     expect(after.snapshot.ticker).toBe(`练习 #1 · ${REAL_TICKER}`);

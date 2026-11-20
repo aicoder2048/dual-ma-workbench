@@ -33,7 +33,7 @@ const CHART = (() => {
   return {
     candles: days.map((time, i) => ({ time, open: close[i] - 1, high: close[i] + 2, low: close[i] - 2, close: close[i] })),
     volume: days.map((time) => ({ time, value: 1e6, spike: false })),
-    lines: { MA20: line(5), EMA20: line(4), MA60: line(10), EMA60: line(9), MA120: line(15), EMA120: line(14) },
+    lines: { MA20: line(5), EMA20: line(4), MA60: line(10), EMA60: line(9), MA120: line(15), EMA120: line(14), MA200: line(20).slice(199) },
     drops: [{ time: days[280], period: 20 }],
   };
 })();
@@ -619,6 +619,26 @@ describe("中栏：结论 → 看大局 → 找打法 → 做推演", () => {
     expect(holding).toContain("反弹再减仓");
     expect(holding).toContain("183.08");
     expect(await page.textContent("#verdict .record")).toContain("空仓不买，回测没有进场");
+    expect(errors).toEqual([]);
+    await page.close();
+  }, 30_000);
+
+  test("结论：MA200 朴素规则对照一行，默认视图看得见、没被挡；图上 MA200 默认不画，图例里点开", async () => {
+    const { page, errors } = await open();
+    expect(await notCovered(page, "#verdict .naive")).toBe(true);
+    const naive = (await page.textContent("#verdict .naive"))!;
+    expect(naive).toContain("MA200 朴素规则：收盘在下方 -25.9%，空仓");
+    expect(naive.replace(/\s+/g, "")).toContain("双均线也空仓一致");
+    expect(naive).toContain("评估 MAR 0.26 vs 0.14");
+    await page.waitForSelector("#chart canvas");
+    const btn = '#legend button[data-line="MA200"]';
+    expect(await page.getAttribute(btn, "aria-pressed")).toBe("false");
+    expect(await page.textContent("#chart-readout")).not.toContain("MA200");
+    await scrollIntoCenter(page, ".chart-card"); // 图在结论下面：像用户一样滚到图
+    expect(await notCovered(page, btn)).toBe(true);
+    await page.click(btn);
+    expect(await page.getAttribute(btn, "aria-pressed")).toBe("true");
+    expect(await page.textContent("#chart-readout")).toContain(`MA200 ${CHART.lines.MA200.at(-1)!.value.toFixed(2)}`);
     expect(errors).toEqual([]);
     await page.close();
   }, 30_000);

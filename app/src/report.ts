@@ -14,7 +14,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import type { Analysis, HurdlePath, Lean, PairProgress, RuleResult, Scenario, Solve } from "./citations.ts";
 import { buildChecklist, buildForecast, buildPlans, playKey, type Check, type Forecast, type Plan, type Situation } from "./plan.ts";
-import { RULE_EVIDENCE, recordNote, type RecordNote } from "./record.ts";
+import { naiveCompare, RULE_EVIDENCE, recordNote, type NaiveCompare, type RecordNote } from "./record.ts";
 import { PROJECT_ROOT } from "./sources.ts";
 
 export type Stance = "bullish" | "bearish" | "neutral";
@@ -72,6 +72,8 @@ export interface Report {
   forecast: Forecast;
   /** 结论卡片上那句回测记录。 */
   record: RecordNote;
+  /** 结论卡片上的对照：MA200 朴素规则和双均线照方向持有一不一致。 */
+  naive: NaiveCompare;
   steps: ReportStep[];
   visual: ReportVisual;
 }
@@ -223,6 +225,7 @@ export function buildReport(a: Analysis): Report {
     checklist,
     forecast,
     record,
+    naive: naiveCompare(a.ma200),
     steps: [
       { key: "big_picture", title: "看大局", subtitle: "现在是什么趋势", items: big },
       { key: "play", title: "找打法", subtitle: "这种趋势用哪套打法、条件齐了没有", items: play },
