@@ -561,10 +561,10 @@ describe("自己画水平线", () => {
 
 
 describe("三步报告：每一步先给结论", () => {
-  test("看大局：第一眼就是趋势类型；六种类型的对照表在这里，不在定策略", async () => {
+  test("看大局：第一眼就是趋势类型；类型对照表在这里，不在定策略", async () => {
     const { page, errors } = await open();
     const step = page.locator('[data-step="big_picture"]');
-    expect(await step.locator(".answer").textContent()).toContain("极度超卖");
+    expect(await step.locator(".answer").textContent()).toContain("加速下跌");
     expect(await step.locator("table.trend").count()).toBe(1);
     expect(await page.locator('[data-step="strategy"] table.trend').count()).toBe(0);
     expect(errors).toEqual([]);
@@ -783,16 +783,19 @@ describe("十字线日期", () => {
 });
 
 describe("看大局的证据：按判断顺序的四问", () => {
-  test("四问依次是：横盘、偏哪边、健康还是极度、交叉确认；每问先给判断；最后接回结论", async () => {
+  // 四问改成脚本的判断顺序（rules.md J1–J7）：类型看 60/120 线组和钟表，加速看钟表或乖离，阶段看 20 线组
+  test("四问依次是：60/120 排好没有、60 线几点钟、是不是加速、20 线组走到哪一步；每问先给判断；最后接回结论", async () => {
     const { page, errors } = await open();
     const step = page.locator('[data-step="big_picture"]');
     const qs = await step.locator(".check h3").allTextContents();
-    expect(qs.map((q) => q.replace(/\s+/g, ""))).toEqual(["①是不是横盘？", "②偏哪一边？", "③健康还是极度？", "④交叉确认（参考）"]);
+    expect(qs.map((q) => q.replace(/\s+/g, ""))).toEqual(["①60/120线组排好了吗？", "②60线几点钟？", "③是不是加速？", "④20线组走到哪一步？"]);
+    for (const q of await step.locator(".check h3").all()) expect(await q.isVisible()).toBe(true);
     const verdicts = await step.locator(".check .judge").allTextContents();
-    expect(verdicts[0]).toContain("不是横盘");
-    expect(verdicts[1]).toContain("明显偏空");
-    expect(verdicts[2]).toContain("极度");
-    expect(await step.locator(".check-sum").textContent()).toContain("极度超卖");
+    expect(verdicts[0]).toContain("有类型");
+    expect(verdicts[1]).toContain("点");
+    expect(verdicts[2]).toContain("加速起点");
+    expect(verdicts[3]).toContain("延伸");
+    expect(await step.locator(".check-sum").textContent()).toContain("加速下跌·延伸");
     expect(await step.locator("table.vt th:text('MA 方向')").count()).toBe(0); // 和总结卡片重复的均线表去掉了
     expect(errors).toEqual([]);
     await page.close();

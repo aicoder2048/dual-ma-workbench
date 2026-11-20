@@ -8,7 +8,6 @@ export const CARD_NAMES = {
   direction: "3. 看方向",
 };
 
-const shortTrend = (t) => String(t).replace("（排列或方向不一致）", "");
 const fmt = (x, d = 1) => `${x >= 0 ? "+" : ""}${Number(x).toFixed(d)}`;
 
 /** analysis：脚本结果；visual：report.visual。返回 [{ text }]，最多 5 条，按和这只股票的相关程度排。 */
@@ -36,10 +35,10 @@ export function cardQuestions(card, analysis, visual) {
     add(true, `"${a.lines[0].clock}"这种钟表读法怎么用？`);
     add(true, "价位梯子怎么读？间距大小说明什么？");
   } else if (card === "strategy") {
-    const t = shortTrend(a.trend);
+    const t = a.regime.name;
     add(true, `为什么「${t}」要这样做？`);
     add(true, `出现什么变化，才会从「${t}」变成别的类型？`);
-    add(t === "过渡态", "过渡态和横盘震荡有什么区别？");
+    add(a.regime.type === null, `「${t}」和横盘有什么区别？`);
     add(true, "仓位为什么要以心态稳得住为准？");
   } else if (card === "direction") {
     const worst = [...a.drops].sort((x, y) => x.ma_flat_change_pct - y.ma_flat_change_pct)[0];

@@ -76,7 +76,7 @@ export interface Sample extends Outcome {
   date: string;
   lean: LeanLabel;
   score: number;
-  /** 当时用的打法（plan.ts 的 playKey：六种趋势类型、横盘破位、过渡态里的两种打架）。 */
+  /** 当时用的打法（plan.ts 的 playKey：五种类型、空头结构反弹中、多头结构回撤中、过渡、横盘破位）。 */
   play: string;
   /** 当时空仓计划的那句话（buildPlans(a).flat.action）。 */
   flat: string;
@@ -194,7 +194,7 @@ export function renderReport(sum: Summary, m: ReportMeta): string {
     "",
     `## 打法 → 之后 ${h} 日涨跌`,
     "",
-    "打法是六种趋势类型，加上横盘破位（横盘但 20/60 已经死叉）和过渡态里的两种打架。",
+    "打法是五种类型、空头结构反弹中、多头结构回撤中、过渡，加上横盘破位（横盘但 20/60 已经死叉）。",
     "",
     table(sum.byPlay, "打法"),
     "",

@@ -16,9 +16,9 @@ export function clockGlyph(clock) {
 
 // ---------- 模糊判断：接下来几周对谁有利 ----------
 const LEAN_SCALE = ["明显偏空", "偏空", "不明", "偏多", "明显偏多"];
-/** 和服务端 report.ts 的 stanceOf 同一规则：打架时 neutral。 */
-export const stanceOf = (l) => (l.conflict ? "neutral" : l.score >= 0.25 ? "bullish" : l.score <= -0.25 ? "bearish" : "neutral");
-export const leanName = (l) => l.label + (l.conflict ? `·${l.conflict}` : "");
+/** 和服务端 report.ts 的 stanceOf 同一规则。 */
+export const stanceOf = (l) => (l.score >= 0.25 ? "bullish" : l.score <= -0.25 ? "bearish" : "neutral");
+export const leanName = (l) => l.label;
 const ARROW = { 1: ["↗", "bullish", "向上"], 0: ["→", "neutral", "走平"], [-1]: ["↘", "bearish", "向下"] };
 const REL = { 1: "在上", 0: "贴近", [-1]: "在下" };
 
@@ -56,18 +56,17 @@ function leanPairs(l) {
       <tr><th>60 组对 120 组</th><td>${cell("MA60/MA120")}</td><td>${cell("EMA60/EMA120")}</td></tr></tbody></table>`;
 }
 
-/** 什么会改变判断：还没越过的门槛，按 EMA 先拐、MA 后拐排。距离用现价的百分比。 */
+/** 什么会改变判断：两个方向都列，现价上方的是"站上转多"，下方的是"跌破转空"；按 EMA 先拐、MA 后拐排。 */
 function leanFlips(l, close) {
-  if (!l.flips.length) return `<p class="lean-none">方向不明，没有要盯的门槛。等均线理顺，或等标志性动作。</p>`;
-  const verb = l.score < 0 ? "站上" : "跌破";
   const rows = l.flips.filter((f) => !f.line.endsWith("120")).map((f) => {
+    const verb = f.toward === "多" ? "站上" : "跌破";
     const what = f.line.startsWith("EMA") ? f.line : `${f.line} 扣价`;
-    const role = f.line.startsWith("EMA") ? `${f.line} 先拐（第 1 个动作）` : `过了抵扣价，${f.line} 跟着拐（第 2 个动作）`;
+    const role = f.line.startsWith("EMA") ? `${f.line} 先拐（第 1 个动作），转${f.toward}` : `过了抵扣价，${f.line} 跟着拐（第 2 个动作），转${f.toward}`;
     const dist = (f.price / close - 1) * 100;
-    return `<li class="${f.crossed ? "crossed" : ""}" ${tip(f.text)}>
-        <span class="fv">${f.crossed ? "已" : ""}${verb} ${what}</span>
+    return `<li class="${f.toward === "多" ? "bullish" : "bearish"}" ${tip(f.text)}>
+        <span class="fv">${verb} ${what}</span>
         <span class="num">${f2(f.price)}</span>
-        <span class="num fd">${f.crossed ? "已越过" : pct(dist)}</span>
+        <span class="num fd">${pct(dist)}</span>
         <span class="fr">${role}</span></li>`;
   }).join("");
   return `<ul class="lean-flips">${rows}</ul>`;
@@ -76,7 +75,7 @@ function leanFlips(l, close) {
 export function leanCard(l, close, trend) {
   return `<div class="lean-top">
       <div class="lean-verdict"><span class="eyebrow">接下来几周 · 对谁有利</span>
-        <div class="lean-label ${stanceOf(l)}">${esc(l.label)}${l.conflict ? `<em>· ${esc(l.conflict)}</em>` : ""}</div>
+        <div class="lean-label ${stanceOf(l)}">${esc(l.label)}</div>
         <div class="lean-trend">趋势类型 <b>${esc(trend)}</b></div></div>
       ${leanScale(l)}
     </div>
@@ -86,7 +85,7 @@ export function leanCard(l, close, trend) {
       <div class="ev"><div class="ev-k">排布：短期线组在上还是在下 <span>相差 &lt; 0.5% 算贴近</span></div>${leanPairs(l)}</div>
       <div class="ev"><div class="ev-k">什么会改变判断 <span>距现价</span></div>${leanFlips(l, close)}</div>
     </div>
-    <p class="lean-foot">模糊判断：只数方向和排布，不预测明天涨跌。一两处小错位不改变大方向。价位过了门槛，才值得反应。</p>`;
+    <p class="lean-foot">模糊判断：看类型线 MA60、MA120 往哪走、收盘不变能保持几天（${l.basis.map((b) => `${b.line} ${b.direction} ${b.hold_days}/${b.days} 天`).join("，")}），不预测明天涨跌。价位过了门槛，才值得反应。</p>`;
 }
 
 // ---------- 1. 看大局 ----------
@@ -313,28 +312,26 @@ export function outlookAnswer(o, p, close) {
 }
 
 /**
- * 看大局的证据：按趋势类型的判断顺序排成四问（和脚本 classify 一致）。
- * ① 三条 MA 挤在一起 → 横盘；② 模糊判断定偏哪边；③ 乖离分位定健康还是极度；④ 交叉只作确认，不参与判断。
+ * 看大局的证据：按脚本的判断顺序排成四问（rules.md J1–J7）。
+ * ① 60/120 线组次序和方向 → 有没有类型；② 60 线几点钟 → 稳定还是横盘；③ 钟表或乖离 → 是不是加速；④ 20 线组走到哪一步 → 阶段。
  */
 function bigPictureEvidence(v) {
-  const l = v.lean;
-  const side = l.score >= 0.6 ? "上涨" : l.score <= -0.6 ? "下跌" : null;
+  const r = v.regime;
   const pctl = Math.round(v.bias.pctl * 100);
-  const extreme = v.bias.pctl <= 0.05 || v.bias.pctl >= 0.95;
-  const tangle = v.trend === "横盘震荡";
-  const dbl = v.crosses.filter((c) => c.verdict.startsWith("双"));
+  const SIDE = { 1: "多头", 0: "不一致", [-1]: "空头" };
+  const WAY = { 1: "向上", 0: "不一致", [-1]: "向下" };
   const check = (n, q, judge, body = "") =>
     `<section class="check"><h3>${n} ${q}</h3><p class="judge">${judge}</p>${body}</section>`;
-  return `<p class="evidence-title">证据：趋势类型是按下面的顺序判出来的</p>`
-    + check("①", "是不是横盘？", `三条 MA 相差 ${v.spread.toFixed(1)}%（挤在 4% 以内、60 线走平才算缠绕）→ <b>${tangle ? "是横盘" : "不是横盘"}</b>`)
-    + check("②", "偏哪一边？", `${esc(leanName(l))}：6 条线 ${l.up} 上、${l.down} 下 → <b>${side ? `${side}一侧` : "两边都不够明显，算过渡态"}</b>`,
+  return `<p class="evidence-title">证据：类型 × 阶段是按下面的顺序判出来的</p>`
+    + check("①", "60/120 线组排好了吗？", `次序${SIDE[r.order]}，60 线组${WAY[r.dir60]}、120 线组${WAY[r.dir120]} → <b>${r.type ? "有类型" : "定不出类型，按 20/60 的结构命名"}</b>`,
       ladder(v))
-    + check("③", "健康还是极度？", `离 20 线 ${pct(v.bias.value)}，在自身历史排 ${pctl}% 分位（两端各 5% 算大幅乖离）→ <b>${extreme ? "极度" : "健康"}</b>`,
+    + check("②", "60 线几点钟？", `MA60 ${r.clock60.angle >= 0 ? "+" : ""}${r.clock60.angle.toFixed(0)}°，${esc(r.clock60.hour)}（2 点半到 3 点半算走平，1 点钟以上算加速）；6 条线相差 ${v.spread.toFixed(1)}% → <b>${r.type === "横盘" ? "横盘" : r.type ? "有斜率" : "不看"}</b>`)
+    + check("③", "是不是加速？", `离 20 线 ${pct(v.bias.value)}，在自身历史排 ${pctl}% 分位（两端各 5% 算大幅乖离）→ <b>${r.accel ? `加速${esc(r.accel.phase)}` : "不是加速"}</b>`,
       biasMeter(v))
-    + check("④", "交叉确认（参考）", dbl.length ? `${dbl.map((c) => `${c.pair} ${c.verdict}`).join("，")}：两组都交叉，方向得到确认。不参与上面的判断。` : "没有双交叉：方向还没得到交叉确认。不参与上面的判断。",
+    + check("④", "20 线组走到哪一步？", `${r.stage ? `${esc(r.stage)}${r.depth ? `（${esc(r.depth)}）` : ""}` : esc(r.name)}：破线、拐头算回撤，交叉了算转折。双交叉要同一对周期的 MA、EMA 都交叉。`,
       crossTable(v))
     + `<p class="check-sum">所以是 <b>${esc(v.trend)}</b>。</p>`
-    + `<details class="ref"><summary>六种趋势类型对照（现在是哪一种）</summary>${trendTable(v)}</details>`;
+    + `<details class="ref"><summary>趋势类型对照（现在是哪一种）</summary>${trendTable(v)}</details>`;
 }
 
 /** 每一步的证据（结论在 step-answer 里）。 */

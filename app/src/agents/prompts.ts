@@ -144,8 +144,8 @@ export function advisorContext(snapshot: { analysis: Analysis; facts: Facts } | 
     const report = buildReport(a);
     parts.push(
       `【当前页面数据】${a.label}（${a.date} 收盘 ${a.close.toFixed(2)}）`,
-      `模糊判断（先说这个）：${a.lean.label}${a.lean.conflict ? `·${a.lean.conflict}` : ""}。${a.lean.play}`,
-      `规则初判：${a.trend}。${a.strategy}`,
+      `模糊判断（先说这个）：${a.lean.label}。`,
+      `类型 × 阶段：${a.regime.name}。打法：${a.play.text}`,
       "规则报告要点：\n" + report.steps.flatMap((s) => s.items).map((i) => `- ${i}`).join("\n"),
       "可引用数据：\n" + factsForPrompt(snapshot.facts),
     );

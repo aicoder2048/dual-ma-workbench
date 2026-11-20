@@ -23,17 +23,15 @@ export interface SuggestionSet {
   advisor: Suggestion[];
 }
 
-const SHORT = (t: string) => t.replace("（排列或方向不一致）", "");
-
 export function ruleSuggestions(a: Analysis, asof: string | null = null): SuggestionSet {
   const T = a.label;
   const line = (n: number) => a.lines.find((l) => l.period === n)!;
   const act =
-    a.lean.conflict === "反弹受压" ? `${T} 这波反弹是真的吗，能追吗？` :
-    a.lean.conflict === "回调有撑" ? `${T} 这次回调要不要卖？` :
-    a.trend === "健康上涨" ? `${T} 现在能加仓吗？` :
-    a.trend === "极度超买" ? `${T} 涨这么多还能追吗？` :
-    a.trend === "健康下跌" || a.trend === "极度超卖" ? `${T} 跌这么多能抄底吗？` :
+    a.regime.transition === "空头结构反弹中" ? `${T} 这波反弹是真的吗，能追吗？` :
+    a.regime.transition === "多头结构回撤中" ? `${T} 这次回调要不要卖？` :
+    a.regime.type === "稳定上涨" ? `${T} 现在能加仓吗？` :
+    a.regime.type === "加速上涨" ? `${T} 涨这么多还能追吗？` :
+    a.regime.type === "稳定下跌" || a.regime.type === "加速下跌" ? `${T} 跌这么多能抄底吗？` :
     `${T} 什么条件下才值得出手？`;
   const s60 = line(60).slope;
   const analyst: Suggestion[] = [
@@ -51,7 +49,7 @@ export function ruleSuggestions(a: Analysis, asof: string | null = null): Sugges
     Math.abs(ma60 / ma120 - 1) < 0.01
       ? { text: "MA60 和 MA120 快交叉了，什么叫双交叉？", intent: "复习概念" }
       : { text: "什么叫双交叉？为什么只看一组不够？", intent: "复习概念" },
-    { text: `「${SHORT(a.trend)}」是什么意思，该怎么做？`, intent: "复习概念" },
+    { text: `「${a.regime.name}」是什么意思，该怎么做？`, intent: "复习概念" },
   ];
   if (a.bias_pctl <= 0.05 || a.bias_pctl >= 0.95) {
     advisor.push({ text: `乖离率在历史 ${Math.round(a.bias_pctl * 100)}% 分位说明什么？`, intent: "复习概念" });
@@ -116,7 +114,7 @@ export class Suggester {
     });
     try {
       await session.prompt(
-        `股票 ${a.label}${asof ? `（回放 ${asof}）` : ""}，规则初判：${a.trend}。\n数据：\n${factsForPrompt(facts)}`,
+        `股票 ${a.label}${asof ? `（回放 ${asof}）` : ""}，类型 × 阶段：${a.regime.name}。\n数据：\n${factsForPrompt(facts)}`,
       );
       const last = [...session.messages].reverse().find((m: any) => m.role === "assistant");
       return last ? parseSuggestions(assistantText(last as any)) : null;
