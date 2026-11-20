@@ -1,6 +1,6 @@
 /**
  * 出题范围：EVALUATION_PLAN 2.1 的指数 / ETF 和大盘股（2016 年初市值靠前的，加上之后大跌的），
- * 抽一只票、再在它的历史里抽一天：之前至少 3 年、之后至少半年（HORIZON 根）。可以给种子，测试用。
+ * 抽一只票、再在它的历史里抽一天：之前至少 5 年、之后至少半年（HORIZON 根）。可以给种子，测试用。
  */
 import type { Bar } from "./blind.ts";
 
@@ -19,8 +19,8 @@ const LATE: PoolEntry[] = [
 export const POOL: PoolEntry[] = [...[...ETF, ...STOCKS].map((ticker) => ({ ticker })), ...LATE];
 export const DEFAULT_SINCE = "2006-01-01";
 
-/** 开局之前要有几年、之后要有几根。 */
-export const HISTORY_YEARS = 3;
+/** 开局之前要有几年、之后要有几根。5 年和工作台实时取数一样：日线分析看最近 3 年，周线用 5 年。 */
+export const HISTORY_YEARS = 5;
 export const HORIZON = 126;
 
 /** 确定的伪随机数（mulberry32），同一个种子出同一道题。 */
@@ -47,7 +47,7 @@ export function pickStart(bars: Bar[], rand: () => number): number | null {
   return lo + Math.floor(rand() * (hi - lo + 1));
 }
 
-/** 练习数据从哪一根开始：开局往前 HISTORY_YEARS 年（和工作台平时一样只看 3 年）。 */
+/** 练习数据从哪一根开始：开局往前 HISTORY_YEARS 年（和工作台实时取数一样）。 */
 export function windowStart(bars: Bar[], start: number): number {
   const from = yearsBefore(bars[start].date, HISTORY_YEARS);
   return bars.findIndex((b) => b.date >= from);

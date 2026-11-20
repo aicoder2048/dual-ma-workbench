@@ -6,7 +6,7 @@
  *
  * 每只票取一次日线（yfinance 复权开高低收量，只取到昨天，存 reports/replay/data/<票>.csv），取数交给
  * skill 的 backtest.py --fetch-only（缓存覆盖不到所需历史、超过 7 天没更新、或给了 --refresh 就重新取）。
- * 每个回放点切出"当天往前 3 年"交给 dma_analyze.py --csv --asof --json，和工作台实时取数的历史长度一致。
+ * 每个回放点切出"当天往前 5 年"交给 dma_analyze.py --csv --asof --json，和工作台实时取数一样（日线看最近 3 年，周线用 5 年）。
  * 报告写到 reports/replay/<今天>-20d.md（不进仓库）；--compare 给另一次回放的样本 JSON，报告末尾加一节前后对照。
  * 逐笔回测（按打法进出场、和买入持有比）在 backtest.py，报告是 reports/replay/<今天>.md。
  */
@@ -26,7 +26,8 @@ const BUY_TURN_PLAYS = ["稳定下跌", "加速下跌"];
 const OUT = resolve(PROJECT_ROOT, "reports/replay");
 const DATA = resolve(OUT, "data");
 const CUT = resolve(OUT, "cut");
-const HISTORY_YEARS = 3; // 和 dma_analyze.py 的 DAILY_YEARS（日线分析窗口）一致
+const HISTORY_YEARS = 5; // 和 dma_analyze.py 的 HISTORY_YEARS（实时取数、周线用的历史）一致
+const DAILY_YEARS = 3; // dma_analyze.py 的 DAILY_YEARS（日线分析窗口）
 
 const DEFAULT = ["NVDA", "TSLA", "AAPL", "GOOG", "META", "MSFT", "AMZN", "SPY", "QQQ"];
 const argv = process.argv.slice(2);
@@ -72,16 +73,19 @@ async function load(t: string): Promise<{ rows: string[]; bars: Bar[] }> {
   return got;
 }
 
-/** 第 i 天的分析：切出当天往前 3 年的 CSV，交给 dma_analyze.py。 */
+/** 第 i 天的分析：切出当天往前 5 年的 CSV，交给 dma_analyze.py。 */
 async function analyzeAt(t: string, rows: string[], bars: Bar[], i: number): Promise<Analysis> {
   const date = bars[i].date;
-  const from = new Date(date);
-  from.setFullYear(from.getFullYear() - HISTORY_YEARS);
-  const lo = from.toISOString().slice(0, 10);
+  const yearsBack = (n: number) => {
+    const d = new Date(date);
+    d.setFullYear(d.getFullYear() - n);
+    return d.toISOString().slice(0, 10);
+  };
   const cut = resolve(CUT, `${t}-${date}.csv`);
-  const kept = rows.slice(1).filter((r) => r.slice(0, 10) >= lo && r.slice(0, 10) <= date);
-  // 历史不够 3 年就停：乖离率分位会被短历史带偏，和工作台不一致
-  if (!kept.length || kept[0].slice(0, 10) > iso(Date.parse(lo) + 7 * DAY)) throw new Error(`${t} ${date}：历史从 ${kept[0]?.slice(0, 10)} 起，不够 ${HISTORY_YEARS} 年`);
+  const kept = rows.slice(1).filter((r) => r.slice(0, 10) >= yearsBack(HISTORY_YEARS) && r.slice(0, 10) <= date);
+  // 日线不够 3 年就停：乖离率分位会被短历史带偏，和工作台不一致
+  const lo = yearsBack(DAILY_YEARS);
+  if (!kept.length || kept[0].slice(0, 10) > iso(Date.parse(lo) + 7 * DAY)) throw new Error(`${t} ${date}：历史从 ${kept[0]?.slice(0, 10)} 起，不够 ${DAILY_YEARS} 年`);
   writeFileSync(cut, [rows[0], ...kept].join("\n"));
   const { stdout } = await pexec("uv", ["run", "--quiet", "--script", SCRIPT, "--csv", cut, "--asof", date, "--json"],
     { cwd: PROJECT_ROOT, encoding: "utf8", maxBuffer: 32 * 1024 * 1024, timeout: 90_000 });

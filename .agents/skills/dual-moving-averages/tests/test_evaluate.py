@@ -250,7 +250,7 @@ def test_light_path_equals_full_analysis(ticker, date):
     px = bt.load(FIXTURES / f"{ticker}.csv")
     i = px.index.get_loc(pd.Timestamp(date))
     a = bt.analyze_on(px, i, ticker)
-    assert ev.light(bt.cut_at(px, i)) == ev.regime_fields(a["regime"], a["play"]["key"], a["weekly"])
+    assert ev.light(bt.cut_at(px, i), bt.history_at(px, i)) == ev.regime_fields(a["regime"], a["play"]["key"], a["weekly"])
 
 
 def test_cached_record_survives_json_and_ignores_later_prices():

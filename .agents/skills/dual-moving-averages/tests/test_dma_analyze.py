@@ -14,6 +14,7 @@ import pandas as pd
 import pytest
 
 SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
+FIXTURES = Path(__file__).resolve().parent / "fixtures"
 sys.path.insert(0, str(SCRIPTS))
 
 import dma_analyze as dma  # noqa: E402
@@ -218,3 +219,18 @@ def test_bars_without_20_bars_of_history_have_no_tone(rising):
     tones = _tones(rising)  # 200 根全在图上
     assert tones[:20] == [None] * 20
     assert None not in tones[20:]
+
+
+def test_csv_mode_cuts_like_live_fetch():
+    """CSV 模式和按代码实时取数一样：日线分析只看最近 3 年，周线用最近 5 年，都截到 asof。"""
+    daily, history, _ = dma.load_prices(None, str(FIXTURES / "GOOGL.csv"), "2024-08-05", None, "auto")
+    end = pd.Timestamp("2024-08-05")
+    assert daily.index[-1] == history.index[-1] == end
+    assert daily.index[0] >= end - pd.DateOffset(years=3) > daily.index[0] - pd.Timedelta(days=7)
+    assert history.index[0] >= end - pd.DateOffset(years=5) > history.index[0] - pd.Timedelta(days=7)
+
+
+def test_csv_mode_without_asof_ends_at_the_last_row():
+    daily, history, _ = dma.load_prices(None, str(FIXTURES / "TSLA.csv"), None, None, "auto")
+    assert daily.index[-1] == history.index[-1] == pd.Timestamp("2021-05-14")
+    assert daily.index[0] >= pd.Timestamp("2018-05-14")

@@ -41,9 +41,9 @@ describe("蒙眼：换算、日期、标签", () => {
   test("parseT", () => {
     expect([parseT("T+5"), parseT("t5"), parseT("T-3"), parseT("T0"), parseT("2024-01-01")]).toEqual([5, 5, -3, 0, null]);
   });
-  test("抽日子：之前至少 3 年、之后至少半年；同一个种子同一天", () => {
+  test("抽日子：之前至少 5 年（和实时取数一样）、之后至少半年；同一个种子同一天", () => {
     const i = pickStart(REAL, seeded(7))!;
-    expect(REAL[i].date >= "2017-01-02").toBe(true);
+    expect(REAL[i].date >= "2019-01-02").toBe(true);
     expect(REAL.length - 1 - i).toBeGreaterThanOrEqual(HORIZON);
     expect(pickStart(REAL, seeded(7))).toBe(i);
   });

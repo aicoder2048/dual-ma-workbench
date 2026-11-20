@@ -81,6 +81,7 @@ describe("练习的接口", () => {
     // 页面、长风、鸿雁拿到的分析：日期是 T+n，没有真实信息，不能看之后
     const a = await json(`/api/analyze?ticker=${encodeURIComponent("练习 #1")}`);
     expect(a.analysis.date).toBe("T0");
+    expect(a.analysis.weekly.bars).toBeGreaterThan(250); // 周线和实时取数一样用 5 年（约 261 周），不是 3 年
     expect(a.analysis.label).toBe("练习 #1");
     expect(JSON.stringify(a.analysis)).not.toMatch(DATE_RE);
     expect(leaks(a.raw)).toEqual([]);

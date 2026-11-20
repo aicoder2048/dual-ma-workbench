@@ -13,6 +13,7 @@ from conftest import FIXTURES, SCRIPTS
 import backtest as bt
 import hourly as hr
 import trades as tr
+from weekly import weekly_json
 
 C = tr.COST
 
@@ -26,15 +27,30 @@ def plain(a: dict) -> dict:
     return {k: v for k, v in out.items() if k not in ("label", "source")}
 
 
-@pytest.mark.parametrize("ticker,date", [("SPY", "2022-06-15"), ("SPY", "2024-04-19"), ("TSLA", "2021-04-14")])
-def test_in_process_analysis_equals_cli_asof(tmp_path, ticker, date):
+def live_history(px: pd.DataFrame, i: int) -> pd.DataFrame:
+    """实时取数那天能拿到的：往前 5 年（dma_analyze.HISTORY_YEARS），fixture 不够 5 年就是全部。"""
+    end = px.index[i]
+    return px.iloc[:i + 1][px.index[:i + 1] >= end - pd.DateOffset(years=5)]
+
+
+@pytest.mark.parametrize("ticker,date", [("SPY", "2022-06-15"), ("SPY", "2024-04-19"), ("TSLA", "2021-04-14"),
+                                         ("GOOGL", "2024-08-05")])
+def test_in_process_analysis_equals_cli_on_live_history(tmp_path, ticker, date):
     px = fixture(ticker)
     i = px.index.get_loc(pd.Timestamp(date))
-    cut = tmp_path / f"{ticker}-{date}.csv"
-    bt.cut_at(px, i).to_csv(cut)
-    proc = subprocess.run([sys.executable, str(SCRIPTS / "dma_analyze.py"), "--csv", str(cut), "--asof", date, "--json"],
+    csv = tmp_path / f"{ticker}-{date}.csv"
+    live_history(px, i).to_csv(csv)
+    proc = subprocess.run([sys.executable, str(SCRIPTS / "dma_analyze.py"), "--csv", str(csv), "--asof", date, "--json"],
                           capture_output=True, text=True, check=True)
     assert plain(bt.analyze_on(px, i, ticker)) == plain(json.loads(proc.stdout)["analysis"])
+
+
+def test_replay_weekly_uses_five_years_like_live():
+    px = fixture("GOOGL")
+    i = px.index.get_loc(pd.Timestamp("2024-08-05"))
+    w = bt.analyze_on(px, i, "GOOGL")["weekly"]
+    assert w == plain({"w": weekly_json(live_history(px, i))})["w"]
+    assert w["bars"] > 250                             # 5 年约 261 周，不是 3 年的约 157 周
 
 
 def test_decision_ignores_everything_after_that_day():

@@ -19,7 +19,7 @@
 
 - 行情：yfinance 日线（2010 起），开高低收用拆股复权价（出信号，和 skill 一致），收益用含分红的复权价。
   缓存在 --data（默认 reports/replay/data/eval/）。
-- 每天的分析：切出当天往前 3 年，逐日跑轻量路径（类型、阶段、横盘箱体、周线排列，H3、H5 用），
+- 每天的分析：切出当天往前 3 年（周线用往前 5 年，和实时取数一样），逐日跑轻量路径（类型、阶段、横盘箱体、周线排列，H3、H5 用），
   每 decision_every 天跑一次完整分析（backtest.analyze_on，等于 dma_analyze.py --csv --asof；H1、H2、H4、H6 用）。
   完整分析的那天，轻量路径的结果必须和完整分析一字不差，不一样就停。
 - 每只票的结果缓存在 <out>/eval/daily/<票>.jsonl，规则代码或行情变了自动重算。只改门槛时几秒出结果。
@@ -212,13 +212,13 @@ def regime_fields(reg: dict, key: str, weekly: dict) -> dict:
             "w_ma": weekly.get("arr_ma"), "w_ema": weekly.get("arr_ema")}
 
 
-def light(cut: pd.DataFrame) -> dict:
+def light(cut: pd.DataFrame, history: pd.DataFrame) -> dict:
     """轻量路径：只算类型 × 阶段和周线，步骤和 dma_analyze.analyze 里同名的几行一样（不跑推演、规则）。"""
     df = add_indicators(cut.copy())
     row = df.iloc[-1]
     bias = df["BIAS20"].dropna()
     reg, _ = rg.classify(df, find_structure(df), float((bias <= row["BIAS20"]).mean()))
-    return regime_fields(dma._plain(asdict(reg)), rl.play_key(reg), weekly_json(cut))
+    return regime_fields(dma._plain(asdict(reg)), rl.play_key(reg), weekly_json(history))
 
 
 def outcomes(cut: pd.DataFrame, px: pd.DataFrame, i: int, solves: list[dict]) -> list[list]:
@@ -240,7 +240,7 @@ def analyze_day(px: pd.DataFrame, i: int, ticker: str, full: bool) -> dict:
     cut = bt.cut_at(px, i)
     if cut.index[-1] != px.index[i] or len(cut) > i + 1:
         raise AssertionError(f"{ticker} {px.index[i].date()}：分析用到了之后的行情")
-    rec = {"i": i, "d": str(px.index[i].date()), **light(cut)}
+    rec = {"i": i, "d": str(px.index[i].date()), **light(cut, bt.history_at(px, i))}
     if not full:
         return rec
     a = bt.analyze_on(px, i, ticker)
@@ -865,7 +865,7 @@ def verify(cfg: dict, data: Path, out: Path, tickers: list[str], samples: int = 
         for r in [dec[k] for k in rng.choice(len(dec), min(samples, len(dec)), replace=False)]:
             i = r["i"]
             cut = tmp / f"{t}-{r['d']}.csv"
-            bt.cut_at(px, i).to_csv(cut)
+            bt.history_at(px, i).to_csv(cut)
             proc = subprocess.run([sys.executable, str(SCRIPTS / "dma_analyze.py"), "--csv", str(cut), "--asof", r["d"],
                                    "--json"], capture_output=True, text=True, check=True)
             a = json.loads(proc.stdout)["analysis"]

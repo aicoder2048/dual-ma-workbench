@@ -28,6 +28,8 @@ const CHART_BEFORE = 259;
 /** 分析至少要这么多根（skill 的 MIN_BARS = 120 + 5 + 1）。 */
 const MIN_BARS = 126;
 const PERIODS = [20, 60, 120];
+/** first：chart 第一根是练习数据（barsOf）的第几根。 */
+interface FullChart { chart: ChartData; first: number }
 
 /** 真实日线从哪里来。 */
 export interface PriceSource { load(entry: PoolEntry): Promise<Bar[]> }
@@ -122,7 +124,7 @@ export class Practice {
   private readonly now: () => string;
   private chain: Promise<unknown> = Promise.resolve();
   private bars = new Map<string, Bar[]>();
-  private charts = new Map<string, Promise<ChartData>>();
+  private charts = new Map<string, Promise<FullChart>>();
   private raws = new Map<string, Promise<Raw>>();
 
   constructor(private o: PracticeOptions) {
@@ -155,7 +157,7 @@ export class Practice {
         const start = pickStart(bars, rand);
         if (start !== null) picked = { entry, bars, start };
       }
-      if (!picked) throw new PracticeError("抽了 5 只票都没有够长的历史（之前 3 年、之后半年），检查行情数据", 500);
+      if (!picked) throw new PracticeError("抽了 5 只票都没有够长的历史（之前 5 年、之后半年），检查行情数据", 500);
       const { entry, bars, start } = picked;
       const w0 = windowStart(bars, start);
       const r = rebase(bars.slice(w0, start + HORIZON + 1), start - w0);
@@ -217,13 +219,16 @@ export class Practice {
     return JSON.parse(await this.o.run(args)) as AnalyzeResult;
   }
 
-  /** 整段（含开局之后）的图表数据：只留在服务端，按 cursor 切给页面。均线、着色、放量都只看当天及以前，切开不会变。 */
-  private chartOf(id: string): Promise<ChartData> {
+  /**
+   * 到最后一根的图表数据：只留在服务端，按 cursor 切给页面。均线、着色、放量都只看当天及以前，切开不会变。
+   * dma_analyze 的日线只看最近 3 年，所以图从练习数据的第 first 根开始，比 CSV 第一根晚约 2 年。
+   */
+  private chartOf(id: string): Promise<FullChart> {
     let c = this.charts.get(id);
     if (!c) {
-      // 一定要给 --asof：不给的话 CSV 模式只取到今天，2200 年的日期全被切掉
-      const last = this.barsOf(id).at(-1)!.date;
-      c = this.python(["--csv", this.csvPath(id), "--asof", last, "--json", "--chart-bars", "100000"]).then((r) => r.chart);
+      const bars = this.barsOf(id);
+      c = this.python(["--csv", this.csvPath(id), "--asof", bars.at(-1)!.date, "--json", "--chart-bars", "100000"])
+        .then(({ chart }) => ({ chart, first: bars.findIndex((b) => b.date === chart.candles[0].time) }));
       this.charts.set(id, c);
       c.catch(() => this.charts.delete(id));
     }
@@ -263,23 +268,24 @@ export class Practice {
       index = s.startIndex + k;
     }
     if (index > s.cursor) throw new PracticeError(`练习只能看到 ${tLabel(s.cursor - s.startIndex)} 及以前，${asof} 还没走到（不能看之后的 K 线）`, 400);
-    if (index < MIN_BARS - 1) throw new PracticeError(`${asof} 之前的数据不够分析（至少要 ${MIN_BARS} 根）`, 400);
+    const earliest = Math.max(MIN_BARS - 1, (await this.chartOf(s.id)).first);
+    if (index < earliest) throw new PracticeError(`练习最早只能看到 ${tLabel(earliest - s.startIndex)}，${asof} 太早`, 400);
     const raw = await this.rawAt(s, index);
     const dates = this.barsOf(s.id).map((b) => b.date);
     return { analysis: relabel(raw.analysis, labeler(dates, s.startIndex, index)), chart: await this.sliceAt(s, index) };
   }
 
   private async sliceAt(s: Prepared, index: number): Promise<ChartData> {
-    const full = await this.chartOf(s.id);
-    const from = Math.max(0, Math.min(s.startIndex, index) - CHART_BEFORE);
-    const candles = full.candles.slice(from, index + 1);
+    const { chart: full, first } = await this.chartOf(s.id);
+    const from = Math.max(first, Math.min(s.startIndex, index) - CHART_BEFORE);
+    const candles = full.candles.slice(from - first, index - first + 1);
     const lo = candles[0].time, hi = candles.at(-1)!.time;
     const within = <P extends { time: string }>(xs: P[]) => xs.filter((p) => p.time >= lo && p.time <= hi);
     return {
       candles,
       volume: within(full.volume),
       lines: Object.fromEntries(Object.entries(full.lines).map(([k, xs]) => [k, within(xs)])),
-      drops: PERIODS.filter((n) => index - n + 1 >= from).map((n) => ({ time: full.candles[index - n + 1].time, period: n })),
+      drops: PERIODS.filter((n) => index - n + 1 >= from).map((n) => ({ time: full.candles[index - n + 1 - first].time, period: n })),
     };
   }
 
@@ -457,10 +463,10 @@ export class Practice {
 
   /** 揭晓：真实代码和日期，整段图表（到最后一根）换回真实日期和价格。 */
   private async revealOf(s: Extract<Session, { phase: "revealed" }>, bars: Bar[]): Promise<RevealView> {
-    const full = await this.chartOf(s.id);
+    const { chart: full, first } = await this.chartOf(s.id);
     const { shiftDays, priceFactor: k } = s.secret;
     const day = (t: string) => addDays(t, -shiftDays);
-    const from = Math.max(0, s.startIndex - CHART_BEFORE);
+    const from = Math.max(first, s.startIndex - CHART_BEFORE) - first;
     const lo = full.candles[from].time;
     const within = <P extends { time: string }>(xs: P[]) => xs.filter((p) => p.time >= lo);
     return {
