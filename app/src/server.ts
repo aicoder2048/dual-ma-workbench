@@ -7,6 +7,7 @@ import { resolve } from "node:path";
 import { Analyzer } from "./analyze.ts";
 import { codeFingerprint } from "./build.ts";
 import { createHandler } from "./http.ts";
+import { Journal } from "./journal.ts";
 import { PROJECT_ROOT, SOURCE_DOCS, SourceLibrary } from "./sources.ts";
 import { initialModel, piCatalog, piDefaultModel } from "./agents/catalog.ts";
 import { SettingsStore } from "./settings.ts";
@@ -26,6 +27,7 @@ const workbench = new Workbench(analyzer, library, { settings });
 const handler = createHandler({
   analyzer,
   watchlist: new Watchlist(),
+  journal: new Journal(),
   library,
   publicDir: resolve(import.meta.dir, "../public"),
   settings,

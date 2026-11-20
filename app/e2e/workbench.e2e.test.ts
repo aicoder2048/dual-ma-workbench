@@ -10,6 +10,7 @@ import { chromium, type Browser, type Page } from "playwright";
 import { Analyzer } from "../src/analyze.ts";
 import type { Analysis } from "../src/citations.ts";
 import { createHandler } from "../src/http.ts";
+import { Journal } from "../src/journal.ts";
 import { SettingsStore } from "../src/settings.ts";
 import { SourceLibrary } from "../src/sources.ts";
 import { Speaker } from "../src/tts.ts";
@@ -51,7 +52,7 @@ beforeAll(async () => {
       if (args[0] === "SLOW") { await Bun.sleep(1500); throw new Error("SLOW 超时"); }
       return JSON.stringify({ analysis: { ...(nvda as Analysis), label: args[0], warning: warningNext ?? nvda.warning }, chart: CHART });
     }),
-    watchlist: new Watchlist(join(dir, "w.json")),
+    watchlist: new Watchlist(join(dir, "w.json")), journal: new Journal(join(dir, "journal.json")),
     library: SourceLibrary.load(),
     publicDir: resolve(import.meta.dir, "../public"),
     settings: new SettingsStore(join(dir, "s.json")),
