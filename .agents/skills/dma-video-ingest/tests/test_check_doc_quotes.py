@@ -64,3 +64,9 @@ def test_unknown_code_fails(tmp_path, capsys):
     md, subs, v = setup(tmp_path, "视频 Q 00:10「没有登记代号的视频」")
     assert run(md, subs, v) == 1
     assert "subtitles.json 里没有代号 Q" in capsys.readouterr().out
+
+
+def test_labeled_external_source_is_checked(tmp_path, capsys):
+    md, subs, v = setup(tmp_path, "视频 B（外部来源：某作者，非 LEI）01:01「当前价格高过抵扣价」")
+    assert run(md, subs, v) == 1
+    assert "共 1 条原话，失败 1" in capsys.readouterr().out
