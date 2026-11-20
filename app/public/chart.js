@@ -14,6 +14,9 @@ function isoDate(t) {
 
 const css = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
 
+// 破线拐头着色：tone 由 Python 算好（见 html_report.bar_tones），这里只查颜色
+const TONE_TOKENS = { bull: "--bar-bull", bear: "--bar-bear", mixed: "--bar-mixed" };
+
 export function createChart(box, legendEl) {
   if (!window.LightweightCharts) {
     box.innerHTML = '<p class="caption">图表库没能从 CDN 加载，请检查网络。</p>';
@@ -73,6 +76,23 @@ export function createChart(box, legendEl) {
   });
   legendEl.appendChild(logBtn);
   applyScale();
+
+  // 着色：绿 / 黑 / 灰看 20 线破线拐头。默认开，记在本机。
+  let toneOn = true;
+  try { toneOn = localStorage.getItem("dma-tone") !== "0"; } catch { /* 隐私模式 */ }
+  const toneBtn = document.createElement("button");
+  toneBtn.type = "button";
+  toneBtn.className = "tone-toggle";
+  toneBtn.title = "绿：收盘站上 MA20 且高于 20 日抵扣价；黑：两样都不满足；灰：只满足一样";
+  toneBtn.innerHTML = Object.values(TONE_TOKENS).map((t) => `<i style="--c: var(${t})"></i>`).join("") + "着色";
+  toneBtn.setAttribute("aria-pressed", String(toneOn));
+  toneBtn.addEventListener("click", () => {
+    toneOn = !toneOn;
+    toneBtn.setAttribute("aria-pressed", String(toneOn));
+    try { localStorage.setItem("dma-tone", toneOn ? "1" : "0"); } catch { /* 忽略 */ }
+    paint();
+  });
+  logBtn.before(toneBtn);
 
   // ---------- 读数条：鼠标停在哪天显示哪天，移开显示最新一天 ----------
   const readout = document.createElement("div");
@@ -163,6 +183,8 @@ export function createChart(box, legendEl) {
       <b>1 年</b>（默认）判断现在是几点钟、属于哪种趋势；<b>全部</b>看大周期和横盘有多长（"横有多长，竖有多高"）；<b>半年</b>看最近的细节，比如这次回调比上次深还是浅；<b>1 周、1 月</b>看最近几根 K 线怎么走。</p>
     <p><b>画线</b>：点「画线」，再点图上一处，就在那个价位画一条横线，刷新后还在。常画的是前高、前低、自己的成本价、"跌破就重新看"的价位。
       图上的<b>虚线门槛线</b>是自动画的：价格过了它，20 线组才会拐头（先 EMA20，后 MA20），判断才值得改。</p>
+    <p><b>着色</b>：绿 = 收盘在 MA20 上方且高于 20 日抵扣价（MA20 向上）；黑 = 两样都不满足（MA20 向下）；灰 = 只满足一样。
+      第一根黑柱就是 20 线破线拐头；连续黑柱、收不回去，才说明拐头确认了。点图例里的「着色」可以关掉。</p>
     <p><b>看量</b>：底部的量柱，黄色是超过 50 日均量 2 倍的大量。看两种情况：横盘末期突然放量，是要变盘的信号；
       急涨或急跌的末端连续放量，说明多空分歧在化解，行情往往快要转向，并不代表强势。看到放量先提高警惕，动手还是要等均线拐头。</p>
     <p><b>回放</b>：点「回放」，再点图上的一天（或在「选起点」里选日期、最早一天、随机一天），图上就只剩那天及以前的 K 线，
@@ -218,6 +240,15 @@ export function createChart(box, legendEl) {
 
   let data = null; // 完整数据
   let view = null; // 图上画着的：平时就是 data，回放时是截到那天的
+  let toneColors = {}; // tone → 颜色，换主题时在 paint 里重取
+
+  /** 一根 K 线 → 图表库的数据点（新对象：图表库会把 time 就地改成 {year, month, day}）。阳线空心、阴线实心。 */
+  function candleBar(c) {
+    const bar = { time: c.time, open: c.open, high: c.high, low: c.low, close: c.close };
+    const color = toneOn && toneColors[c.tone];
+    if (!color) return bar;
+    return { ...bar, color: c.close >= c.open ? "rgba(0,0,0,0)" : color, borderColor: color, wickColor: color };
+  }
 
   function paint() {
     if (!view) return;
@@ -228,6 +259,8 @@ export function createChart(box, legendEl) {
       rightPriceScale: { borderColor: css("--line") }, timeScale: { borderColor: css("--line") },
     });
     candles.applyOptions({ upColor: "rgba(0,0,0,0)", downColor: muted, borderUpColor: muted, borderDownColor: muted, wickUpColor: muted, wickDownColor: muted });
+    toneColors = Object.fromEntries(Object.entries(TONE_TOKENS).map(([k, t]) => [k, css(t)]));
+    candles.setData(view.candles.map(candleBar));
     vol.setData(view.volume.map(volBar));
     for (const s of SPECS) series[s.key].applyOptions({ color: css(s.token) });
     paintLevels();
@@ -243,7 +276,6 @@ export function createChart(box, legendEl) {
   /** 把一份图表数据（完整的，或回放截到某天的）画到图上。 */
   function show(v) {
     view = v;
-    candles.setData(v.candles);
     for (const s of SPECS) series[s.key].setData(v.lines[s.key] || []);
     paint();
     showReadout(null);
@@ -338,7 +370,7 @@ export function createChart(box, legendEl) {
   function appendBar(i) {
     view = sliceAt(data, i);
     const t = data.candles[i].time;
-    candles.update({ ...data.candles[i] }); // 传副本：图表库会把 time 就地改成 {year, month, day}
+    candles.update(candleBar(data.candles[i]));
     const v = view.volume.at(-1);
     if (v?.time === t) vol.update(volBar(v));
     for (const s of SPECS) {
