@@ -83,7 +83,7 @@ export interface RuleResult {
   yields_to: string | null;
 }
 
-/** 五步定位（rules.md J15）：一对线组的转折走到哪一步，每步带日期。 */
+/** 五个进度点（rules.md J15）：一对线组的转折走到哪一步，每步带日期。 */
 export type StepName = "破线" | "EMA 拐头" | "MA 拐头" | "第一个交叉" | "双交叉";
 export interface Turn { direction: "向上" | "向下"; steps: { step: StepName; date: string | null }[]; progress: number }
 export interface PairProgress { pair: "20/60" | "60/120"; side: "多头" | "空头" | null; completed: Turn | null; current: Turn | null }
@@ -186,7 +186,7 @@ export function buildFacts(a: Analysis): Facts {
   put("模糊判断.10天后", `价格不变 ${ln.after.days} 天后的模糊判断`, `${ln.after.label}（${ln.after.up} 上 · ${ln.after.down} 下）`);
   for (const f of ln.flips) put(`改变判断.${f.line}`, `什么会改变判断（转${f.toward}）：${f.line}`, f.text);
   for (const r of a.rules) put(`规则.${r.id}`, `规则 ${r.id} ${r.name}`, `${r.status}${r.yields_to ? `，${r.yields_to} 优先` : ""}：${r.basis}`);
-  for (const p of a.steps) put(`五步.${p.pair}`, `${p.pair} 的五步进度（破线、EMA 拐头、MA 拐头、第一个交叉、双交叉）`, stepsText(p));
+  for (const p of a.steps) put(`五步.${p.pair}`, `${p.pair} 的五个进度点（破线、EMA 拐头、MA 拐头、第一个交叉、双交叉）`, stepsText(p));
   put("周线.排列", "周线 MA、EMA 排列", a.weekly.available ? `MA ${a.weekly.arr_ma}，EMA ${a.weekly.arr_ema}` : a.weekly.reason);
   put("小时线.排列", "小时线 MA、EMA 排列", a.hourly.available ? `MA ${a.hourly.arr_ma}，EMA ${a.hourly.arr_ema}（到 ${a.hourly.last}）` : a.hourly.reason);
   put("排列.MA", "MA 排列", a.arr_ma);

@@ -4,7 +4,7 @@
  * 中栏按"结论 → 看大局 → 找打法 → 做推演"排：
  * - plans / record：结论卡片（空仓、持仓各一行：做法、触发价、止损、风险；这套打法的回测记录）。
  * - checklist：找打法的条件清单；forecast：做推演的三问（30 天）。都在 plan.ts，价位读脚本结果。
- * - visual：给前端画图用的结构化数据（均线状态、价位梯子、乖离分位、五步进度、周线和小时线、类型总表、
+ * - visual：给前端画图用的结构化数据（均线状态、价位梯子、乖离分位、五个进度点、周线和小时线、类型总表、
  *   门槛路径、持平情景和求解、规则清单）。都是脚本的输出，这里不重算。
  * - steps[].items：给模型看的看大局、找打法、做推演，按 ASD-STE100 简明中文写的短句，一句一事，每句带引用。
  *
@@ -172,7 +172,7 @@ export function buildReport(a: Analysis): Report {
   ];
   if (a.bias_pctl <= 1 - extreme || a.bias_pctl >= extreme) big.push("大幅乖离是趋势的最后一步 [[S:article#3.2]]。");
   for (const p of a.steps) {
-    if (p.current?.progress) big.push(`${p.pair} 正在${p.current.direction}转折，走到第 ${p.current.progress} 步 [[D:五步.${p.pair}]] [[S:rules#J15]]。`);
+    if (p.current?.progress) big.push(`${p.pair} 正在${p.current.direction}转折，走到第 ${p.current.progress} 个进度点 [[D:五步.${p.pair}]] [[S:rules#J15]]。`);
   }
   for (const c of crosses) {
     if (c.verdict.startsWith("双")) big.push(`${c.pair}：${c.verdict} [[D:交叉.${c.pair}]]。同一对周期的 MA、EMA 都交叉，才算确认 [[S:rules#J16]]。`);
