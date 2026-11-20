@@ -36,7 +36,7 @@ uv run <SKILL_DIR>/scripts/to_simplified.py videoes/<名字>.zh-Hant.vtt --move-
 
 只换字形不改用词（OpenCC `t2s`），时间轴原样保留；写出 `<名字>.zh-Hans.vtt`，繁体原件挪到 `videoes/raw/`。之后所有步骤都用简体那份。
 
-给视频定代号：读 DMA `references/cases.md` 开头的代号行，取下一个没用过的字母。
+给视频定代号：读 DMA `references/cases.md` 开头的代号行，取下一个没用过的字母。同时在本 skill 的 `subtitles.json` 里登记 `"<代号>": "<字幕文件名>"`（字幕放 `videoes/`），第 5 步的全文核对靠它找字幕。
 
 ## 2. 抽条目，写条目文件
 
@@ -117,5 +117,13 @@ uv run <SKILL_DIR>/scripts/verify_quotes.py <字幕文件> videoes/<名字>.item
 - **策略** → `playbooks.md` 对应趋势类型下。有 `rules.md` 时只引规则编号，不重写规则文字。
 - **冲突** → 按字幕改原文，汇报时逐处列出改前、改后。
 - **案例** → `cases.md` 加一节，格式照现有：`## <标的 年份>（<周期>，<代号>）：<一句读法>`，下面是"时间 | 现象 | 读法"表。用视频里走读的那段行情；没有具体行情就写作者画的示意图。同时把新代号加进开头的代号行。
+
+写完后核对 DMA 全部文档里的原话（SKILL.md 和 references/*.md 里每一处 `视频 X mm:ss「原话」`）：
+
+```bash
+uv run <SKILL_DIR>/scripts/check_doc_quotes.py
+```
+
+失败的会列出"文件名:行号"和原因，改到全部通过再交。本机缺某期字幕会提示"跳过"；加 `--require-subs` 则算失败。
 
 不改现有小节标题：工作台 `app/src/sources.ts` 按"文件#标题"引用。写完后告诉用户要重启工作台才生效。
