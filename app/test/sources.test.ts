@@ -31,6 +31,16 @@ describe("chunkMarkdown", () => {
   });
 });
 
+describe("SourceLibrary.search", () => {
+  test("长段落反复出现同一个词，排不过标题对题的短段落", () => {
+    const lib = new SourceLibrary(chunkMarkdown(DOC, [
+      "## 案例复盘", "抵扣价".repeat(20),
+      "## 定义与公式", "MA 每天的变化 = (今天收盘价 − 抵扣价) / N，抵扣价是 N 天前的收盘价。",
+    ].join("\n")));
+    expect(lib.search("抵扣价的公式")[0].chunk.heading).toBe("定义与公式");
+  });
+});
+
 const HAS_PRIVATE = existsSync(resolve(PROJECT_ROOT, "chat/1118_what-I-want.md"));
 
 describe.skipIf(!HAS_PRIVATE)("SourceLibrary（本地完整资料，公开仓库里没有）", () => {
