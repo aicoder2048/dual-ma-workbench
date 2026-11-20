@@ -2,19 +2,22 @@
  * 回放验证：在历史日期上生成当时的判断和空仓计划，对照之后 20 个交易日的真实走势。
  *
  *   cd app && bun scripts/replay.ts [NVDA TSLA ...] [--years 2] [--step 20] [--horizon 20] [--jobs 6] [--refresh]
+ *                                   [--compare reports/replay/<改造前>.json]
  *
- * 每只票取一次日线（yfinance 复权，只取到昨天，存 reports/replay/data/<票>.csv）；缓存覆盖不到所需历史、
- * 超过 7 天没更新、或给了 --refresh 就重新取。每个回放点切出"当天往前 3 年"交给
- * dma_analyze.py --csv --asof --json，和工作台实时取数的历史长度一致。报告写到 reports/replay/<今天>.md（不进仓库）。
+ * 每只票取一次日线（yfinance 复权开高低收量，只取到昨天，存 reports/replay/data/<票>.csv），取数交给
+ * skill 的 backtest.py --fetch-only（缓存覆盖不到所需历史、超过 7 天没更新、或给了 --refresh 就重新取）。
+ * 每个回放点切出"当天往前 3 年"交给 dma_analyze.py --csv --asof --json，和工作台实时取数的历史长度一致。
+ * 报告写到 reports/replay/<今天>-20d.md（不进仓库）；--compare 给另一次回放的样本 JSON，报告末尾加一节前后对照。
+ * 逐笔回测（按打法进出场、和买入持有比）在 backtest.py，报告是 reports/replay/<今天>.md。
  */
 import { execFile } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { promisify } from "node:util";
 import { SCRIPT } from "../src/analyze.ts";
 import type { Analysis } from "../src/citations.ts";
 import { buildPlans, ma20Claim, playKey } from "../src/plan.ts";
-import { forwardOutcome, ma20Check, renderReport, summarize, type Bar, type Sample } from "../src/replay.ts";
+import { forwardOutcome, ma20Check, renderCompare, renderReport, summarize, type Bar, type Sample } from "../src/replay.ts";
 import { PROJECT_ROOT } from "../src/sources.ts";
 
 const pexec = promisify(execFile);
@@ -27,7 +30,7 @@ const HISTORY_YEARS = 3; // 和 dma_analyze.py 的 DAILY_YEARS（日线分析窗
 
 const DEFAULT = ["NVDA", "TSLA", "AAPL", "GOOG", "META", "MSFT", "AMZN", "SPY", "QQQ"];
 const argv = process.argv.slice(2);
-const VALUED = ["years", "step", "horizon", "jobs"];
+const VALUED = ["years", "step", "horizon", "jobs", "compare"];
 const opt = (name: string, d: number, min: number) => {
   const i = argv.indexOf(`--${name}`);
   const v = i < 0 ? d : Number(argv[i + 1]);
@@ -39,20 +42,8 @@ const TICKERS = tickers.length ? tickers.map((t) => t.toUpperCase()) : DEFAULT;
 // horizon 至少 5：MA20 推演看 5 天后
 const YEARS = opt("years", 2, 0.1), STEP = opt("step", 20, 1), HORIZON = opt("horizon", 20, 5), JOBS = opt("jobs", 6, 1);
 const REFRESH = argv.includes("--refresh");
-
-// end 取今天（不含）：只要已经收盘的日线。行数不够（限流、代码写错时 yfinance 常常不报错、只给空表）就报错，不写缓存。
-const FETCH = `
-import sys, yfinance as yf, pandas as pd
-t, out, start, min_rows = sys.argv[1], sys.argv[2], sys.argv[3], int(sys.argv[4])
-df = yf.download(t, start=start, end=pd.Timestamp.today().strftime("%Y-%m-%d"), auto_adjust=True, progress=False)
-if isinstance(df.columns, pd.MultiIndex):
-    df.columns = df.columns.get_level_values(0)
-df = df[["Close", "Volume"]].dropna() if len(df) else df
-if len(df) < min_rows:
-    sys.exit(f"{t}：只取到 {len(df)} 根日线，至少要 {min_rows} 根")
-df.index.name = "Date"
-df.to_csv(out)
-`;
+const COMPARE = argv.includes("--compare") ? argv[argv.indexOf("--compare") + 1] : null;
+const BACKTEST = resolve(SCRIPT, "../backtest.py");
 
 const DAY = 86_400_000;
 const iso = (ms: number) => new Date(ms).toISOString().slice(0, 10);
@@ -62,26 +53,23 @@ const MIN_ROWS = Math.round((YEARS + HISTORY_YEARS) * 240);
 
 function parse(csv: string): { rows: string[]; bars: Bar[] } {
   const [head, ...rows] = readFileSync(csv, "utf8").trim().split("\n");
-  if (!head.startsWith("Date")) throw new Error(`${csv} 格式不对：${head}`);
+  const col = head.split(",").indexOf("Close");
+  if (!head.startsWith("Date") || col < 0) throw new Error(`${csv} 格式不对：${head}`);
   const bars = rows.map((r) => {
-    const [date, close] = r.split(",");
-    return { date: date.slice(0, 10), close: Number(close) };
+    const cells = r.split(",");
+    return { date: cells[0].slice(0, 10), close: Number(cells[col]) };
   });
   if (bars.some((b) => !Number.isFinite(b.close))) throw new Error(`${csv} 里有不是数字的收盘价`);
   return { rows: [head, ...rows], bars };
 }
 
-/** 取日线：缓存覆盖得到、7 天内更新过、没给 --refresh，就用缓存；否则重新取。 */
+/** 取日线：backtest.py --fetch-only 决定用缓存还是重取（结构判断要最高价、最低价，缓存只有收盘价也会重取）。 */
 async function load(t: string): Promise<{ rows: string[]; bars: Bar[] }> {
-  const csv = resolve(DATA, `${t}.csv`);
-  if (!REFRESH && existsSync(csv)) {
-    const got = parse(csv);
-    const first = got.bars[0]?.date ?? "9999", last = got.bars.at(-1)?.date ?? "0000";
-    if (first <= iso(Date.parse(NEED_FROM) + 7 * DAY) && last >= iso(Date.now() - 7 * DAY) && got.bars.length >= MIN_ROWS) return got;
-    console.error(`${t}：缓存 ${first} ~ ${last}（${got.bars.length} 根）不够用，重新取`);
-  }
-  await pexec("uv", ["run", "--quiet", "--with", "yfinance", "--with", "pandas", "python", "-c", FETCH, t, csv, NEED_FROM, String(MIN_ROWS)]);
-  return parse(csv);
+  await pexec("uv", ["run", "--quiet", "--script", BACKTEST, "--fetch-only", "--history-from", NEED_FROM, "--data", DATA,
+    ...(REFRESH ? ["--refresh"] : []), t], { cwd: PROJECT_ROOT });
+  const got = parse(resolve(DATA, `${t}.csv`));
+  if (got.bars.length < MIN_ROWS) throw new Error(`${t}：只有 ${got.bars.length} 根日线，至少要 ${MIN_ROWS} 根`);
+  return got;
 }
 
 /** 第 i 天的分析：切出当天往前 3 年的 CSV，交给 dma_analyze.py。 */
@@ -137,7 +125,7 @@ const samples = (await pool(points, JOBS, async ({ t, i }): Promise<Sample | nul
   const flat = buildPlans(a).flat;
   if (++done % 20 === 0) console.error(`  ${done}/${points.length}`);
   return {
-    ticker: t, date: a.date, lean: a.lean.label, score: a.lean.score, play: playKey(a), flat: flat.action,
+    ticker: t, date: a.date, lean: a.lean.label, score: a.lean.score, play: playKey(a), stage: a.regime.stage, flat: flat.action,
     buyTurn: BUY_TURN_PLAYS.includes(playKey(a)),
     ma20: ma20Check(bars.map((b) => b.close), i, ma20Claim(a)),
     ...o,
@@ -146,10 +134,10 @@ const samples = (await pool(points, JOBS, async ({ t, i }): Promise<Sample | nul
 
 if (!samples.length) throw new Error("一个回放点都没有：检查股票代码和数据");
 const dates = samples.map((s) => s.date).sort();
-const md = renderReport(summarize(samples), {
-  tickers: TICKERS, from: dates[0], to: dates.at(-1)!, horizon: HORIZON, source: "yfinance 复权日线（每个点只用当天往前 3 年）",
-});
-const file = resolve(OUT, `${new Date().toISOString().slice(0, 10)}.md`);
+const meta = { tickers: TICKERS, from: dates[0], to: dates.at(-1)!, horizon: HORIZON, source: "yfinance 复权日线（每个点只用当天往前 3 年）" };
+let md = renderReport(summarize(samples), meta);
+if (COMPARE) md += "\n" + renderCompare(JSON.parse(readFileSync(resolve(COMPARE), "utf8")) as Sample[], samples, HORIZON);
+const file = resolve(OUT, `${new Date().toISOString().slice(0, 10)}-20d.md`);
 writeFileSync(file, md);
 writeFileSync(file.replace(/\.md$/, ".json"), JSON.stringify(samples, null, 1));
 console.log(md);
