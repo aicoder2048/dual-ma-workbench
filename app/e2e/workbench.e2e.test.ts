@@ -10,11 +10,13 @@ import { chromium, type Browser, type Page } from "playwright";
 import { Analyzer } from "../src/analyze.ts";
 import type { Analysis } from "../src/citations.ts";
 import { createHandler } from "../src/http.ts";
+import { Journal } from "../src/journal.ts";
 import { SettingsStore } from "../src/settings.ts";
 import { SourceLibrary } from "../src/sources.ts";
 import { Speaker } from "../src/tts.ts";
 import { Watchlist } from "../src/watchlist.ts";
 import nvda from "../test/fixtures/nvda-analysis.json";
+import spy from "../test/fixtures/spy-2024-04-19-analysis.json";
 
 /** 300 个交易日的合成日线：图表工具（范围、读数、门槛线）要有真数据才能测。 */
 const CHART = (() => {
@@ -49,9 +51,10 @@ beforeAll(async () => {
     analyzer: new Analyzer(async (args) => {
       if (args[0] === "ANT") throw new Error("取不到 ANT 的行情");
       if (args[0] === "SLOW") { await Bun.sleep(1500); throw new Error("SLOW 超时"); }
+      if (args[0] === "SPY") return JSON.stringify({ analysis: spy, chart: CHART }); // 稳定上涨·回撤中：交易日志用
       return JSON.stringify({ analysis: { ...(nvda as Analysis), label: args[0], warning: warningNext ?? nvda.warning }, chart: CHART });
     }),
-    watchlist: new Watchlist(join(dir, "w.json")),
+    watchlist: new Watchlist(join(dir, "w.json")), journal: new Journal(join(dir, "journal.json")),
     library: SourceLibrary.load(),
     publicDir: resolve(import.meta.dir, "../public"),
     settings: new SettingsStore(join(dir, "s.json")),
@@ -1274,6 +1277,116 @@ describe("两个 agent 都写角色 + 名字", () => {
       els.map((el) => Math.round(el.getBoundingClientRect().height / parseFloat(getComputedStyle(el).lineHeight || "0") || 0)));
     expect(lines).toEqual([1, 1]);
     expect(errors).toEqual([]);
+    await page.close();
+  }, 30_000);
+});
+
+describe("交易日志", () => {
+  /** 控件在当前视图里看得见、没被挡住（不先滚动，照用户看到的样子）。 */
+  const usable = (page: Page, sel: string) => page.locator(sel).evaluate((el) => {
+    const r = el.getBoundingClientRect();
+    const hit = document.elementFromPoint(r.x + Math.min(20, r.width / 2), r.y + r.height / 2);
+    return r.height > 0 && r.top >= 0 && r.bottom <= innerHeight && !!hit && el.contains(hit);
+  });
+  const shot = (page: Page, name: string) => process.env.JOURNAL_SHOTS
+    ? page.screenshot({ path: join(process.env.JOURNAL_SHOTS, `${name}.png`) }) : Promise.resolve();
+
+  test("回放 SPY 2024-04-19：记入日志 → 进场 → 离场 → 复盘，左栏汇总跟着变；刷新后还在", async () => {
+    const { page, errors } = await open(undefined, "SPY@2024-04-19");
+    expect(await usable(page, "#journal-add")).toBe(true);
+    await shot(page, "1-default-view");
+    await page.click("#journal-add");
+    const dlg = page.locator("#journal-dialog");
+    expect(await dlg.locator("h2").textContent()).toBe("记入日志：SPY 2024-04-19");
+    expect(await dlg.locator(".j-plan").textContent()).toContain("稳定上涨");
+    await dlg.locator("input[name=size]").fill("1/3 仓");
+    await dlg.locator("textarea[name=reason]").fill("回撤到 60 线组，等吃回撤条件齐");
+    expect(await usable(page, "#journal-save")).toBe(true);
+    await shot(page, "2-record-dialog");
+    await page.click("#journal-save");
+
+    // 记完：对话框关上，左栏切到交易日志，新的一笔在最上面
+    await page.waitForSelector("#journal-dialog", { state: "hidden" });
+    expect(await page.getAttribute("#tab-journal", "aria-selected")).toBe("true");
+    const item = page.locator("#journal-list .j-item").first();
+    expect(await item.textContent()).toContain("SPY");
+    expect(await item.locator(".j-state").textContent()).toBe("计划");
+    expect(await usable(page, "#journal-list .j-item")).toBe(true);
+    expect(await page.textContent("#journal-summary")).toContain("计划 1");
+
+    await item.click();
+    const detail = page.locator("#journal-detail");
+    expect(await detail.locator(".j-plan").textContent()).toContain("记入后不能改");
+    await detail.locator('[data-act="enter"] input[name=date]').fill("2024-04-22");
+    await detail.locator('[data-act="enter"] input[name=price]').fill("499.5");
+    expect(await usable(page, '#journal-detail [data-act="enter"] button')).toBe(true);
+    await detail.locator('[data-act="enter"] button').click();
+    await page.waitForSelector('#journal-detail [data-act="exit"]');
+    expect(await page.locator("#journal-list .j-state").first().textContent()).toBe("已进场");
+
+    await detail.locator('[data-act="exit"] input[name=date]').fill("2024-05-15");
+    await detail.locator('[data-act="exit"] input[name=price]').fill("529.47");
+    await detail.locator('[data-act="exit"] input[name=reason]').fill("主动止盈");
+    await detail.locator('[data-act="exit"] button').click();
+    await page.waitForSelector('#journal-detail [data-act="review"]');
+    expect(await detail.locator(".j-outcome").textContent()).toContain("+6.00%");
+    expect(await detail.locator(".j-outcome").textContent()).toContain("23");
+
+    await detail.locator('[data-act="review"] input[value=yes]').check();
+    await detail.locator('[data-act="review"] textarea[name=lesson]').fill("按计划拿住了");
+    const review = page.locator('#journal-detail [data-act="review"] button');
+    await review.scrollIntoViewIfNeeded();
+    expect(await usable(page, '#journal-detail [data-act="review"] button')).toBe(true);
+    await review.click();
+    await page.waitForFunction(() => document.querySelector("#journal-list .j-line")?.textContent?.includes("照计划"));
+    await shot(page, "3-detail-closed");
+    await page.click("#journal-detail header .j-close");
+
+    const sum = page.locator("#journal-summary");
+    expect(await sum.textContent()).toContain("已离场 1");
+    expect(await sum.locator("tbody tr").first().textContent()).toContain("100%"); // 照计划：1 笔，胜率 100%
+    expect(await sum.locator(".j-small").first().textContent()).toContain("少于 10 笔");
+    expect(await usable(page, "#journal-summary .j-stats")).toBe(true);
+    // 汇总表在左栏里放得下：不出框、不被截断
+    expect(await page.locator("#journal-summary").evaluate((el) => {
+      const t = el.querySelector(".j-stats")!.getBoundingClientRect();
+      const box = el.getBoundingClientRect();
+      return t.right <= box.right - 4 && el.scrollWidth <= el.clientWidth;
+    })).toBe(true);
+    await shot(page, "4-summary");
+
+    await page.reload();
+    await page.waitForSelector(".lean-label");
+    expect(await page.getAttribute("#tab-journal", "aria-selected")).toBe("true"); // 记住选的标签
+    expect(await page.locator("#journal-list .j-line").first().textContent()).toContain("+6.0%");
+    expect(errors).toEqual([]);
+    await page.close();
+  }, 60_000);
+
+  test("记入时处境可以换成持仓，预览跟着换；取消不记", async () => {
+    const { page } = await open(undefined, "SPY@2024-04-19");
+    const before = await (await fetch(`${base}/api/journal`)).json();
+    await page.click("#journal-add");
+    const dlg = page.locator("#journal-dialog");
+    const flat = await dlg.locator(".j-action").textContent();
+    await dlg.locator('[data-situation="holding"]').click();
+    expect(await dlg.locator(".j-action").textContent()).not.toBe(flat);
+    expect(await dlg.locator('[data-situation="holding"]').getAttribute("aria-pressed")).toBe("true");
+    await dlg.locator("footer .j-close").click();
+    expect(await dlg.getAttribute("open")).toBeNull();
+    expect((await (await fetch(`${base}/api/journal`)).json()).entries.length).toBe(before.entries.length);
+    await page.close();
+  }, 30_000);
+
+  test("还没进场就想填离场：页面上没有离场的表；服务端也拒绝", async () => {
+    const id = "e2e-illegal-01";
+    await fetch(`${base}/api/journal`, { method: "POST", body: JSON.stringify({ id, ticker: "SPY", asof: "2024-04-19", situation: "flat", cost: null, size: "", reason: "" }) });
+    const { page } = await open(async (p) => { await p.addInitScript(() => localStorage.setItem("dma-left-tab", "journal")); }, "SPY@2024-04-19");
+    await page.click(`#journal-list [data-id="${id}"]`);
+    expect(await page.locator('#journal-detail [data-act="exit"]').count()).toBe(0);
+    expect(await page.locator('#journal-detail [data-act="cancel"]').count()).toBe(1);
+    const res = await fetch(`${base}/api/journal/${id}`, { method: "POST", body: JSON.stringify({ type: "exit", date: "2024-05-01", price: 500, reason: "" }) });
+    expect(res.status).toBe(409);
     await page.close();
   }, 30_000);
 });

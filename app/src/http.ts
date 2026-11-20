@@ -3,6 +3,7 @@ import { existsSync } from "node:fs";
 import { extname, resolve } from "node:path";
 import { explainError, type Analyzer } from "./analyze.ts";
 import { buildFacts } from "./citations.ts";
+import { captureSnapshot, Journal, JournalError, journalView, parseAction, parseCreate } from "./journal.ts";
 import { buildReport } from "./report.ts";
 import { nearestThinking, piCatalog, THINKING_LEVELS, type ModelCatalog } from "./agents/catalog.ts";
 import { DATA_OPTIONS, SettingsStore, VOICE_OPTIONS } from "./settings.ts";
@@ -13,6 +14,7 @@ import type { Watchlist } from "./watchlist.ts";
 export interface Deps {
   analyzer: Analyzer;
   watchlist: Watchlist;
+  journal: Journal;
   library: SourceLibrary;
   publicDir: string;
   settings: SettingsStore;
@@ -33,7 +35,7 @@ const MIME: Record<string, string> = {
 };
 
 export function createHandler(deps: Deps) {
-  const { analyzer, watchlist, library, publicDir, settings } = deps;
+  const { analyzer, watchlist, journal, library, publicDir, settings } = deps;
   const tts = deps.tts ?? new Speaker();
   const catalog = deps.catalog ?? piCatalog();
   /** effective：两个 agent 实际用的思考程度（模型不支持想要的档位时取最近的）；当前模型不在清单里时是 null。 */
@@ -72,6 +74,21 @@ export function createHandler(deps: Deps) {
       const body = (await req.json().catch(() => ({}))) as { ticker?: string };
       if (req.method === "POST") return json(watchlist.add(body.ticker ?? ""));
       if (req.method === "DELETE") return json(watchlist.remove(body.ticker ?? ""));
+    }
+    if (p === "/api/journal") {
+      if (req.method === "GET") return json(journalView(journal.list()));
+      if (req.method === "POST") {
+        // 快照按页面说的票、日期、处境在这里重新取，不信页面发来的计划
+        const input = parseCreate(await req.json().catch(() => null));
+        const { analysis } = await analyzer.analyze(input.ticker, input.asof);
+        journal.create(input, captureSnapshot(analysis, buildReport(analysis), input));
+        return json(journalView(journal.list()));
+      }
+    }
+    const entryId = p.match(/^\/api\/journal\/([^/]+)$/)?.[1];
+    if (entryId && req.method === "POST") {
+      journal.apply(decodeURIComponent(entryId), parseAction(await req.json().catch(() => null)));
+      return json(journalView(journal.list()));
     }
     if (p === "/api/settings") {
       if (req.method === "GET") return json(await settingsView());
@@ -126,6 +143,7 @@ export function createHandler(deps: Deps) {
     try {
       return await api(req, url);
     } catch (err) {
+      if (err instanceof JournalError) return fail(err.message, err.status);
       return fail(explainError(err), err instanceof Error && /不合法|格式|最多|清单/.test(err.message) ? 400 : 500);
     }
   };

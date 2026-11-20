@@ -6,6 +6,7 @@ import { Analyzer, normalizeAsof, normalizeTicker, type Runner } from "../src/an
 import { bookOf, buildFacts, validateCitations, type Analysis } from "../src/citations.ts";
 import type { ModelCatalog } from "../src/agents/catalog.ts";
 import { createHandler } from "../src/http.ts";
+import { Journal } from "../src/journal.ts";
 import { buildReport } from "../src/report.ts";
 import { DEFAULT_SETTINGS, SettingsStore } from "../src/settings.ts";
 import { Speaker } from "../src/tts.ts";
@@ -98,7 +99,7 @@ describe("HTTP", () => {
   const dir = mkdtempSync(join(tmpdir(), "wl-"));
   const handler = createHandler({
     analyzer: new Analyzer(fakeRunner()),
-    watchlist: new Watchlist(join(dir, "watchlist.json")),
+    watchlist: new Watchlist(join(dir, "watchlist.json")), journal: new Journal(join(dir, "journal.json")),
     library,
     publicDir: resolve(import.meta.dir, "../public"),
     settings: new SettingsStore(join(dir, "settings.json")),
@@ -124,6 +125,26 @@ describe("HTTP", () => {
     const del = await get("/api/watchlist", { method: "DELETE", body: JSON.stringify({ ticker: "AMD" }) });
     expect(await del.json()).not.toContain("AMD");
   });
+  test("交易日志：记入时服务端按票和日期重新取快照；进场、离场后汇总跟着变", async () => {
+    const post = (path: string, body: unknown) => get(path, { method: "POST", body: JSON.stringify(body) });
+    const id = "http-0001";
+    const made = await post("/api/journal", { id, ticker: "SPY", asof: "2024-04-19", situation: "flat", cost: null, size: "", reason: "" });
+    expect(made.status).toBe(200);
+    const view = await made.json();
+    expect(view.entries[0]).toMatchObject({ id, state: "planned", snapshot: { ticker: "SPY", asof: "2024-04-19", action: buildReport(analysis).plans.flat.action } });
+    await post(`/api/journal/${id}`, { type: "enter", date: "2024-04-22", price: 100 });
+    const closed = await (await post(`/api/journal/${id}`, { type: "exit", date: "2024-04-30", price: 110, reason: "" })).json();
+    expect(closed.summary.counts).toMatchObject({ planned: 0, closed: 1 });
+    expect(closed.entries[0].outcome).toEqual({ pnl: expect.closeTo(10, 6), days: 8 });
+  });
+  test("交易日志：夹带快照 400，不合法的转移 409，没有这笔 404", async () => {
+    const post = (path: string, body: unknown) => get(path, { method: "POST", body: JSON.stringify(body) });
+    const ok = { id: "http-0002", ticker: "SPY", asof: null, situation: "flat", cost: null, size: "", reason: "" };
+    expect((await post("/api/journal", { ...ok, snapshot: {} })).status).toBe(400);
+    await post("/api/journal", ok);
+    expect((await post("/api/journal/http-0002", { type: "review", followed: true, deviation: "", lesson: "" })).status).toBe(409);
+    expect((await post("/api/journal/none-0000", { type: "cancel", note: "" })).status).toBe(404);
+  });
   test("静态文件不能跳出 public 目录", async () => {
     expect((await get("/../src/server.ts")).status).toBe(404);
     expect((await get("/%2e%2e/src/server.ts")).status).toBe(404);
@@ -146,7 +167,7 @@ describe("HTTP 设置", () => {
   const handler = () => {
     const dir = mkdtempSync(join(tmpdir(), "set-"));
     return createHandler({
-      analyzer: new Analyzer(fakeRunner()), watchlist: new Watchlist(join(dir, "w.json")), library,
+      analyzer: new Analyzer(fakeRunner()), watchlist: new Watchlist(join(dir, "w.json")), journal: new Journal(join(dir, "journal.json")), library,
       publicDir: resolve(import.meta.dir, "../public"), settings: new SettingsStore(join(dir, "s.json")),
       catalog: fakeCatalog(),
     });
@@ -200,7 +221,7 @@ describe("HTTP 设置", () => {
     const s = new SettingsStore(join(dir, "s.json"));
     s.update({ model: "openrouter/gone" });
     const h2 = createHandler({
-      analyzer: new Analyzer(fakeRunner()), watchlist: new Watchlist(join(dir, "w.json")), library,
+      analyzer: new Analyzer(fakeRunner()), watchlist: new Watchlist(join(dir, "w.json")), journal: new Journal(join(dir, "journal.json")), library,
       publicDir: resolve(import.meta.dir, "../public"), settings: s, catalog: fakeCatalog(),
     });
     const b = await (await call(h2, "GET")).json();
@@ -213,7 +234,7 @@ describe("/api/tts", () => {
   const dir = mkdtempSync(join(tmpdir(), "dma-tts-"));
   const calls: { text: string; voice: string }[] = [];
   const handler = createHandler({
-    analyzer: new Analyzer(fakeRunner()), watchlist: new Watchlist(join(dir, "w.json")), library,
+    analyzer: new Analyzer(fakeRunner()), watchlist: new Watchlist(join(dir, "w.json")), journal: new Journal(join(dir, "journal.json")), library,
     publicDir: resolve(import.meta.dir, "../public"), settings: new SettingsStore(join(dir, "s.json")),
     tts: new Speaker(async (text, voice) => { calls.push({ text, voice }); return new Uint8Array([1, 2, 3]); }),
   });
