@@ -35,7 +35,7 @@ export const SOURCE_DOCS: SourceDoc[] = [
   { code: "dropoff", title: "抵扣价学习笔记", path: "study-notes/261118-ma-drop-off-price.md" },
   { code: "ta01", title: "TA01 均线实战要点", path: "docs/moving-averages/TA01-MA-Practical-Essentials.md" },
   { code: "ta15", title: "TA15 用均线判断趋势与震荡", path: "docs/moving-averages/TA15-Trend-Summary-from-MA.md" },
-  { code: "memo", title: "用户看片笔记", path: "memo/模糊正确.md" },
+  { code: "memo", title: "看片笔记：模糊正确、推演与系统精髓", path: "memo/模糊正确.md" },
 ];
 
 /**
@@ -66,6 +66,7 @@ export interface Chunk {
   body: string;
 }
 
+const BODY_HITS_CAP = 3;
 const HEADING = /^(#{1,3})\s+(.+?)\s*$/;
 // "2.3 抵扣价" 或 "1. 双均线是干什么的"；不匹配 "2020 年的例子"
 const SECTION_NO = /^(\d+\.\d+(?:\.\d+)*|\d+)\.?\s+(?=\D)/;
@@ -163,7 +164,7 @@ export class SourceLibrary {
     return [...real, ...aliases];
   }
 
-  /** 关键词检索：英文按词、中文按二字组，标题命中权重更高。 */
+  /** 关键词检索：英文按词、中文按二字组，标题命中权重更高。每个词在正文里最多算 3 次，免得长段落靠重复刷分。 */
   search(query: string, limit = 6): { chunk: Chunk; score: number }[] {
     const terms = queryTerms(query);
     if (!terms.length) return [];
@@ -171,7 +172,7 @@ export class SourceLibrary {
       .map((chunk) => {
         const head = chunk.heading.toLowerCase();
         const body = chunk.body.toLowerCase();
-        const score = terms.reduce((s, t) => s + (head.includes(t) ? 3 : 0) + countOf(body, t), 0);
+        const score = terms.reduce((s, t) => s + (head.includes(t) ? 3 : 0) + Math.min(countOf(body, t), BODY_HITS_CAP), 0);
         return { chunk, score };
       })
       .filter((r) => r.score > 0)
