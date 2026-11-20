@@ -218,7 +218,7 @@ async function act(body) {
     const happened = fills(before, view.trades);
     if (view.phase === "revealed") { stop(); showReveal(); }
     else render();
-    if (happened.length) { stop(); render(); say(happened.join("；")); deps.refreshJournal(); }
+    if (happened.length) { stop(); if (view.phase !== "revealed") render(); say(happened.join("；")); deps.refreshJournal(); }
     if (happened.length || phaseChanged) refreshList();
     return view;
   } catch (err) {

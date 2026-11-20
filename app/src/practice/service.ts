@@ -190,7 +190,8 @@ export class Practice {
     const bars = await this.o.prices.load({ ticker: s.secret.ticker, since: this.pool.find((p) => p.ticker === s.secret.ticker)?.since });
     const start = bars.findIndex((b) => b.date === s.secret.start);
     if (start < 0) throw new PracticeError(`练习 #${s.no}：行情里没有开局那天`, 500);
-    this.writeCsv(s.id, rebase(bars.slice(windowStart(bars, start), start + HORIZON + 1), start - windowStart(bars, start)).bars);
+    const w0 = windowStart(bars, start);
+    this.writeCsv(s.id, rebase(bars.slice(w0, start + HORIZON + 1), start - w0).bars);
   }
 
   private csvPath = (id: string) => resolve(this.dir, `${id}.csv`);
