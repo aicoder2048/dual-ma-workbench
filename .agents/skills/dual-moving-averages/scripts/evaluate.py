@@ -726,7 +726,7 @@ RECOMMEND = [
     (lambda v, s: v["H6"] not in (es.USEFUL, es.DEV_PASSED),
      "H6（假动作）没得到支持：rules.md 对应规则（J17、J18）标\"回测不支持\"，不删，工作台不再据此给结论。"),
     (lambda v, s: all(x in (es.USELESS, es.UNSURE, es.FEW) or x.startswith("只在") for x in v.values()),
-     "全部无用或不确定：如实写进 README，工作台是学习和复盘工具，不提供可验证的交易优势。"),
+     "全部无用或不确定：如实写进 README 作风险提示：没找到可验证的交易优势（产品定位由用户定，不因此改变）。"),
 ]
 
 

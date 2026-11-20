@@ -273,7 +273,7 @@ footer {{ font-size: 12px; color: var(--muted); display: grid; gap: 4px; }}
 
   <footer>
     <div>{ai_note}。趋势类型初判是规则算的（阈值见 dma_analyze.py），需要结合图形确认。方法来自双均线教学视频：均线的方向就是价格的最小阻力方向。</div>
-    <div>只用于学习和复盘，不是投资建议。生成于 {generated}。</div>
+    <div>交易决定和盈亏由你自己负责，这不是投资建议。生成于 {generated}。</div>
   </footer>
 </div>
 
