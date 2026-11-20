@@ -1476,9 +1476,12 @@ describe("盲测练习", () => {
 
   test("出题 → 记计划 → 往后放到进场、止损 → 揭晓；控件都在默认视图里，揭晓前看不到真实信息", async () => {
     const { page, errors } = await open();
-    await page.click("#tab-practice");
+    expect(await usable(page, "#practice-btn")).toBe(true);
+    await page.click("#practice-btn");
+    await page.click("#pp-tab-combo");
     expect(await usable(page, "#practice-new")).toBe(true);
     await page.click("#practice-new");
+    await page.waitForSelector("#practice-page", { state: "hidden" }); // 综合题在工作台里做
     await page.waitForSelector("#practice .pr-tools");
     await page.waitForFunction(() => document.getElementById("ticker")?.textContent === "练习 #1" && document.querySelector(".lean-label"));
     await page.waitForFunction(() => document.getElementById("meta-line")?.textContent?.includes("T0"));
@@ -1532,11 +1535,10 @@ describe("盲测练习", () => {
     expect(await page.textContent("#practice .pr-phase")).toBe("决策中");
     await shot(page, "4-stopped");
     expect(await visibleLeaks(page)).toEqual([]);
-    // 交易日志里是「练习 #1」，日期是 T+n
+    // 练习的单不进交易日志的列表：只在汇总下面提一句
     await page.click("#tab-journal");
-    const item = page.locator("#journal-list .j-item").first();
-    expect(await item.textContent()).toContain("练习 #1");
-    expect(await item.textContent()).toContain("练习");
+    expect(await page.textContent("#journal-list")).not.toContain("练习 #1");
+    expect(await page.textContent("#journal-summary")).toContain("练习的 1 笔另算");
     expect(await visibleLeaks(page)).toEqual([]);
 
     // 揭晓：点两下
@@ -1556,9 +1558,14 @@ describe("盲测练习", () => {
     expect(rows[2]).toContain("✓");
     expect(await usable(page, "#practice .pr-disc-list li:nth-child(3)")).toBe(true);
     await shot(page, "5-reveal");
-    await page.waitForFunction((t) => document.querySelector("#journal-list .j-item")?.textContent?.includes(t), REAL_TICKER);
-    // 练习的统计在「练习」标签：1 题已揭晓
-    await page.click("#tab-practice");
+    // 复盘：揭晓页上每一笔后面的按钮打开这一笔（换回真实代码）
+    expect(await usable(page, "#practice [data-review]")).toBe(true);
+    await page.click("#practice [data-review]");
+    await page.waitForFunction((t) => document.querySelector("#journal-detail h2")?.textContent?.includes(t), REAL_TICKER);
+    await page.click("#journal-detail .j-close");
+    // 练习的统计在练习页「综合题」：1 题已揭晓
+    await page.click('#practice [data-act="list"]');
+    await page.waitForSelector("#practice-stats .j-stats");
     expect(await page.textContent("#practice-stats")).toContain("已揭晓 1");
     const split = await page.locator("#practice-stats .j-stats tbody th").allTextContents();
     expect(split).toEqual(["照计划", "没照", "纪律高", "纪律低", "全部"]);

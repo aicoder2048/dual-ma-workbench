@@ -14,9 +14,9 @@ let view = { entries: [], summary: null, smallSample: 10 };
 let api;
 let current;
 
-const TABS = ["watch", "journal", "practice"];
-/** 左栏的三个标签：自选股、交易日志、练习。选哪个记在本机。 */
-export function selectTab(name) {
+const TABS = ["watch", "journal"];
+/** 左栏的两个标签：自选股、交易日志。选哪个记在本机。练习在顶栏，不在这里。 */
+function selectTab(name) {
   for (const [tab, pane] of TABS.map((t) => [`tab-${t}`, `${t}-pane`])) {
     const on = tab === `tab-${name}`;
     $(tab).setAttribute("aria-selected", String(on));
@@ -37,12 +37,12 @@ function summaryHtml(s) {
   const c = s.closed;
   const small = !c.all.n ? `<p class="j-small">还没有已离场的。离场、复盘后，这里按照没照计划分开算。</p>`
     : c.all.small ? `<p class="j-small">已离场 ${c.all.n} 笔，少于 ${view.smallSample} 笔：数字只当参考，别据此下结论。</p>` : "";
-  const practiced = view.entries.filter((e) => e.practice).length;
+  const practiced = view.entries.length - real().length;
   return `<div class="j-counts">${counts}</div>${small}
     <table class="j-stats"><thead><tr><th></th><th>笔</th><th>胜率</th><th>均值</th><th>中位</th><th>天</th></tr></thead>
       <tbody>${groupRow("照计划", c.followed)}${groupRow("没照", c.deviated)}${groupRow("全部", c.all)}</tbody></table>
     ${c.unreviewed ? `<p class="j-small">${c.unreviewed} 笔已离场还没复盘，不算进照没照计划。</p>` : ""}
-    ${practiced ? `<p class="j-small">上面只算实盘。标「练习」的 ${practiced} 笔另算，见「练习」标签。</p>` : ""}`;
+    ${practiced ? `<p class="j-small">这里只有实盘。练习的 ${practiced} 笔另算，在顶栏「练习」→ 综合题。</p>` : ""}`;
 }
 
 function itemHtml(e) {
@@ -56,20 +56,24 @@ function itemHtml(e) {
     line = `进场 ${esc(e.entry.date)} @ <span class="num">${f2(e.entry.price)}</span>`;
   }
   return `<li class="j-item" data-id="${esc(e.id)}" tabindex="0">
-      <span class="sym">${esc(s.ticker)}${e.practice ? ` <span class="j-tag">练习</span>` : ""}</span><span class="j-state ${e.state}">${STATE_LABEL[e.state]}</span>
+      <span class="sym">${esc(s.ticker)}</span><span class="j-state ${e.state}">${STATE_LABEL[e.state]}</span>
       <span class="j-date">${esc(s.date)} · ${SITUATION_LABEL[s.situation]}</span>
       <span class="j-line">${line}</span></li>`;
 }
 
+/** 列表和计数只放实盘的单：练习的单在练习页里看、复盘。 */
+const real = () => view.entries.filter((e) => !e.practice);
+
 function paint() {
-  $("journal-count").textContent = view.entries.length ? String(view.entries.length) : "";
+  const entries = real();
+  $("journal-count").textContent = entries.length ? String(entries.length) : "";
   if (view.error) {
     $("journal-summary").innerHTML = `<p class="j-error" role="alert">${esc(view.error)}</p>`;
     $("journal-list").innerHTML = "";
     return;
   }
   $("journal-summary").innerHTML = summaryHtml(view.summary);
-  $("journal-list").innerHTML = view.entries.length ? view.entries.map(itemHtml).join("")
+  $("journal-list").innerHTML = entries.length ? entries.map(itemHtml).join("")
     : `<li class="j-empty">还没有记录。在中栏结论卡片上点「记入日志」，记下当时的计划。</li>`;
 }
 
@@ -245,6 +249,11 @@ function detailDialog(id) {
 }
 
 export const refreshJournal = () => refresh();
+/** 打开一笔的详情（练习页的「复盘」用：练习的单不在左栏列表里）。 */
+export async function openEntry(id) {
+  if (!view.entries.some((e) => e.id === id)) await refresh();
+  detailDialog(id);
+}
 
 /** opts.record：结论卡片上点「记入日志」时先问它，返回 true 表示已经处理（练习里改记练习的计划）。 */
 export async function initJournal(opts) {

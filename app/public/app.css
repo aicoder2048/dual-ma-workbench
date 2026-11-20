@@ -357,6 +357,7 @@ body.offline .status-pill .dot { background: var(--bad); }
 .settings-btn { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 12px 0 9px; border: 1px solid var(--line); border-radius: 8px; background: var(--card); cursor: pointer; font-size: 13px; color: var(--fg); }
 .settings-btn svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .settings-btn:hover, .settings-btn[aria-expanded="true"] { border-color: var(--accent); color: var(--accent); }
+.practice-btn[aria-expanded="true"] { background: var(--accent-soft); }
 
 /* 左栏顶部：搜索 */
 .left .search { display: flex; align-items: center; gap: 8px; margin: 12px 12px 4px; padding: 0 10px; height: 36px; background: var(--card); border: 1px solid var(--line); border-radius: 10px; }
@@ -716,8 +717,22 @@ footer .j-close { font-size: 13px; }
 .j-yn legend { font-size: 12.5px; color: var(--muted); margin-bottom: 2px; }
 .j-outcome { font-size: 14px; }
 
-/* ===================== 盲测练习 ===================== */
-.j-tag { font: 500 10.5px var(--sans); color: var(--neutral); border: 1px solid color-mix(in srgb, var(--neutral) 50%, var(--line)); border-radius: 999px; padding: 0 6px; vertical-align: 2px; }
+/* ===================== 练习页：顶栏下面整块盖住工作台 ===================== */
+.practice-page { position: fixed; z-index: 12; top: var(--bar-h); left: 0; right: 0; bottom: 0; background: var(--bg); background-image: var(--paper); display: flex; flex-direction: column; }
+.practice-page[hidden] { display: none; }
+.pp-head { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 16px; padding: 10px 20px; border-bottom: 1px solid var(--line); background: var(--panel); }
+.pp-head h2 { margin: 0; font: 700 17px var(--heading); }
+.pp-sub { font-size: 12.5px; color: var(--muted); }
+.pp-tabs { display: flex; gap: 4px; }
+.pp-tabs button { border: 1px solid var(--line); background: var(--card); color: var(--muted); border-radius: 999px; padding: 3px 14px; font: 600 13px var(--sans); cursor: pointer; }
+.pp-tabs button[aria-selected="true"] { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+.pp-close { margin-left: auto; border: 1px solid var(--line); background: var(--card); color: var(--fg); border-radius: 8px; padding: 4px 12px; font-size: 13px; cursor: pointer; }
+.pp-close:hover { border-color: var(--accent); color: var(--accent); }
+.pp-body { flex: 1; min-height: 0; overflow-y: auto; }
+.pp-body[hidden] { display: none; }
+.pp-combo { width: min(760px, 100%); margin: 0 auto; padding: 8px 4px 20px; }
+
+/* ===================== 盲测练习（综合题） ===================== */
 .pr-start { margin: 8px 12px 0; display: grid; gap: 6px; }
 .pr-new { justify-self: start; border: 1px solid var(--accent); background: var(--accent); color: var(--card); border-radius: 8px; padding: 4px 14px; font: 600 13px var(--sans); cursor: pointer; }
 .pr-new:disabled { opacity: .6; cursor: default; }
@@ -755,6 +770,7 @@ body.practice-revealed #verdict, body.practice-revealed #steps, body.practice-re
 .pr-tools .pr-reveal[data-armed="1"] { border-color: var(--down); color: var(--down); }
 .pr-result { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 13.5px; }
 .pr-trades { margin: 0; padding-left: 18px; font-size: 12.5px; color: var(--muted); }
+.pr-trades button { margin-left: 8px; font-size: 12px; background: var(--card); border: 1px solid var(--line); border-radius: 999px; padding: 0 10px; cursor: pointer; color: var(--accent); }
 .pr-disc { border-top: 1px dashed var(--line); padding-top: 6px; font-size: 12.5px; }
 .pr-disc h4 { margin: 0 0 4px; font-size: 13px; }
 .pr-disc-head { margin: 4px 0 2px; color: var(--muted); }
@@ -764,5 +780,4 @@ body.practice-revealed #verdict, body.practice-revealed #steps, body.practice-re
 .pr-disc-list .pass .mark { color: var(--up); } .pr-disc-list .fail .mark { color: var(--down); } .pr-disc-list .na { color: var(--muted); }
 .pr-disc-sum { margin: 4px 0 0; font-size: 11.5px; color: var(--muted); }
 .practice p { margin: 0; font-size: 12.5px; }
-.j-tag { white-space: nowrap; }
 .journal-dialog .j-yn label { margin-right: 12px; }
