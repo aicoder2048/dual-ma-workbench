@@ -6,6 +6,7 @@ import { initAsofInput, initSplitters } from "./layout.js";
 import { initSelection } from "./selection.js";
 import { initAskMenu, selectionLabel } from "./askmenu.js";
 import { collapseDrawer, initDrawer, updatePeek } from "./drawer.js";
+import { initJournal } from "./journal.js";
 import { resolveTicker } from "./names.js";
 import { applyRemoteSettings, initSettings, openSettings } from "./settings.js";
 import { chartLevels, conclusionCard, forecastAnswer, holdingRow, installTips, leanName, planBody, playAnswer, pnlText, stanceOf, stepVisuals, trendAnswer } from "./viz.js";
@@ -479,11 +480,12 @@ async function main() {
       input.select();
     },
   });
+  const journal = initJournal({ api, current: () => ({ data: state.data, asof: state.asof, pos: loadPosition(state.ticker) }) });
   const [t, asof] = decodeURIComponent(location.hash.slice(1)).split("@");
   const wl = refreshWatchlist();
   const first = t || (await api("/api/watchlist"))[0];
   if (first) await loadAnalysis(first, asof || null);
-  await wl;
+  await Promise.all([wl, journal]);
 }
 
 main();

@@ -383,6 +383,7 @@ export function conclusionCard(r, close, p) {
   const buys = r.record.setup !== null;
   return `<div class="concl-head"><span class="eyebrow">结论</span><b class="concl-trend">${esc(r.trend.type)}</b>
       <span class="concl-lean">接下来几周 <span class="lean-label ${stanceOf(r.visual.lean)}">${esc(r.visual.lean.label)}</span></span>
+      <button type="button" id="journal-add" class="journal-add" title="把此刻的计划记进交易日志，之后对照结果">记入日志</button>
       <button type="button" class="ask-card" data-ask-card="verdict" aria-haspopup="menu">问鸿雁</button></div>
     ${conclusionRow("空仓", r.plans.flat, close, true, buys, null)}
     <div class="holding-row">${holdingRow(r, close, p)}</div>
