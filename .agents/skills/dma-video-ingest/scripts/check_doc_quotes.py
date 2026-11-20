@@ -29,7 +29,8 @@ import verify_quotes as vq  # noqa: E402
 SKILL = HERE.parent
 DMA = SKILL.parent / "dual-moving-averages"
 PROJECT = SKILL.parents[2]
-QUOTE = re.compile(r"视频 ([A-Z]) (\d{1,2}:\d{2}(?::\d{2})?)「([^」]+)」")
+# 代号后可带括号标注，例如外部来源"视频 N（外部来源：老猫与指标，非 LEI）01:24「…」"
+QUOTE = re.compile(r"视频 ([A-Z])(?:（[^）]*）| )(\d{1,2}:\d{2}(?::\d{2})?)「([^」]+)」")
 
 
 def collect(files: list[Path]) -> dict[str, list[dict]]:
