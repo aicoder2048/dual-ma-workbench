@@ -4,6 +4,7 @@ import { extname, resolve } from "node:path";
 import { explainError, type Analyzer } from "./analyze.ts";
 import { buildFacts } from "./citations.ts";
 import { captureSnapshot, Journal, JournalError, journalView, parseAction, parseCreate } from "./journal.ts";
+import type { DrillBank } from "./practice/drills.ts";
 import type { Practice } from "./practice/service.ts";
 import { PracticeError } from "./practice/session.ts";
 import { buildReport } from "./report.ts";
@@ -26,6 +27,8 @@ export interface Deps {
   catalog?: ModelCatalog;
   /** 盲测练习；不传就没有练习的接口。 */
   practice?: Practice;
+  /** 识别题库；不传就没有识别题的接口。 */
+  drills?: DrillBank;
 }
 
 const json = (data: unknown, status = 200) =>
@@ -39,7 +42,7 @@ const MIME: Record<string, string> = {
 };
 
 export function createHandler(deps: Deps) {
-  const { analyzer, watchlist, journal, library, publicDir, settings, practice } = deps;
+  const { analyzer, watchlist, journal, library, publicDir, settings, practice, drills } = deps;
   const journalPage = () => journalView(journal.list(), practice ? (e) => practice.displayEntry(e) : undefined);
   const tts = deps.tts ?? new Speaker();
   const catalog = deps.catalog ?? piCatalog();
@@ -105,6 +108,10 @@ export function createHandler(deps: Deps) {
       if (req.method === "GET") return json(await practice.view(id));
       if (req.method === "POST") return json(await practice.act(id, await req.json().catch(() => null)));
     }
+    if (drills && p === "/api/drills" && req.method === "GET") return json(drills.overview());
+    if (drills && p === "/api/drills/next" && req.method === "GET") return json(await drills.next(q.get("kind") || null));
+    const drillId = drills && req.method === "POST" && p.match(/^\/api\/drills\/([^/]+)\/answer$/)?.[1];
+    if (drills && drillId) return json(await drills.answer(decodeURIComponent(drillId), await req.json().catch(() => null)));
     if (p === "/api/settings") {
       if (req.method === "GET") return json(await settingsView());
       if (req.method === "PUT") {
