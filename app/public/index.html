@@ -181,11 +181,13 @@
     <h2 id="practice-title">练习</h2>
     <span class="pp-sub">练眼力：一眼看出图形和信号</span>
     <div class="pp-tabs" role="tablist" aria-label="练习方式">
-      <button type="button" role="tab" id="pp-tab-combo" aria-controls="pp-combo" aria-selected="true">综合题</button>
+      <button type="button" role="tab" id="pp-tab-drill" aria-controls="pp-drill" aria-selected="true">识别题</button>
+      <button type="button" role="tab" id="pp-tab-combo" aria-controls="pp-combo" aria-selected="false">综合题</button>
     </div>
     <button type="button" id="practice-close" class="pp-close" title="回到工作台（Esc）">回到工作台 ✕</button>
   </header>
-  <div id="pp-combo" class="pp-body pp-combo" role="tabpanel" aria-labelledby="pp-tab-combo">
+  <div id="pp-drill" class="pp-body" role="tabpanel" aria-labelledby="pp-tab-drill"></div>
+  <div id="pp-combo" class="pp-body pp-combo" role="tabpanel" aria-labelledby="pp-tab-combo" hidden>
     <div class="pr-start">
       <button type="button" id="practice-new" class="pr-new">出一道综合题</button>
       <p class="pane-note">整笔盲测：随机一只票、随机一天。藏起代码和日期，价格换成指数（第一根 = 100），只给你看到那天为止的数据。在工作台里记下计划，一根一根往后放，碰到价位自动成交，最后揭晓，按「照打法」评纪律。</p>

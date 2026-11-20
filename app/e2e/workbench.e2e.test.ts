@@ -11,6 +11,7 @@ import { Analyzer, pythonRunner } from "../src/analyze.ts";
 import type { Analysis } from "../src/citations.ts";
 import { createHandler } from "../src/http.ts";
 import { Journal } from "../src/journal.ts";
+import { DrillBank } from "../src/practice/drills.ts";
 import { seeded } from "../src/practice/pool.ts";
 import { Practice } from "../src/practice/service.ts";
 import { SessionStore } from "../src/practice/session.ts";
@@ -67,8 +68,11 @@ beforeAll(async () => {
       return JSON.stringify({ analysis: { ...(nvda as Analysis), label: args[0], warning: warningNext ?? nvda.warning }, chart: CHART });
   });
   analyzer.mount(practice);
+  // 识别题库：同一段假"真实"行情，真的 scan.py；先出好几段的题
+  const drills = new DrillBank({ prices, dir: join(dir, "drills"), pool: [{ ticker: REAL_TICKER }], random: seeded(5) });
+  await drills.fill(3);
   const handler = createHandler({
-    analyzer, practice,
+    analyzer, practice, drills,
     watchlist: new Watchlist(join(dir, "w.json")), journal,
     library: SourceLibrary.load(),
     publicDir: resolve(import.meta.dir, "../public"),
@@ -101,7 +105,7 @@ beforeAll(async () => {
   });
   base = `http://127.0.0.1:${server.port}`;
   browser = await chromium.launch({ channel: "chrome", args: ["--autoplay-policy=no-user-gesture-required"] });
-});
+}, 120_000);
 
 // 本机 Chrome 关闭要 10 秒左右，超过 bun 钩子默认的 5 秒
 afterAll(async () => {
@@ -1572,6 +1576,62 @@ describe("盲测练习", () => {
     expect(await usable(page, "#practice-stats .pr-disc-sum")).toBe(true);
     expect(await page.textContent("#practice-list")).toMatch(/纪律 \d\/\d/);
     await shot(page, "6-stats");
+    expect(errors).toEqual([]);
+    await page.close();
+  }, 120_000);
+
+  test("识别题：顶栏进入，五种题都能答，答完有依据和规则编号；回到工作台原样不动", async () => {
+    const { page, errors } = await open();
+    const ticker = await page.textContent("#ticker");
+    const hash = await page.evaluate(() => location.hash);
+    expect(await usable(page, "#practice-btn")).toBe(true);
+    await page.click("#practice-btn");
+    expect(await page.getAttribute("#pp-tab-drill", "aria-selected")).toBe("true");
+    await page.waitForSelector(".dr-choice");
+    expect(await usable(page, "#practice-close")).toBe(true);
+    const kinds = [["chart", "看图"], ["signal", "看信号"], ["dropoff", "看抵扣价"], ["construct", "看构造和 2B"], ["play", "看打法"]];
+    for (const [kind, label] of kinds) {
+      expect({ kind, chip: await usable(page, `.dr-kinds [data-kind="${kind}"]`) }).toEqual({ kind, chip: true });
+      await page.click(`.dr-kinds [data-kind="${kind}"]`);
+      await page.waitForFunction((t) => document.querySelector(".dr-kind")?.textContent === t && !document.querySelector(".dr-verdict"), label);
+      expect(await page.locator("#dr-chart canvas").count()).toBeGreaterThan(0);
+      expect(await page.textContent("#dr-readout")).toContain("T0");
+      const parts = await page.locator(".dr-part").count();
+      for (let i = 0; i < parts; i++) {
+        const n = await page.locator(`.dr-part[data-part="${i}"] .dr-choice`).count();
+        for (let j = 0; j < n; j++) {
+          expect({ kind, i, j, ok: await usable(page, `.dr-part[data-part="${i}"] .dr-choice[data-choice="${j}"]`) }).toEqual({ kind, i, j, ok: true });
+        }
+      }
+      expect(await visibleLeaks(page)).toEqual([]);
+      await shot(page, `drill-${kind}-question`);
+      for (let i = 0; i < parts; i++) await page.click(`.dr-part[data-part="${i}"] .dr-choice[data-choice="0"]`);
+      await page.waitForSelector(".dr-verdict");
+      for (const sel of [".dr-verdict", '.dr-feedback [data-act="next"]', ".dr-rule", ".dr-evidence li"]) {
+        expect({ kind, sel, ok: await usable(page, sel) }).toEqual({ kind, sel, ok: true });
+      }
+      expect(await page.locator(".dr-choice.right").count()).toBe(parts); // 每问都标出对的那个
+      expect(await page.textContent(".dr-rule b")).toMatch(/^[AJP]\d+$/);
+      expect(await visibleLeaks(page)).toEqual([]);
+      await shot(page, `drill-${kind}-feedback`);
+    }
+    // 键盘：Enter 下一题，数字键选
+    await page.keyboard.press("Enter");
+    await page.waitForFunction(() => document.querySelector(".dr-choice") && !document.querySelector(".dr-verdict"));
+    const parts = await page.locator(".dr-part").count();
+    for (let i = 0; i < parts; i++) await page.keyboard.press("1");
+    await page.waitForSelector(".dr-verdict");
+    // 回到工作台：票、地址都没变；Esc 也能关
+    await page.click("#practice-close");
+    await page.waitForSelector("#practice-page", { state: "hidden" });
+    expect(await page.textContent("#ticker")).toBe(ticker);
+    expect(await page.evaluate(() => location.hash)).toBe(hash);
+    expect(await usable(page, "#load-ticker")).toBe(true);
+    await page.click("#practice-btn");
+    await page.waitForSelector("#practice-page", { state: "visible" });
+    await page.keyboard.press("Escape");
+    await page.waitForSelector("#practice-page", { state: "hidden" });
+    expect(await page.textContent("#ticker")).toBe(ticker);
     expect(errors).toEqual([]);
     await page.close();
   }, 120_000);

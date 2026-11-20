@@ -7,6 +7,7 @@ import { initSelection } from "./selection.js";
 import { initAskMenu, selectionLabel } from "./askmenu.js";
 import { collapseDrawer, initDrawer, updatePeek } from "./drawer.js";
 import { initJournal, openEntry, refreshJournal } from "./journal.js";
+import { initDrills, onShow as showDrills } from "./drills.js";
 import * as practice from "./practice.js";
 import { closePage, initPracticePage, openPage } from "./practicepage.js";
 import { resolveTicker } from "./names.js";
@@ -492,7 +493,8 @@ async function main() {
       input.select();
     },
   });
-  initPracticePage();
+  initDrills({ api });
+  initPracticePage({ onMode: (m) => m === "drill" && showDrills() });
   const journal = initJournal({
     api, current: () => ({ data: state.data, asof: state.asof, pos: loadPosition(state.ticker) }),
     record: () => Boolean(practice.active() && (practice.planDialog(), true)),
