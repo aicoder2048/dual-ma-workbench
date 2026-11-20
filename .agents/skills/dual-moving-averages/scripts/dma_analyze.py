@@ -6,7 +6,7 @@
 #     "yfinance",  # 只在 Polygon 不可用时作为回退数据源
 # ]
 # ///
-"""双均线分析：MA + EMA（默认 20/60/120），抵扣价推演，趋势类型初判。
+"""双均线分析：MA + EMA（默认 20/60/120），抵扣价推演，类型 × 阶段，逐条规则评估。
 
 用法：
   uv run dma_analyze.py TSLA
@@ -19,8 +19,9 @@
 数据来源：默认先用 Polygon/Massive 付费 API（POLYGON_API_KEY，见 find_polygon_key 的查找顺序），
 失败或历史不够长时回退 yfinance。--source polygon|yfinance 可强制只用一个。
 
-输出是给人（或 agent）读的 Markdown 报告。趋势分类是启发式规则，阈值见常量，
-只做初判，最终结论要结合图形和 SKILL.md 的判断流程。
+输出是给人（或 agent）读的 Markdown 报告。规则的文字和来源在 references/rules.md，
+计算在 regime.py（类型 × 阶段）和 rules.py（每条规则的状态、唯一的打法）。
+需看图的规则脚本算不了，结论要结合图形。
 """
 from __future__ import annotations
 
@@ -32,29 +33,57 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from dataclasses import asdict
 from datetime import datetime, time as dtime
+from enum import Enum
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
 import pandas as pd
 
+import regime as rg
+import rules as rl
 from indicators import PERIODS, add_indicators, arrangement
-from projection import projection
-from structure import structure_json
+from projection import HURDLE_DAYS, extend, hurdle_path, projection
+from structure import find_structure, structure_json
 from weekly import weekly_json
 
-SLOPE_LOOKBACK = 5          # 用最近 5 根 K 线算均线斜率
-FLAT_SLOPE_PCT = 0.05       # 日均变化 < 0.05% 视为走平（3 点钟）
-STEEP_SLOPE_PCT = 0.5       # 20 线日均变化 > 0.5% 视为陡峭（1 点钟方向）
-TANGLE_SPREAD_PCT = 4.0     # 三条 MA 最大最小差 / 价格 < 4% 视为缠绕
-EXTREME_PCTL = 0.95         # 20 线乖离率处于自身历史 95% 分位以上 = 大幅乖离
+SLOPE_LOOKBACK = 5          # 方向（拐没拐）：用最近 5 根 K 线
+FLAT_SLOPE_PCT = 0.05       # 脚本自定：日均变化 < 0.05% 算走平
 PROJECT_DAYS = 10           # 抵扣价推演天数
-VOLUME_SPIKE = 2.0          # 成交量 > 50 日均量 2 倍 = 大量
-ORDER_TIE_PCT = 0.5         # 两条线相差 < 价格的 0.5% 视为"贴在一起"，不算上下
-LEAN_DIR_WEIGHT = 0.6       # 模糊判断：方向占 60%，排布占 40%
-LEAN_CLEAR = 0.6            # |分数| ≥ 0.6 明显偏多/偏空
-LEAN_SOME = 0.25            # |分数| ≥ 0.25 偏多/偏空，否则不明
+ORDER_TIE_PCT = 0.5         # 脚本自定：两条线相差 < 价格的 0.5% 算贴在一起，不算上下
+LEAN_LINES = (60, 120)      # 模糊判断看类型线组的两条 MA
+LEAN_CLEAR = 0.6            # 脚本自定：|分数| ≥ 0.6 明显偏多 / 偏空
+LEAN_SOME = 0.25            # 脚本自定：|分数| ≥ 0.25 偏多 / 偏空，否则不明
 LEAN_LABELS = ("明显偏多", "偏多", "不明", "偏空", "明显偏空")
+
+# JSON 的 thresholds：规则用到的每个数和它的性质（视频 / 校准值 / 脚本自定），rules.md 末尾有同一张表
+THRESHOLDS = {
+    "CLOCK_WINDOW": (rg.CLOCK_WINDOW, "脚本自定"), "CLOCK_SCALE": (rg.CLOCK_SCALE, "校准值"),
+    "FLAT_DEG": (rg.FLAT_DEG, "视频"), "ACCEL_DEG": (rg.ACCEL_DEG, "视频"),
+    "EXTREME_PCTL": (rg.EXTREME_PCTL, "脚本自定"), "RANGE_SPREAD_PCT": (rg.RANGE_SPREAD_PCT, "脚本自定"),
+    "DENSE_PCT": (rg.DENSE_PCT, "视频"), "RANGE_MIN_DAYS": (rg.RANGE_MIN_DAYS, "视频"),
+    "OPEN_LOOKBACK": (rg.OPEN_LOOKBACK, "脚本自定"), "ACCEL_START_LOOKBACK": (rg.ACCEL_START_LOOKBACK, "脚本自定"),
+    "HURDLE_DAYS_60": (HURDLE_DAYS[60], "脚本自定"), "HURDLE_DAYS_120": (HURDLE_DAYS[120], "脚本自定"),
+    "SLOPE_LOOKBACK": (SLOPE_LOOKBACK, "脚本自定"), "FLAT_SLOPE_PCT": (FLAT_SLOPE_PCT, "脚本自定"),
+    "ORDER_TIE_PCT": (ORDER_TIE_PCT, "脚本自定"), "LEAN_CLEAR": (LEAN_CLEAR, "脚本自定"),
+    "LEAN_SOME": (LEAN_SOME, "脚本自定"), "VOLUME_SPIKE": (rl.VOLUME_SPIKE, "脚本自定"),
+    "VOLUME_PERSIST": (rl.VOLUME_PERSIST, "脚本自定"), "FAKE_MOVE_PCT": (rl.FAKE_MOVE_PCT, "脚本自定"),
+    "FAKE_DAYS": (rl.FAKE_DAYS, "脚本自定"), "STOP_DAYS": (rl.STOP_DAYS, "脚本自定"),
+    "BREAKOUT_BARS": (rl.BREAKOUT_BARS, "脚本自定"), "FRESH_BARS": (rl.FRESH_BARS, "脚本自定"),
+    "PATTERN_RECENT_BARS": (rl.PATTERN_RECENT_BARS, "脚本自定"),
+}
+
+
+def _plain(x):
+    """asdict 之后把枚举换成它的中文值，Markdown 和 JSON 都直接用。"""
+    if isinstance(x, Enum):
+        return x.value
+    if isinstance(x, dict):
+        return {k: _plain(v) for k, v in x.items()}
+    if isinstance(x, list):
+        return [_plain(v) for v in x]
+    return x
 
 
 HISTORY_YEARS = 5           # 取多少年日线（周线 MA120 要 120 周）
@@ -174,20 +203,8 @@ def load_prices(ticker: str | None, csv: str | None, asof: str | None,
 
 
 def slope_pct(series: pd.Series) -> float:
-    """最近 SLOPE_LOOKBACK 根的日均变化率（%）。"""
+    """最近 SLOPE_LOOKBACK 根的日均变化率（%）：方向用，不是钟表。"""
     return (series.iloc[-1] / series.iloc[-1 - SLOPE_LOOKBACK] - 1) * 100 / SLOPE_LOOKBACK
-
-
-def clock(s: float) -> str:
-    if abs(s) < FLAT_SLOPE_PCT:
-        return "3 点钟（走平）"
-    if s >= STEEP_SLOPE_PCT:
-        return "1 点钟（陡升）"
-    if s > 0:
-        return "2 点钟（上行）"
-    if s <= -STEEP_SLOPE_PCT:
-        return "5 点钟（陡降）"
-    return "4 点钟（下行）"
 
 
 def last_cross(df: pd.DataFrame, kind: str, fast: int, slow: int) -> str:
@@ -244,83 +261,58 @@ def lean_label(score: float) -> str:
     return "不明"
 
 
-def lean_of(values: dict[str, float], slopes: dict[str, float], close: float) -> dict:
-    """模糊判断：6 条成本线往哪走（方向）+ 短中长期谁在上（排布），合成 −1…+1 的分数。
-
-    方向：每条线向上 +1、走平 0、向下 −1。排布：20 线组对 60 线组、60 线组对 120 线组，
-    MA 和 EMA 各算一次，共 4 对；两条线相差不到价格的 ORDER_TIE_PCT 算贴在一起（0）。
-    一两处小错位只扣一点分，不会把明显的趋势判成"混乱"。
-    """
+def line_votes(values: dict[str, float], slopes: dict[str, float], close: float) -> dict:
+    """6 条线往哪走（方向）、20/60 和 60/120 谁在上（排布）。只作证据，不进分数。"""
     dirs = {k: sign(v, FLAT_SLOPE_PCT) for k, v in slopes.items()}
     tol = close * ORDER_TIE_PCT / 100
-    pairs = []
-    for kind in ("MA", "EMA"):
-        for fast, slow in ((20, 60), (60, 120)):
-            rel = sign(values[f"{kind}{fast}"] - values[f"{kind}{slow}"], tol)
-            pairs.append({"pair": f"{kind}{fast}/{kind}{slow}", "rel": rel})
+    pairs = [{"pair": f"{kind}{fast}/{kind}{slow}", "rel": sign(values[f"{kind}{fast}"] - values[f"{kind}{slow}"], tol)}
+             for kind in ("MA", "EMA") for fast, slow in ((20, 60), (60, 120))]
     up = sum(d > 0 for d in dirs.values())
     down = sum(d < 0 for d in dirs.values())
-    order = sum(p["rel"] for p in pairs)
-    score = LEAN_DIR_WEIGHT * (up - down) / len(dirs) + (1 - LEAN_DIR_WEIGHT) * order / len(pairs)
-    # 方向和短期排布打架：多数线向上、20 线组却还在 60 线组下方（或反过来）
-    short = pairs[0]["rel"] + pairs[2]["rel"]  # MA20/MA60 + EMA20/EMA60
-    conflict = ("反弹受压" if up > down and short == -2 else
-                "回调有撑" if down > up and short == 2 else None)
-    return {"score": score, "label": lean_label(score), "up": up, "down": down,
-            "flat": len(dirs) - up - down, "dirs": dirs, "order": order, "pairs": pairs,
-            "conflict": conflict}
+    return {"up": up, "down": down, "flat": len(dirs) - up - down, "dirs": dirs,
+            "order": sum(p["rel"] for p in pairs), "pairs": pairs}
 
 
-def flip_levels(a_lines: list[dict], drops: list[dict], score: float, close: float) -> list[dict]:
-    """什么价位会改变判断：偏空看"站上"，偏多看"跌破"。按 EMA 先拐、MA 后拐、短周期到长周期排列。
+def hold(df: pd.DataFrame, n: int) -> dict:
+    """类型线 MA(n) 的安全边际：收盘不变时朝今天的方向连续走几天；K 天内天天这样走，收盘要守在哪（level）。"""
+    c = float(df["Close"].iloc[-1])
+    h = hurdle_path(df, n, HURDLE_DAYS[n])
+    way = 1 if h.prices[0] < c else (-1 if h.prices[0] > c else 0)
+    days = 0
+    for p in h.prices:
+        if way == 0 or (p - c) * way >= 0:
+            break
+        days += 1
+    edge = h.max_price if way >= 0 else h.min_price
+    return {"line": f"MA{n}", "direction": {1: "上", -1: "下", 0: "平"}[way], "hold_days": days, "days": h.days,
+            "level": edge, "level_pct": (edge / c - 1) * 100}
 
-    价格已经越过的门槛标 crossed=True：那条线已经（或明天就会）朝反方向拐了。
+
+def lean_of(df: pd.DataFrame) -> dict:
+    """模糊判断：类型线组（MA60、MA120）朝哪走、收盘不变能保持几天。分数 = 两条线"带方向的保持天数 / 看的天数"的平均。"""
+    row = df.iloc[-1]
+    c = float(row["Close"])
+    basis = [hold(df, n) for n in LEAN_LINES]
+    score = sum({"上": 1, "下": -1, "平": 0}[b["direction"]] * b["hold_days"] / b["days"] for b in basis) / len(basis)
+    values = {f"{k}{n}": float(row[f"{k}{n}"]) for n in PERIODS for k in ("MA", "EMA")}
+    slopes = {f"{k}{n}": slope_pct(df[f"{k}{n}"]) for n in PERIODS for k in ("MA", "EMA")}
+    return {"score": score, "label": lean_label(score), "basis": basis, **line_votes(values, slopes, c)}
+
+
+def flip_levels(lines: list[dict], drops: list[dict], close: float) -> list[dict]:
+    """什么会改变判断，两个方向都列：价位在现价上方的是"站上就转多"，在下方的是"跌破就转空"。
+
+    每个周期两道门槛：EMA 是线本身（先拐），MA 是明天的抵扣价（后拐）。
     """
-    if abs(score) < LEAN_SOME:
-        return []
-    up = score < 0  # 偏空时要价格涨上去才会翻转
-    verb, turn = ("站上", "向上") if up else ("跌破", "向下")
     out = []
-    for ln, d in zip(a_lines, drops):
+    for ln, d in zip(lines, drops):
         n = ln["period"]
         for line, price, what in ((f"EMA{n}", ln["ema"], f"EMA{n}"), (f"MA{n}", d["tomorrow"], f"MA{n} 的抵扣价")):
-            crossed = close > price if up else close < price
-            text = (f"已经{verb} {what}（{price:.2f}）：{line} {turn}拐的力量已出现" if crossed
-                    else f"收盘{verb} {what}（{price:.2f}），{line} 拐头{turn}")
-            out.append({"line": line, "price": price, "crossed": crossed, "text": text})
+            up = price > close
+            verb, turn = ("站上", "向上") if up else ("跌破", "向下")
+            out.append({"line": line, "price": price, "toward": "多" if up else "空",
+                        "text": f"收盘{verb} {what}（{price:.2f}），{line} 拐头{turn}"})
     return out
-
-
-def classify(lean_score: float, slopes: dict, spread_pct: float, bias_pctl: float) -> str:
-    """趋势类型：先看是否缠绕走平，再按模糊判断的方向分上涨/下跌，最后看乖离分轻重。"""
-    if spread_pct < TANGLE_SPREAD_PCT and abs(slopes[60]) < FLAT_SLOPE_PCT * 2:
-        return "横盘震荡"
-    if lean_score >= LEAN_CLEAR:
-        return "极度超买" if bias_pctl >= EXTREME_PCTL else "健康上涨"
-    if lean_score <= -LEAN_CLEAR:
-        return "极度超卖" if bias_pctl <= 1 - EXTREME_PCTL else "健康下跌"
-    return "过渡态（排列或方向不一致）"
-
-
-STRATEGY = {
-    "横盘震荡": "基本不做。等末期标志性动作（大量/缺口/假跌破），且突破前高前已形成或即将形成多头排列，才小仓位埋伏；多头排列被破坏就走。",
-    "健康上涨": "持有；回调到均线获支撑时，切小级别（1h/30m）等破线-拐头-交叉-多头排列后结构性加仓。不追高。",
-    "极度超买": "不追，只看不做。有仓位分批止盈或上移止损，等回落后重新组织均线。",
-    "健康下跌": "不抄底。反弹到均线附近是减仓/离场机会。",
-    "极度超卖": "不抢反弹。均线理顺成多头排列前不买。",
-    "过渡态（排列或方向不一致）": "条件不满足就不做。看抵扣价推演：均线能否在合理时间内理顺？反弹若被中长期线压着多半是假动作。",
-}
-
-LEAN_PLAY = {
-    "明显偏多": "顺着多头做：持有，回调到均线附近找加仓点，不追加速。",
-    "偏多": "多头略占上风，但还没理顺：轻仓或等回调，不加大仓位。",
-    "不明": "成本没有方向：不做，等均线理顺或出现标志性动作。",
-    "偏空": "空头略占上风：不买；有仓位就在反弹时减仓。",
-    "明显偏空": "顺着空头看：不抄底，反弹到均线附近是离场机会。",
-    # 方向和排布打架时，优先用这两条
-    "反弹受压": "中长期线压着反弹（20 线组还在 60 线组下方），多半是假动作：不买，有仓位逢高减。用抵扣价算 20 线组多久能站上 60 线组。",
-    "回调有撑": "短期回调，但 20 线组仍在 60 线组上方，结构还是多头：持有观察，不在急跌里卖；20/60 双死叉才算结构坏。",
-}
 
 
 ET = ZoneInfo("America/New_York")
@@ -339,18 +331,11 @@ def partial_bar_warning(last_bar: pd.Timestamp, now: datetime | None = None) -> 
             "抵扣价比较、均线方向、交叉都可能在收盘前变化，下结论请等美东 16:15 后重跑。")
 
 
-def lean_after(values: dict[str, float], drops: list[dict], close: float) -> dict:
-    """价格停在现价 PROJECT_DAYS 天后的模糊判断。MA 由抵扣价推出，EMA 用精确解。"""
-    days = PROJECT_DAYS
-    after, slopes = {}, {}
-    for d in drops:
-        n = d["period"]
-        after[f"MA{n}"] = values[f"MA{n}"] * (1 + d["ma_flat_change_pct"] / 100)
-        after[f"EMA{n}"] = close + (values[f"EMA{n}"] - close) * (1 - 2 / (n + 1)) ** days
-    for k, v in after.items():
-        slopes[k] = (v / values[k] - 1) * 100 / days
-    res = lean_of(after, slopes, close)
-    return {"days": days, "score": res["score"], "label": res["label"], "conflict": res["conflict"],
+def lean_after(df: pd.DataFrame) -> dict:
+    """价格停在现价 PROJECT_DAYS 天后的模糊判断：把持平的收盘价接上去，用同一套算法再算一次。"""
+    c = float(df["Close"].iloc[-1])
+    res = lean_of(extend(df, [c] * PROJECT_DAYS))
+    return {"days": PROJECT_DAYS, "score": res["score"], "label": res["label"],
             "up": res["up"], "down": res["down"], "flat": res["flat"]}
 
 
@@ -359,48 +344,54 @@ def analyze(df: pd.DataFrame, label: str, src: str, history: pd.DataFrame | None
     row = df.iloc[-1]
     c = float(row["Close"])
     slopes = {n: slope_pct(df[f"MA{n}"]) for n in PERIODS}
-    ema_slopes = {n: slope_pct(df[f"EMA{n}"]) for n in PERIODS}
-    arr_ma, arr_ema = arrangement(row, "MA"), arrangement(row, "EMA")
-    mas = [row[f"MA{n}"] for n in PERIODS]
-    spread_pct = float((max(mas) - min(mas)) / c * 100)
     bias_hist = df["BIAS20"].dropna()
     bias_pctl = float((bias_hist <= row["BIAS20"]).mean())
-    values = {f"{k}{n}": float(row[f"{k}{n}"]) for n in PERIODS for k in ("MA", "EMA")}
-    lean = lean_of(values, {**{f"MA{n}": slopes[n] for n in PERIODS},
-                            **{f"EMA{n}": ema_slopes[n] for n in PERIODS}}, c)
-    trend = classify(lean["score"], slopes, spread_pct, bias_pctl)
+    structure = find_structure(df)
+    regime, p20 = rg.classify(df, structure, bias_pctl)
+    p60 = rg.pair_progress(df, 60, 120)
+    weekly = weekly_json(df if history is None else history)
 
     lines = [{"period": n, "ma": float(row[f"MA{n}"]), "ema": float(row[f"EMA{n}"]),
               "above": bool(c > row[f"MA{n}"]), "slope": slopes[n],
-              "clock": clock(slopes[n]), "ema_clock": clock(ema_slopes[n])} for n in PERIODS]
+              "clock": rg.clock(df, f"MA{n}").hour, "ema_clock": rg.clock(df, f"EMA{n}").hour} for n in PERIODS]
     crosses = [{"pair": f"{fast}/{slow}", "ma": last_cross(df, "MA", fast, slow),
                 "ema": last_cross(df, "EMA", fast, slow)} for fast, slow in ((20, 60), (60, 120))]
     volume = None
     if "Volume" in df.columns and df["Volume"].notna().any():
         vol_ratio = (df["Volume"] / df["Volume"].rolling(50).mean()).iloc[-20:]
         volume = {"ratio": float(vol_ratio.iloc[-1]),
-                  "spikes": [str(d.date()) for d in vol_ratio[vol_ratio > VOLUME_SPIKE].index]}
+                  "spikes": [str(d.date()) for d in vol_ratio[vol_ratio > rl.VOLUME_SPIKE].index]}
     drops = []
     for n in PERIODS:
         d = drop_off(df, n)
         d["period"] = n
         d["direction"] = "上" if c > d["tomorrow"] else ("下" if c < d["tomorrow"] else "平")
         drops.append(d)
-    lean["play"] = LEAN_PLAY[lean["conflict"] or lean["label"]]
-    lean["flips"] = flip_levels(lines, drops, lean["score"], c)
-    lean["after"] = lean_after(values, drops, c)
+    lean = lean_of(df)
+    lean["flips"] = flip_levels(lines, drops, c)
+    lean["after"] = lean_after(df)
+    results = rl.evaluate(rl.Ctx(df=df, regime=regime, p20=p20, p60=p60, structure=structure, weekly=weekly))
     prev = float(df["Close"].iloc[-2])
     return {
         "label": label, "date": str(df.index[-1].date()), "close": c,
         "change_pct": (c / prev - 1) * 100, "source": src,
         "warning": partial_bar_warning(df.index[-1]),
-        "lines": lines, "arr_ma": arr_ma, "arr_ema": arr_ema,
-        "spread_pct": spread_pct, "bias20": float(row["BIAS20"]), "bias_pctl": bias_pctl,
+        "lines": lines, "arr_ma": arrangement(row, "MA"), "arr_ema": arrangement(row, "EMA"),
+        "spread_pct": rg.spread6(row), "bias20": float(row["BIAS20"]), "bias_pctl": bias_pctl,
         "crosses": crosses, "volume": volume,
-        "trend": trend, "strategy": STRATEGY[trend], "drops": drops, "lean": lean,
-        "projection": projection(df), "structure": structure_json(df),
-        "weekly": weekly_json(df if history is None else history),
+        "regime": _plain(asdict(regime)), "steps": [_plain(asdict(p20)), _plain(asdict(p60))],
+        "play": rl.build_play(regime, results), "rules": results,
+        "thresholds": {k: {"value": v, "source": s} for k, (v, s) in THRESHOLDS.items()},
+        "drops": drops, "lean": lean,
+        "projection": projection(df), "structure": structure_json(df), "weekly": weekly,
     }
+
+
+def _turn_cell(t: dict | None) -> str:
+    if not t:
+        return "—"
+    done = [f"{s['step']} {s['date'][5:]}" for s in t["steps"] if s["date"]]
+    return f"{t['direction']} {t['progress']}/5" + (f"：{'，'.join(done)}" if done else "")
 
 
 def render_markdown(a: dict) -> str:
@@ -408,37 +399,44 @@ def render_markdown(a: dict) -> str:
            f"数据来源：{a['source']}", ""]
     if a["warning"]:
         out += ["> [!warning] " + a["warning"], ""]
-    ln = a["lean"]
-    af = ln["after"]
+    ln, af, r = a["lean"], a["lean"]["after"], a["regime"]
     out += ["## 0) 模糊判断：接下来几周对谁有利", "",
-            f"**{ln['label']}**{'·' + ln['conflict'] if ln['conflict'] else ''}"
-            f"（分数 {ln['score']:+.2f}，−1 最空、+1 最多）→ {ln['play']}", "",
-            f"- 方向：6 条成本线 {ln['up']} 条向上、{ln['flat']} 条走平、{ln['down']} 条向下",
-            "- 排布：" + "，".join(f"{p['pair']} {'>' if p['rel'] > 0 else '<' if p['rel'] < 0 else '≈'}"
-                                 for p in ln["pairs"]) + f"（相差 < {ORDER_TIE_PCT}% 价格算 ≈）",
-            f"- 价格停在这里 {af['days']} 天后：{af['label']}{'·' + af['conflict'] if af['conflict'] else ''}"
-            f"（{af['up']} 上 / {af['down']} 下）"]
-    if ln["flips"]:
-        out.append("- 什么会改变判断（按 EMA 先拐、MA 后拐的顺序）：")
-        out += [f"  - {f['text']}" for f in ln["flips"][:4]]
+            f"**{ln['label']}**（分数 {ln['score']:+.2f}，−1 最空、+1 最多）。依据是类型线组往哪走、能保持多久：", ""]
+    for b in ln["basis"]:
+        way = {"上": "上行", "下": "下行", "平": "走平"}[b["direction"]]
+        side = "之上" if b["direction"] == "上" else "之下"
+        out.append(f"- {b['line']} {way}：收盘不变能保持 {b['hold_days']}/{b['days']} 天；"
+                   f"{b['days']} 天天天{way}要收盘守在 {b['level']:.2f}{side}（离现价 {b['level_pct']:+.1f}%）")
+    out += [f"- 价格停在这里 {af['days']} 天后：{af['label']}（分数 {af['score']:+.2f}）",
+            f"- 证据：6 条线 {ln['up']} 条向上、{ln['flat']} 条走平、{ln['down']} 条向下；"
+            + "，".join(f"{p['pair']} {'>' if p['rel'] > 0 else '<' if p['rel'] < 0 else '≈'}" for p in ln["pairs"])]
+    for toward, word in (("多", "转多"), ("空", "转空")):
+        flips = [f["text"] for f in ln["flips"] if f["toward"] == toward and not f["line"].endswith("120")]
+        if flips:
+            out.append(f"- 什么会{word}（EMA 先拐、MA 后拐）：" + "；".join(flips))
+    clk = f"60 线 {r['clock60']['angle']:+.0f}°（{r['clock60']['hour']}），20 线 {r['clock20']['angle']:+.0f}°（{r['clock20']['hour']}）"
     out += ["", "## 1) 看大局", "",
-            "| 周期 | MA | EMA | 价格在 MA 上/下 | MA 方向 | EMA 方向 |",
-            "|---|---|---|---|---|---|"]
-    for ln in a["lines"]:
-        out.append(f"| {ln['period']} | {ln['ma']:.2f} | {ln['ema']:.2f} | {'上' if ln['above'] else '下'} | "
-                   f"{ln['clock']} {ln['slope']:+.2f}%/日 | {ln['ema_clock']} |")
-    out += ["",
-            f"- 排列：MA **{a['arr_ma']}**，EMA **{a['arr_ema']}**",
-            f"- 三条 MA 间距：{a['spread_pct']:.1f}% of 价格（< {TANGLE_SPREAD_PCT}% 视为缠绕）",
+            f"**{r['name']}**" + (f"（{r['depth']}）" if r["depth"] else "") + f"。钟表：{clk}。",
+            ""]
+    if r["accel"]:
+        out.append(f"- 加速{r['accel']['phase']}（按{r['accel']['by']}）")
+    if r["range"]:
+        g = r["range"]
+        box = f"，箱体 {g['box_low']:.2f} ~ {g['box_high']:.2f}" if g["box_low"] and g["box_high"] else ""
+        out.append(f"- 横盘：60 线走平 {g['days']} 根，6 条线相差 {g['spread_pct']:.1f}%{box}，张嘴：{g['opening'] or '没有'}")
+    out += ["", "| 周期 | MA | EMA | 价格在 MA 上/下 | MA 方向（5 日） | MA 钟表 | EMA 钟表 |", "|---|---|---|---|---|---|---|"]
+    for line in a["lines"]:
+        out.append(f"| {line['period']} | {line['ma']:.2f} | {line['ema']:.2f} | {'上' if line['above'] else '下'} | "
+                   f"{line['slope']:+.2f}%/日 | {line['clock']} | {line['ema_clock']} |")
+    out += ["", f"- 排列：MA **{a['arr_ma']}**，EMA **{a['arr_ema']}**；6 条线相差 {a['spread_pct']:.1f}% of 价格",
             f"- 20 线乖离率：{a['bias20']:+.1f}%，处于自身历史 {a['bias_pctl']:.0%} 分位",
-            "- 最近交叉："]
-    for x in a["crosses"]:
-        out.append(f"  - {x['pair']}：MA {x['ma']}；EMA {x['ema']}")
+            "- 五步进度（破线、EMA 拐头、MA 拐头、第一个交叉、双交叉）："]
+    for p in a["steps"]:
+        out.append(f"  - {p['pair']}（{p['side'] or '未定'}）：上一次 {_turn_cell(p['completed'])}；现在 {_turn_cell(p['current'])}")
     if a["volume"]:
-        out.append(f"- 成交量：今日 {a['volume']['ratio']:.1f}× 50 日均量；近 20 日大量（>{VOLUME_SPIKE}×）："
+        out.append(f"- 成交量：今日 {a['volume']['ratio']:.1f}× 50 日均量；近 20 日大量（>{rl.VOLUME_SPIKE}×）："
                    + (", ".join(a["volume"]["spikes"]) or "无"))
-    out += ["", f"**初判趋势类型：{a['trend']}**（启发式，需看图确认）", "",
-            "## 2) 定策略", "", a["strategy"], "",
+    out += ["", "## 2) 定策略", "", a["play"]["text"], "", f"用到的规则：{'、'.join(a['play']['rules'])}", "",
             f"## 3) 看方向：抵扣价推演（未来 {PROJECT_DAYS} 天）", "",
             "| MA | 明天抵扣价 | 明天 MA 方向（价格不变） | 未来扣价均值 | 未来扣价最高 | 低于现价的天数 | 价格不变时 MA 变化 | 第几天首次扣到低于现价 |",
             "|---|---|---|---|---|---|---|---|"]
@@ -448,7 +446,13 @@ def render_markdown(a: dict) -> str:
                    f"{d['below']}/{d['count']} | {d['ma_flat_change_pct']:+.2f}% | {first} |")
     out += ["",
             "读法：抵扣价低于现价 = 扣低值，股价不跌均线就上翘；高于现价 = 扣高值，股价要涨过它均线才不跌。",
-            "“价格不变时 MA 变化”= 假设收盘价一直停在现价，推演期末 MA 相对今天的涨跌。"]
+            "“价格不变时 MA 变化”= 假设收盘价一直停在现价，推演期末 MA 相对今天的涨跌。",
+            "", "## 4) 规则清单", "",
+            "规则文字和来源见 references/rules.md。需看图的规则脚本算不了。", "",
+            "| 编号 | 规则 | 状态 | 依据 | 价位 |", "|---|---|---|---|---|"]
+    for x in a["rules"]:
+        lv = "；".join(f"{k} {v:.2f}" for k, v in x["levels"].items())
+        out.append(f"| {x['id']} | {x['name']} | {x['status']} | {x['basis']} | {lv} |")
     return "\n".join(out)
 
 

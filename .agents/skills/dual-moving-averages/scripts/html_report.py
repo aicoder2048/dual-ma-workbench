@@ -94,10 +94,12 @@ def render_html(a: dict, df: pd.DataFrame, commentary: dict | None = None) -> st
     lean = a["lean"]
     lean_stance = "bullish" if lean["score"] >= 0.25 else "bearish" if lean["score"] <= -0.25 else "neutral"
     stance = c.get("stance") or lean_stance
-    lean_name = lean["label"] + ("·" + lean["conflict"] if lean["conflict"] else "")
-    headline = c.get("headline") or f"{lean_name}（{a['trend']}）"
-    summary = c.get("summary") or lean["play"]
-    flip = next((f["text"] for f in lean["flips"] if not f["crossed"]), "暂无：方向不明，等均线理顺")
+    lean_name = lean["label"]
+    trend = a["regime"]["name"]
+    headline = c.get("headline") or f"{lean_name}（{trend}）"
+    summary = c.get("summary") or a["play"]["text"]
+    against = "空" if lean["score"] >= 0 else "多"
+    flip = next((f["text"] for f in lean["flips"] if f["toward"] == against), "暂无：方向不明，等均线理顺")
     chg_cls = "up" if a["change_pct"] >= 0 else "down"
     chart_json = json.dumps(chart_data(df, a), ensure_ascii=False).replace("</", "<\\/")
 
@@ -222,7 +224,7 @@ footer {{ font-size: 12px; color: var(--muted); display: grid; gap: 4px; }}
       <span class="chip">模糊判断 <b>{html.escape(lean_name)}</b>（6 条线 {lean['up']} 上 / {lean['down']} 下）</span>
       <span class="chip">价不变 {lean['after']['days']} 天后 <b>{html.escape(lean['after']['label'])}</b></span>
       <span class="chip">改变判断 <b>{html.escape(flip)}</b></span>
-      <span class="chip">规则初判 <b>{html.escape(a['trend'])}</b></span>
+      <span class="chip">类型 × 阶段 <b>{html.escape(trend)}</b></span>
       <span class="chip">排列 MA <b>{a['arr_ma']}</b> · EMA <b>{a['arr_ema']}</b></span>
       <span class="chip">20 线乖离 <b class="num">{a['bias20']:+.1f}%</b>（历史 {a['bias_pctl']:.0%} 分位）</span>
     </div>
@@ -242,15 +244,15 @@ footer {{ font-size: 12px; color: var(--muted); display: grid; gap: 4px; }}
         <tbody>{line_rows}</tbody></table></div>
       <ul class="facts">
         {cross_rows}
-        <li><b>间距</b> 三条 MA 相差 {a['spread_pct']:.1f}%（&lt; 4% 视为缠绕）</li>
+        <li><b>间距</b> 6 条线相差 {a['spread_pct']:.1f}%</li>
         <li><b>成交量</b> {vol_text}</li>
       </ul>
       {_bullets(c.get('big_picture'))}
     </section>
     <section class="card step">
       <h2>定策略 <span>该怎么做</span></h2>
-      <p class="label">按「{html.escape(a['trend'])}」查表</p>
-      <p class="rule">{html.escape(a['strategy'])}</p>
+      <p class="label">按「{html.escape(trend)}」</p>
+      <p class="rule">{html.escape(a['play']['text'])}</p>
       {_bullets(c.get('strategy'))}
     </section>
     <section class="card step">
