@@ -242,15 +242,15 @@ export function scenarioFlow(v) {
       <span class="k">${t.line}</span><span class="ar ${WAY[t.now][1]}">${WAY[t.now][0]}</span>
       <span class="num">${t.turn_day ? `第 ${t.turn_day} 天转向` : "不转"}</span></li>`).join("");
   const crosses = sc.crosses.filter((c) => c.cross).map((c) =>
-    `<li><span class="k">${c.kind} ${c.pair}</span><span class="${c.cross === "金叉" ? "bullish" : "bearish"}">${c.cross}</span><span class="num">第 ${c.cross_day} 天</span></li>`).join("")
+    `<li><span class="k">${c.kind} ${c.pair}</span> <b class="${c.cross === "金叉" ? "bullish" : "bearish"}">${c.cross}</b> · 第 ${c.cross_day} 天</li>`).join("")
     || "<li>期间没有交叉</li>";
   const arr = (b) => `<span class="arr ${b === "多头" ? "bullish" : b === "空头" ? "bearish" : "neutral"}">${b}</span>`;
-  return `<div class="flow">
+  return `<div class="flow scenario">
       <div class="node"><div class="nk">① 假设</div><div class="nv">价格停在 <b class="num">${f2(sc.level)}</b><br>${sc.days} 个交易日</div></div>
       <div class="edge">→</div>
-      <div class="node"><div class="nk">② 每条线</div><ul class="proj">${turns}</ul></div>
+      <div class="node"><div class="nk">② 每条线</div><ul class="proj turns">${turns}</ul></div>
       <div class="edge">→</div>
-      <div class="node"><div class="nk">③ 交叉</div><ul class="proj">${crosses}</ul></div>
+      <div class="node"><div class="nk">③ 交叉</div><ul class="cross-list">${crosses}</ul></div>
       <div class="edge">→</div>
       <div class="node"><div class="nk">④ 期末排列</div><div class="nv">MA：${arr(sc.end_arr_ma)}<br>EMA：${arr(sc.end_arr_ema)}</div></div>
     </div>`;
@@ -266,7 +266,7 @@ export function solveList(v) {
 
 /** 规则清单：打法用到的规则在前，每条的状态、依据；让位的写谁优先。全部规则折叠在下面。 */
 function ruleRow(r) {
-  const yields = r.yields_to ? `<span class="yield">，${ruleBtn(r.yields_to)} 优先</span>` : "";
+  const yields = r.yields_to ? `<span class="yield">让位：${ruleBtn(r.yields_to)} 优先</span>` : "";
   return `<li class="rule ${r.yields_to ? "yielded" : ""}" data-rule="${esc(r.id)}">${ruleBtn(r.id)}<b>${esc(r.name)}</b>
       <span class="rs ${STATUS_CLS[r.status]}">${esc(r.status)}</span>${yields}<span class="rb">${esc(r.basis)}</span></li>`;
 }
