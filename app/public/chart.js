@@ -191,7 +191,7 @@ export function createChart(box, legendEl) {
     <p><b>看量</b>：底部的量柱，黄色是超过 50 日均量 2 倍的大量。看两种情况：横盘末期突然放量，是要变盘的信号；
       急涨或急跌的末端连续放量，说明多空分歧在化解，行情往往快要转向，并不代表强势。看到放量先提高警惕，动手还是要等均线拐头。</p>
     <p><b>回放</b>：点「回放」，再点图上的一天（或在「选起点」里选日期、最早一天、随机一天），图上就只剩那天及以前的 K 线，
-      并立刻开始一根一根往后放（默认一秒一根，「回放」按钮下方的控制条可以暂停、前进一根、调速度），像当时身在其中那样练判断：先想好"这里该怎么做"，再放下一根看结果。快捷键 <b>Shift+↓</b> 播放 / 暂停，<b>Shift+→</b> 前进一根。
+      并立刻开始一根一根往后放（默认一秒一根，「回放」按钮下方的控制条可以暂停、前进一根、调速度），像当时身在其中那样练判断：先想好"这里该怎么做"，再放下一根看结果。快捷键 <b>Shift+↓</b> 播放 / 暂停，<b>Shift+→</b> 前进一根，<b>Shift+←</b> 回退一根（回退会停下播放）。
       想看那天的完整分析，点「按这一天分析」。点「回到最新」或 × 退出。</p>`;
   tools.after(help);
   const helpBtn = tools.querySelector(".chart-help-toggle");
@@ -320,6 +320,7 @@ export function createChart(box, legendEl) {
       </span>
     </span>
     <button type="button" class="replay-play" aria-pressed="false" title="播放 / 暂停（Shift+↓）">▶ 播放</button>
+    <button type="button" class="replay-back" title="回退一根（Shift+←）">回退一根</button>
     <button type="button" class="replay-forward" title="前进一根（Shift+→）">前进一根</button>
     <select class="replay-speed" title="播放速度：1x = 一秒一根">${SPEEDS.map((x) => `<option value="${x}">${x}x</option>`).join("")}</select>
     <button type="button" class="replay-realtime">回到最新</button>
@@ -363,7 +364,10 @@ export function createChart(box, legendEl) {
     } else if (prev.mode !== "replay" || rs.index !== prev.index) {
       const r = chart.timeScale().getVisibleLogicalRange();
       show(sliceAt(data, rs.index));
-      windowAt(rs.index, r ? r.to - r.from : 120);
+      // 回退一根时，用户把图拖到别处看（回放那根不在视图里）：视图留在原处，和前进一样不拉回来
+      const away = prev.mode === "replay" && rs.index === prev.index - 1 && r && r.to < prev.index;
+      if (away) chart.timeScale().setVisibleLogicalRange(r);
+      else windowAt(rs.index, r ? r.to - r.from : 120);
     }
     if ((prev.mode === "replay") !== (rs.mode === "replay")) paintLevels();
     syncReplay();
@@ -410,6 +414,7 @@ export function createChart(box, legendEl) {
     levelsBtn.disabled = rs.mode === "replay"; // 门槛线属于最新一天，回放时收起，按钮也不能点
     $r(".replay-play").disabled = rs.mode !== "replay" || atEnd;
     $r(".replay-forward").disabled = rs.mode !== "replay" || atEnd;
+    $r(".replay-back").disabled = rs.mode !== "replay" || rs.index <= 0;
     $r(".replay-analyze").disabled = rs.mode !== "replay";
     $r(".replay-label").textContent = selecting ? "点图上的一天作为回放起点"
       : rs.mode === "replay" ? `回放 ${data.candles[rs.index].time} · 第 ${rs.index + 1}/${last + 1} 根${atEnd ? " · 已到最新一根" : ""}` : "";
@@ -430,6 +435,7 @@ export function createChart(box, legendEl) {
     if (i >= 0) dispatch({ type: "pick", index: i });
   });
   $r(".replay-play").addEventListener("click", () => dispatch({ type: "toggle" }));
+  $r(".replay-back").addEventListener("click", () => dispatch({ type: "back" }));
   $r(".replay-forward").addEventListener("click", () => dispatch({ type: "forward" }));
   $r(".replay-realtime").addEventListener("click", () => dispatch({ type: "realtime" }));
   $r(".replay-exit").addEventListener("click", () => dispatch({ type: "exit" }));
@@ -470,7 +476,7 @@ export function createChart(box, legendEl) {
     if (e.target.closest?.("input, textarea, select, [contenteditable]")) return;
     if (e.key === "Escape" && rs.mode === "select") { dispatch({ type: "exit" }); return; }
     if (rs.mode !== "replay" || !e.shiftKey || e.metaKey || e.ctrlKey || e.altKey) return;
-    const action = { ArrowDown: "toggle", ArrowRight: "forward" }[e.key];
+    const action = { ArrowDown: "toggle", ArrowRight: "forward", ArrowLeft: "back" }[e.key];
     if (!action) return;
     e.preventDefault();
     dispatch({ type: action });

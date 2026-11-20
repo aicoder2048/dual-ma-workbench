@@ -1088,11 +1088,52 @@ describe("K 线回放", () => {
     await page.close();
   }, 30_000);
 
-  test("「怎么用」讲了回放和两个快捷键", async () => {
+  test("回退一根：在「前进一根」左边；退一根、停下播放、视图跨度不变；Shift+← 也行；第一根时不能点", async () => {
+    const { page, errors } = await start("RPLL");
+    await page.click(".replay-toggle");
+    await slow(page);
+    const order = await page.$$eval(".replay-bar button", (bs) => bs.map((b) => b.className));
+    expect(order.indexOf("replay-back")).toBe(order.indexOf("replay-forward") - 1);
+    const p = await barPoint(page, 200);
+    await page.mouse.click(p.x, p.y);
+    await waitRp(page, (r) => r.mode === "replay" && r.playing);
+    const lr = () => page.evaluate(async () => {
+      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+      return (await import("/app.js")).getChart().chart.timeScale().getVisibleLogicalRange();
+    });
+    const r0 = (await lr())!;
+    await page.click(".replay-back");
+    expect(await rp(page)).toMatchObject({ index: 199, bars: 200, playing: false });
+    expect(await page.textContent(".replay-label")).toContain(CHART.candles[199].time);
+    const r1 = (await lr())!;
+    expect(Math.abs((r1.to - r1.from) - (r0.to - r0.from))).toBeLessThan(1);
+    await page.keyboard.press("Shift+ArrowLeft");
+    expect(await rp(page)).toMatchObject({ index: 198, bars: 199 });
+    // 暂停时把图拖到更早的地方看：回退不把视图拉回来
+    await page.evaluate(async () => (await import("/app.js")).getChart().chart.timeScale().setVisibleLogicalRange({ from: 40, to: 120 }));
+    await lr(); // 图表库下一帧才应用新范围（真拖动不会和按键在同一帧）
+    await page.keyboard.press("Shift+ArrowLeft");
+    expect(await rp(page)).toMatchObject({ index: 197, bars: 198 });
+    const dragged = (await lr())!;
+    expect(Math.abs(dragged.from - 40)).toBeLessThan(1);
+    expect(Math.abs(dragged.to - 120)).toBeLessThan(1);
+    await page.click(".replay-forward");
+    await page.click(".replay-forward");
+    expect(await rp(page)).toMatchObject({ index: 199, bars: 200 });
+    await page.click(".replay-start");
+    await page.click(".replay-menu [data-start=earliest]");
+    await waitRp(page, (r) => r.index === 0);
+    await page.click(".replay-play"); // 停下，留在第一根
+    expect(await page.isDisabled(".replay-back")).toBe(true);
+    expect(errors).toEqual([]);
+    await page.close();
+  }, 30_000);
+
+  test("「怎么用」讲了回放和三个快捷键", async () => {
     const { page } = await start("RPLH");
     await page.click(".chart-help-toggle");
     const text = (await page.textContent(".chart-help"))!;
-    for (const k of ["回放", "Shift+↓", "Shift+→"]) expect(text).toContain(k);
+    for (const k of ["回放", "Shift+↓", "Shift+→", "Shift+←"]) expect(text).toContain(k);
     await page.close();
   }, 30_000);
 });

@@ -37,6 +37,16 @@ describe("回放状态机", () => {
     expect(step(at(N - 1, true), { type: "forward" }, N)).toEqual(at(N - 1));
   });
 
+  test("回退一根：退一根并停下播放；在第一根上不动；不在回放里不动", () => {
+    expect(step(at(50, true), { type: "back" }, N)).toEqual(at(49));
+    expect(step(at(50), { type: "back" }, N)).toEqual(at(49));
+    expect(step(at(N - 1), { type: "back" }, N)).toEqual(at(N - 2));
+    const first = at(0);
+    expect(step(first, { type: "back" }, N)).toBe(first);
+    expect(step(off, { type: "back" }, N)).toBe(off);
+    expect(step(select, { type: "back" }, N)).toBe(select);
+  });
+
   test("在最后一根上不能开始播放", () => {
     expect(step(at(N - 1), { type: "play" }, N)).toEqual(at(N - 1));
     expect(step(at(N - 1), { type: "toggle" }, N)).toEqual(at(N - 1));
