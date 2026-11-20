@@ -81,6 +81,11 @@ def test_spy_pullback_first_two_conditions_met_construct_pending(spy):
 def test_tsla_bounce_is_a_fake_move_and_not_a_buy(tsla):
     assert status(tsla, "J17") == "满足"     # 理顺要 +8.4%，距离很大
     assert status(tsla, "P17") == "满足"
+    # 同一页上 10 天和 30 天两个理顺价位要一起给，读者才知道为什么差这么多：MA60 抵扣价第 24 天起才扣低值
+    p17 = next(r for r in tsla["rules"] if r["id"] == "P17")
+    assert p17["levels"]["10 天内理顺"] == pytest.approx(264.51, abs=0.05)
+    assert p17["levels"]["30 天内理顺"] == pytest.approx(230.82, abs=0.05)
+    assert "10 天内要持平在 264.51" in p17["basis"] and "30 天内要持平在 230.82" in p17["basis"]
     assert status(tsla, "P16") == "满足"
     j17 = next(r for r in tsla["rules"] if r["id"] == "J17")
     assert j17["levels"]["10 天内理顺"] == pytest.approx(264.51, abs=0.05)

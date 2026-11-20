@@ -557,8 +557,10 @@ def p17_no_buy_bad_order(c: Ctx) -> Result:
     under = c.row["MA20"] < c.row["MA60"] and c.row["EMA20"] < c.row["EMA60"]
     if not under:
         return _met(False, "20 线组不在 60 线组下方")
-    text, levels = _align_level(c, True, 20)
-    return _met(True, f"20 线组在 60 线组下方，不买；理顺（带方向）{text}", levels)
+    short, short_levels = _align_level(c, True, 10)
+    long, long_levels = _align_level(c, True, 30)
+    return _met(True, f"20 线组在 60 线组下方，不买；理顺（带方向）{short}；{long}",
+                {**short_levels, **long_levels})
 
 
 def p18_not_in_sync(c: Ctx) -> Result:
