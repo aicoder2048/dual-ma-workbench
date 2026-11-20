@@ -13,8 +13,11 @@ import { PROJECT_ROOT } from "./sources.ts";
 const pexec = promisify(execFile);
 export const SCRIPT = resolve(PROJECT_ROOT, ".agents/skills/dual-moving-averages/scripts/dma_analyze.py");
 
+/** 破线拐头着色：bull 收盘站上 MA20 且高于 20 日抵扣价，bear 两样都不满足，mixed 只满足一样。 */
+export type Tone = "bull" | "bear" | "mixed";
+
 export interface ChartData {
-  candles: { time: string; open: number; high: number; low: number; close: number }[];
+  candles: { time: string; open: number; high: number; low: number; close: number; tone?: Tone }[];
   volume: { time: string; value: number; spike: boolean }[];
   lines: Record<string, { time: string; value: number }[]>;
   drops: { time: string; period: number }[];

@@ -163,3 +163,40 @@ def test_flip_levels_mark_thresholds_price_already_crossed():
     ema20 = next(f for f in a["lean"]["flips"] if f["line"] == "EMA20")
     assert ema20["crossed"] == (a["close"] < a["lines"][0]["ema"])
     assert ema20["crossed"]
+
+
+# ---------- K 线着色（tone）----------
+def _tones(df: pd.DataFrame) -> list[str | None]:
+    from html_report import chart_data
+    candles = chart_data(df, dma.analyze(df, "TEST", "synthetic"))["candles"]
+    return [c.get("tone") for c in candles]
+
+
+def test_rising_series_candles_are_bull(rising):
+    assert set(_tones(rising)[-50:]) == {"bull"}
+
+
+def test_falling_series_candles_are_bear():
+    assert set(_tones(make_df([float(i) for i in range(300, 100, -1)]))[-50:]) == {"bear"}
+
+
+def test_close_above_ma20_but_below_deduction_price_is_mixed():
+    # 20 根前有一根 200 的尖峰，已出了 MA20 窗口：今天 101 在 MA20 上方，却低于抵扣价 200
+    closes = [100.0] * 160
+    closes[-21] = 200.0
+    closes[-1] = 101.0
+    assert _tones(make_df(closes))[-1] == "mixed"
+
+
+def test_close_below_ma20_but_above_deduction_price_is_mixed():
+    # 抵扣价 50，窗口里有 300 的尖峰把 MA20 抬到 110：今天 100 高于抵扣价，却在 MA20 下方
+    closes = [100.0] * 160
+    closes[-21] = 50.0
+    closes[-11] = 300.0
+    assert _tones(make_df(closes))[-1] == "mixed"
+
+
+def test_bars_without_20_bars_of_history_have_no_tone(rising):
+    tones = _tones(rising)  # 200 根全在图上
+    assert tones[:20] == [None] * 20
+    assert None not in tones[20:]
