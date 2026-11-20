@@ -281,6 +281,19 @@ def rule_stats(series: dict[str, tuple[pd.DataFrame, int, list[tr.Day]]]) -> lis
     return rows
 
 
+def p14_where(series: dict[str, tuple[pd.DataFrame, int, list[tr.Day]]]) -> str:
+    """吃回撤（多头一侧）P14 算出满足的那些天，当天的打法是什么：只有打法是稳定上涨时，计划才会让人进场。"""
+    keys = defaultdict(int)
+    for _, _, days in series.values():
+        for d in days:
+            if d.status["P14"] == "满足" and d.type not in DOWN_TYPES:
+                keys[f"{d.key}（{d.stage}）"] += 1
+    if not keys:
+        return "吃回撤（多头一侧）P14 一天都没有算出满足。"
+    return ("吃回撤（多头一侧）P14 算出满足的日子按当天打法分：" + "，".join(f"{k} {v} 天" for k, v in keys.items())
+            + "。打法不是稳定上涨的那些天，计划说的是别的（过渡是\"不做\"），所以不产生交易。")
+
+
 def render(series, runs, holds, ma60s, chart_days, meta) -> str:
     out = [f"# 逐笔回测：{meta['from']} ~ {meta['to']}", ""]
     w = [t for t in meta["tickers"] if t in WINNERS]
@@ -373,7 +386,7 @@ def render(series, runs, holds, ma60s, chart_days, meta) -> str:
             "镜像是下跌趋势里的那一侧（P14 镜像 = 反弹卖出）。", "",
             "| 规则 | 说的是 | 触发次数 | 日期数 | 20 根平均 | 20 根超额 | 20 根上涨占比 | 60 根平均 | 60 根超额 | 60 根上涨占比 |",
             "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|",
-            *rule_stats(series), ""]
+            *rule_stats(series), "", p14_where(series), ""]
     out += ["## 不能当真的地方", "",
             "- **只挑了赢家**：默认 9 只是事后看涨得最好的大盘股和指数。加了 5 只落后的，结论分开列；14 只仍然太少，也都是美国大盘股。",
             "- **样本不独立**：同一天几只票常常一起动，\"进场日期数\"比笔数更接近独立的几次。日期数少于 10 的行标\"日期少\"。",
@@ -382,6 +395,8 @@ def render(series, runs, holds, ma60s, chart_days, meta) -> str:
             "- **离场条件是解读**：rules.md 没给吃回撤和双线系统进场之后的底线，这里用 plan.ts 计划里写给用户的止损（见上表）。换一种解读结果会变；没有为了数字去调。",
             "- **复权价**：yfinance 复权价会用之后的分红、拆股回溯调整历史价，对涨跌幅和均线方向的影响可以忽略。",
             "- **成本**：每边 0.05%，没算税和融资。",
+            "",
+            "20 日涨跌表（和 2026-11-19 的报告同一格式）和改造前后对照在同目录的 `<日期>-20d.md`（app 的 `bun scripts/replay.ts --compare`）。",
             ""]
     return "\n".join(out)
 
