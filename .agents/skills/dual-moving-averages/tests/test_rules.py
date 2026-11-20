@@ -117,3 +117,11 @@ def test_lean_reads_the_type_lines(tsla, spy):
     ma120 = next(b for b in spy["lean"]["basis"] if b["line"] == "MA120")
     assert ma120["level"] == pytest.approx(460.20, abs=0.05)
     assert spy["lean"]["label"] in ("偏多", "明显偏多")
+
+
+def test_tsla_second_chance_yields_to_bad_order(tsla):
+    # P20 自己满足，但 P17（排列不合理不买）优先：规则清单要写出来，不然两条读起来互相矛盾
+    p20 = next(r for r in tsla["rules"] if r["id"] == "P20")
+    assert (p20["status"], p20["yields_to"]) == ("满足", "P17")
+    assert next(r for r in tsla["rules"] if r["id"] == "P17")["yields_to"] is None
+    assert "| P20 | 双线系统第 2 次机会 | 满足，P17 优先 |" in dma.render_markdown(tsla)

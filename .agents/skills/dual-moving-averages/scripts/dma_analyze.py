@@ -45,6 +45,7 @@ import regime as rg
 import rules as rl
 from indicators import PERIODS, add_indicators, arrangement
 from projection import HURDLE_DAYS, extend, hurdle_path, projection
+from hourly import load_hourly
 from structure import find_structure, structure_json
 from weekly import weekly_json
 
@@ -339,8 +340,13 @@ def lean_after(df: pd.DataFrame) -> dict:
             "up": res["up"], "down": res["down"], "flat": res["flat"]}
 
 
-def analyze(df: pd.DataFrame, label: str, src: str, history: pd.DataFrame | None = None) -> dict:
-    """把三步分析算成结构化数据，Markdown 和 HTML 都从这里渲染。history 是周线用的更长历史，默认就用 df。"""
+def analyze(df: pd.DataFrame, label: str, src: str, history: pd.DataFrame | None = None,
+            hourly: dict | None = None) -> dict:
+    """把三步分析算成结构化数据，Markdown 和 HTML 都从这里渲染。
+
+    history 是周线用的更长历史，默认就用 df；hourly 是 hourly.load_hourly 的结果，没有时 P13 需看图。
+    """
+    hourly = hourly or {"available": False, "reason": "没有取小时线"}
     row = df.iloc[-1]
     c = float(row["Close"])
     slopes = {n: slope_pct(df[f"MA{n}"]) for n in PERIODS}
@@ -370,7 +376,8 @@ def analyze(df: pd.DataFrame, label: str, src: str, history: pd.DataFrame | None
     lean = lean_of(df)
     lean["flips"] = flip_levels(lines, drops, c)
     lean["after"] = lean_after(df)
-    results = rl.evaluate(rl.Ctx(df=df, regime=regime, p20=p20, p60=p60, structure=structure, weekly=weekly))
+    results = rl.evaluate(rl.Ctx(df=df, regime=regime, p20=p20, p60=p60, structure=structure, weekly=weekly,
+                                     hourly=hourly))
     prev = float(df["Close"].iloc[-2])
     return {
         "label": label, "date": str(df.index[-1].date()), "close": c,
@@ -384,6 +391,7 @@ def analyze(df: pd.DataFrame, label: str, src: str, history: pd.DataFrame | None
         "thresholds": {k: {"value": v, "source": s} for k, (v, s) in THRESHOLDS.items()},
         "drops": drops, "lean": lean,
         "projection": projection(df), "structure": structure_json(df), "weekly": weekly,
+        "hourly": hourly,
     }
 
 
@@ -433,6 +441,10 @@ def render_markdown(a: dict) -> str:
             "- 五步进度（破线、EMA 拐头、MA 拐头、第一个交叉、双交叉）："]
     for p in a["steps"]:
         out.append(f"  - {p['pair']}（{p['side'] or '未定'}）：上一次 {_turn_cell(p['completed'])}；现在 {_turn_cell(p['current'])}")
+    w, h = a["weekly"], a["hourly"]
+    out.append(f"- 周线：MA {w['arr_ma']}、EMA {w['arr_ema']}" if w["available"] else f"- 周线：{w['reason']}")
+    out.append(f"- 小时线（到 {h['last']}）：MA {h['arr_ma']}、EMA {h['arr_ema']}" if h["available"]
+               else f"- 小时线：{h['reason']}")
     if a["volume"]:
         out.append(f"- 成交量：今日 {a['volume']['ratio']:.1f}× 50 日均量；近 20 日大量（>{rl.VOLUME_SPIKE}×）："
                    + (", ".join(a["volume"]["spikes"]) or "无"))
@@ -452,7 +464,8 @@ def render_markdown(a: dict) -> str:
             "| 编号 | 规则 | 状态 | 依据 | 价位 |", "|---|---|---|---|---|"]
     for x in a["rules"]:
         lv = "；".join(f"{k} {v:.2f}" for k, v in x["levels"].items())
-        out.append(f"| {x['id']} | {x['name']} | {x['status']} | {x['basis']} | {lv} |")
+        state = x["status"] + (f"，{x['yields_to']} 优先" if x["yields_to"] else "")
+        out.append(f"| {x['id']} | {x['name']} | {state} | {x['basis']} | {lv} |")
     return "\n".join(out)
 
 
@@ -464,6 +477,7 @@ def main() -> None:
     p.add_argument("--source", choices=("auto", "polygon", "yfinance"), default="auto",
                    help="数据源：auto=先 Polygon 再 yfinance（默认）")
     p.add_argument("--env-file", help="含 POLYGON_API_KEY 的 .env 路径")
+    p.add_argument("--no-hourly", action="store_true", help="不取小时线（P13 吃回撤④ 保持需看图）")
     p.add_argument("--html", help="另外生成网页报告到这个路径（.html）")
     p.add_argument("--commentary", help="点评 JSON（格式见 html_report.py），放进网页报告")
     p.add_argument("--json", action="store_true",
@@ -475,7 +489,12 @@ def main() -> None:
         p.error("--commentary 需要和 --html 一起用")
     df, history, src = load_prices(a.ticker, a.csv, a.asof, a.env_file, a.source)
     df = add_indicators(df)
-    result = analyze(df, (a.ticker or a.csv).upper() if a.ticker else a.csv, src, history)
+    hourly = None
+    if a.ticker and not a.no_hourly:
+        hourly = load_hourly(a.ticker, a.asof, find_polygon_key(a.env_file), a.source, polygon_json)
+    elif a.csv:
+        hourly = {"available": False, "reason": "CSV 模式不取小时线"}
+    result = analyze(df, a.ticker.upper() if a.ticker else a.csv, src, history, hourly)
     if a.json:
         from html_report import chart_data
 
