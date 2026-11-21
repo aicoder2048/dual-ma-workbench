@@ -16,6 +16,7 @@ import plansim as ps
 
 K = ps.Kind
 NO_COST = ps.Config(cost=0.0, equity0=100_000)
+INTRADAY = ps.Config(cost=0.0, equity0=100_000, stop_on_close=False)   # v1 口径：止损看盘中最低价
 
 
 # ---------- 进场成交 ----------
@@ -62,6 +63,12 @@ def test_no_target_holds_until_stop():
     assert ps.bar_exit(9.0, None, 10.0, 99.0, 9.5, entry_bar=False) is None
 
 
+def test_without_an_intraday_stop_only_the_target_fills_during_the_bar():
+    assert ps.bar_exit(None, 13.0, 10.0, 13.5, 8.0, entry_bar=False) == (13.0, "目标")
+    assert ps.bar_exit(None, 13.0, 8.5, 9.5, 8.0, entry_bar=False) is None
+    assert ps.bar_exit(None, 13.0, 10.0, 13.5, 8.0, entry_bar=True) is None
+
+
 # ---------- 账户 ----------
 
 def bars(rows: list[tuple[float, float, float, float]], f: list[float] | None = None) -> ps.Bars:
@@ -99,23 +106,63 @@ def test_costs_come_off_both_sides():
     assert t.pnl == pytest.approx(pnl) and t.r == pytest.approx(pnl / 1000)
 
 
-def test_same_bar_stop_and_target_counts_as_stop():
+def test_same_bar_stop_and_target_counts_as_stop_intraday():
     rows = [WIN[0], WIN[1], (10.0, 13.5, 8.8, 12.0), WIN[3]]
-    (t,) = run({"AAA": bars(rows)}, {0: [order()]}).trades
+    (t,) = run({"AAA": bars(rows)}, {0: [order()]}, cfg=INTRADAY).trades
     assert (t.exit_px, t.reason) == (9.0, "止损") and t.r == pytest.approx(-1.0)
 
 
-def test_gap_below_stop_fills_at_open_and_loses_more_than_1r():
+def test_gap_below_stop_fills_at_open_and_loses_more_than_1r_intraday():
     rows = [WIN[0], WIN[1], (8.5, 8.7, 8.2, 8.4), WIN[3]]
-    (t,) = run({"AAA": bars(rows)}, {0: [order()]}).trades
+    (t,) = run({"AAA": bars(rows)}, {0: [order()]}, cfg=INTRADAY).trades
     assert (t.exit_px, t.reason) == (8.5, "止损") and t.r == pytest.approx(-1.5)
 
 
-def test_gap_up_entry_risk_is_measured_from_the_fill():
+def test_gap_up_entry_risk_is_measured_from_the_fill_intraday():
     rows = [WIN[0], (10.5, 10.6, 10.4, 10.5), (10.0, 10.1, 8.9, 9.0), WIN[3]]
-    (t,) = run({"AAA": bars(rows)}, {0: [order()]}).trades
+    (t,) = run({"AAA": bars(rows)}, {0: [order()]}, cfg=INTRADAY).trades
     # 股数按计划进场价算（1000 股），成交在 10.5：初始风险 1000 × 1.5，亏 1500 → −1R
     assert (t.shares, t.fill) == (1000, 10.5) and t.r == pytest.approx(-1.0)
+
+
+# 收盘口径（默认）：收盘跌破止损，次日开盘走
+
+def test_intraday_dip_below_the_stop_that_closes_above_it_keeps_the_trade():
+    rows = [WIN[0], WIN[1], (10.0, 10.3, 8.8, 9.2), (9.4, 9.6, 9.3, 9.5)]
+    (t,) = run({"AAA": bars(rows)}, {0: [order()]}).trades
+    assert (t.reason, t.exit_px) == ("未平仓", 9.5)
+
+
+def test_close_below_the_stop_exits_next_open_and_can_lose_more_than_1r():
+    rows = [WIN[0], WIN[1], (9.5, 9.6, 8.7, 8.8), (8.6, 8.9, 8.5, 8.7)]
+    (t,) = run({"AAA": bars(rows)}, {0: [order()]}).trades
+    # 1000 股 10 买；第 2 根收盘 8.8 跌破 9，第 3 根开盘 8.6 走：亏 1400，初始风险 1000 → −1.4R（不截到 −1）
+    assert (t.exit_i, t.exit_px, t.reason) == (3, 8.6, "止损") and t.r == pytest.approx(-1.4)
+
+
+def test_close_exactly_at_the_stop_is_not_a_break():
+    rows = [WIN[0], WIN[1], (9.5, 9.6, 8.9, 9.0), (9.4, 9.6, 9.3, 9.5)]
+    (t,) = run({"AAA": bars(rows)}, {0: [order()]}).trades
+    assert t.reason == "未平仓"
+
+
+def test_entry_bar_closing_below_the_stop_exits_next_open():
+    rows = [WIN[0], (9.8, 10.2, 8.9, 8.95), (8.7, 9.0, 8.6, 8.8), WIN[3]]
+    (t,) = run({"AAA": bars(rows)}, {0: [order()]}).trades
+    assert (t.entry_i, t.exit_i, t.exit_px, t.reason) == (1, 2, 8.7, "止损") and t.r == pytest.approx(-1.3)
+
+
+def test_target_reached_in_a_bar_that_dips_below_the_stop_is_a_win():
+    rows = [WIN[0], WIN[1], (10.0, 13.5, 8.8, 12.0), WIN[3]]
+    (t,) = run({"AAA": bars(rows)}, {0: [order()]}).trades
+    assert (t.exit_px, t.reason) == (13.0, "目标") and t.r == pytest.approx(3.0)
+
+
+def test_stop_break_takes_precedence_over_an_invalidation_at_the_same_close():
+    rows = [WIN[0], WIN[1], (9.5, 9.6, 8.7, 8.8), (8.6, 8.9, 8.5, 8.7)]
+    inval = {"AAA": [frozenset(), frozenset(), frozenset({"EMA20 止损"}), frozenset()]}
+    (t,) = run({"AAA": bars(rows)}, {0: [order(exits=("EMA20 止损",))]}, inval).trades
+    assert t.reason == "止损"
 
 
 def test_open_below_stop_is_not_entered():
@@ -130,9 +177,9 @@ def test_untriggered_order_expires_after_one_day():
     assert res.trades == [] and res.skipped == {"没触发": 1}
 
 
-def test_entry_bar_stop_exits_at_the_stop():
+def test_entry_bar_stop_exits_at_the_stop_intraday():
     rows = [WIN[0], (9.8, 10.2, 8.9, 9.1), WIN[2], WIN[3]]
-    (t,) = run({"AAA": bars(rows)}, {0: [order()]}).trades
+    (t,) = run({"AAA": bars(rows)}, {0: [order()]}, cfg=INTRADAY).trades
     assert (t.entry_i, t.exit_i, t.exit_px) == (1, 1, 9.0)
 
 
@@ -150,10 +197,10 @@ def test_condition_not_in_this_plays_exits_is_ignored():
     assert t.reason == "未平仓" and t.exit_px == 10.5
 
 
-def test_no_new_order_for_a_ticker_held_at_the_signal_close():
+def test_no_new_order_for_a_ticker_held_at_the_signal_close_intraday():
     # 第 1 根进场；第 1 根收盘又出计划，那时还拿着，不该下单，哪怕第 2 根开盘先止损走了
     rows = [WIN[0], WIN[1], (8.5, 10.6, 8.4, 10.5), (10.6, 10.7, 10.5, 10.6)]
-    res = run({"AAA": bars(rows)}, {0: [order()], 1: [order(signal=1, entry=10.5, stop=9.5, target=14.0)]})
+    res = run({"AAA": bars(rows)}, {0: [order()], 1: [order(signal=1, entry=10.5, stop=9.5, target=14.0)]}, cfg=INTRADAY)
     assert [(t.signal, t.reason) for t in res.trades] == [(0, "止损")]
 
 
@@ -167,6 +214,25 @@ def test_no_leverage_shares_capped_by_cash():
     # 止损只差 0.1：按风险要 10000 股（10 万元），账户只有 10 万，含成本只够 9995 股
     (t,) = run({"AAA": bars(WIN)}, {0: [order(stop=9.9)]}, cfg=ps.Config(cost=0.0005, equity0=100_000)).trades
     assert t.shares == 9995
+
+
+def test_position_cap_limits_a_tiny_stop_trade_to_a_share_of_equity():
+    # 止损只差 0.1：按风险要 10000 股（10 万元，整个账户）；单票上限 25% → 2.5 万元，2500 股
+    (t,) = run({"AAA": bars(WIN)}, {0: [order(stop=9.9)]}, cfg=ps.Config(cost=0.0, equity0=100_000, max_position=0.25)).trades
+    assert t.shares == 2500 and t.notional == pytest.approx(0.25)
+
+
+def test_position_cap_leaves_a_normal_stop_sized_by_risk():
+    (t,) = run({"AAA": bars(WIN)}, {0: [order()]}, cfg=ps.Config(cost=0.0, equity0=100_000, max_position=0.25)).trades
+    assert t.shares == 1000
+
+
+def test_open_risk_counts_the_capped_shares():
+    # 第一笔被单票上限压到 2500 股，占用风险 2500 × 0.1 = 250，不是按风险算的 10000 股的 1000；第二笔（风险 1000）还放得下 1.5% 的总上限
+    b = {t: bars(WIN) for t in ("AAA", "BBB")}
+    cfg = ps.Config(cost=0.0, equity0=100_000, cap_pct=1.5, max_position=0.25)
+    res = run(b, {0: [order("AAA", stop=9.9), order("BBB")]}, cfg=cfg)
+    assert [(t.ticker, t.shares) for t in res.trades] == [("AAA", 2500), ("BBB", 1000)]
 
 
 def test_equal_notional_ignores_the_stop_distance():
@@ -234,6 +300,27 @@ def test_one_block_has_no_interval():
     cal = ["2024-01-01", "2024-01-02"]
     ts = [ps.Trade("A", "", "", "", 0, 0, 1, 10, 9, 13, 3, 10, 11, 1, "", r, r, 0.1) for r in (1.0, -1.0)]
     assert fp.summarize(ps.Result(ts, np.array([1.0, 1.0]), np.array([0.0, 0.0])), cal, BC)["ci"] is None
+
+
+# ---------- 诊断：止损距离按 ATR ----------
+
+def test_atr_is_wilders_average_true_range_including_gaps():
+    df = pd.DataFrame({"High": [11.0, 12.0, 12.0, 15.0], "Low": [9.0, 10.0, 10.0, 13.0], "Close": [10.0, 11.0, 11.0, 14.0]})
+    # 真实波幅：2、2、2、max(2, |15 − 11|, |13 − 11|) = 4；n = 2 的 Wilder 平均：第 2 根起 2、2，然后 (2 + 4) / 2 = 3
+    assert fp.atr(df, 2).tolist()[1:] == pytest.approx([2.0, 2.0, 3.0])
+
+
+def test_atr_on_a_day_ignores_later_bars():
+    df = pd.DataFrame({"High": [11.0, 12.0, 12.0, 15.0], "Low": [9.0, 10.0, 10.0, 13.0], "Close": [10.0, 11.0, 11.0, 14.0]})
+    later = df.copy()
+    later.iloc[3] = [50.0, 1.0, 30.0]
+    pd.testing.assert_series_equal(fp.atr(df, 2).iloc[:3], fp.atr(later, 2).iloc[:3])
+
+
+def test_trade_pnl_as_a_share_of_equity_ignores_the_stop_distance():
+    from dataclasses import asdict
+    (t,) = run({"AAA": bars(WIN)}, {0: [order()]}).trades
+    assert fp.equity_pnl(asdict(t)) == pytest.approx(3000 / 100_000)       # 赚 3000，进场前净值 10 万
 
 
 # ---------- 计划 → 单：消融开关 ----------
