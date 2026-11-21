@@ -1,8 +1,10 @@
 // K 线 + 6 条均线 + 抵扣价小黄点 + 成交量（TradingView lightweight-charts 4.2.0）。
 import { baseCandleStyle, candleBar as styledBar } from "./candles.js";
+import { createOverlay } from "./chartoverlay.js";
 import { earningsMarks, logicalOf } from "./earnings.js";
 import { measure, measureLines } from "./measure.js";
-import { volumeCell } from "./readout.js";
+import { gapBands, structureScene } from "./overlays.js";
+import { ohlcRow, weekLabel } from "./readout.js";
 import { DEFAULT_SPEED, OFF, SPEEDS, appendDelta, earliestIndex, indexOnOrBefore, randomIndex, sliceAt, speedMs, step } from "./replay.js";
 
 const SPECS = [];
@@ -112,19 +114,11 @@ export function createChart(box, legendEl) {
     const c = view.candles.find((x) => x.time === time) ?? view.candles.at(-1);
     const prev = view.candles[view.candles.indexOf(c) - 1];
     const at = (k) => (view.lines[k] || []).find((p) => p.time === c.time)?.value;
-    // 照 TradingView：第一行日期 + 开高低收 + 比前一天涨跌 + 量和量比，第二行各条均线的值
-    const chg = prev ? c.close - prev.close : null;
-    const tone = chg == null ? "" : chg >= 0 ? "up" : "down";
-    const sign = (x) => (x >= 0 ? "+" : "−") + Math.abs(x).toFixed(2);
-    // 涨跌额放括号外的 ro-abs：一行放不下时先收起涨跌额，留涨跌幅（见下面的 tight）
-    const chgText = chg == null ? ""
-      : `<span class="ro-chg ${tone}"><span class="ro-abs">${sign(chg)}（</span>${sign((chg / prev.close) * 100)}%<span class="ro-abs">）</span></span>`;
-    const ohlc = [["开", c.open], ["高", c.high], ["低", c.low], ["收", c.close]]
-      .map(([k, v]) => `<span>${k}<b class="${tone}">${f2(v)}</b></span>`).join("");
-    const lines = SPECS.filter((sp) => series[sp.key].options().visible)
+    // 照 TradingView：第一行日期 + 开高低收 + 比前一根涨跌 + 量和量比，第二行各条均线的值
+    const label = frame === "week" ? weekLabel(showTime(c.time), view.partial && c === view.candles.at(-1)) : showTime(c.time);
+    const lines = SPECS.filter((sp) => series[sp.key].options().visible && (frame === "day" || !sp.off))
       .map((sp) => `<span><i class="${sp.dashed ? "dash" : ""}" style="--c: var(${sp.token})"></i>${sp.key} ${f2(at(sp.key))}</span>`).join("");
-    const vol = volumeCell(view.volume.find((v) => v.time === c.time));
-    readout.innerHTML = `<div class="ro-ohlc"><b>${showTime(c.time)}</b>${ohlc}${chgText}${vol}</div><div class="ro-lines">${lines}</div>`;
+    readout.innerHTML = `<div class="ro-ohlc">${ohlcRow(label, c, prev, view.volume.find((v) => v.time === c.time))}</div><div class="ro-lines">${lines}</div>`;
     const row = readout.firstChild;
     if (row.scrollWidth > row.clientWidth) row.classList.add("tight"); // 窄栏（默认视口）：量和量比比涨跌额要紧
   };
@@ -133,10 +127,15 @@ export function createChart(box, legendEl) {
   // ---------- 范围按钮：固定时长看斜率（文章 2.4：短期看 1 年） ----------
   // [键, 按钮, 往回看几天]
   const RANGES = [["1w", "1 周", 7], ["1m", "1 月", 31], ["6m", "半年", 183], ["1y", "1 年", 365], ["all", "全部", null]];
-  let rangeKey = "1y";
+  // 日线默认近 1 年；周线默认全部（5 年），1 周、1 月在周线上没有意义
+  const rangeKeys = { day: "1y", week: "all" };
+  const WEEK_OFF = new Set(["1w", "1m"]);
   const tools = document.createElement("div");
   tools.className = "chart-tools";
-  tools.innerHTML = RANGES.map(([k, label]) => `<button type="button" class="range-btn" data-range="${k}">${label}</button>`).join("")
+  tools.innerHTML = `<span class="frame-toggle" role="group" aria-label="日线 / 周线">`
+    + `<button type="button" data-frame="day" aria-pressed="true" title="日 K 线（分析用的就是日线）">日</button>`
+    + `<button type="button" data-frame="week" aria-pressed="false">周</button></span>`
+    + RANGES.map(([k, label]) => `<button type="button" class="range-btn" data-range="${k}">${label}</button>`).join("")
     + `<button type="button" class="range-btn" data-range="reset" title="回到当前范围的默认视图">复位</button>`
     + `<button type="button" class="replay-toggle" aria-pressed="false" title="从过去某一天开始，一根一根往后放 K 线">回放</button>`
     + `<button type="button" class="measure-toggle" aria-pressed="false" title="点这里，再在图上按住从一点拖到另一点：量涨跌多少、隔几根 K 线、几个 ATR（看止损离得远不远）。Esc 清掉">测量</button>`
@@ -145,6 +144,8 @@ export function createChart(box, legendEl) {
     + `<button type="button" class="tone-toggle" title="${TONE_TITLE}">`
     + `${Object.values(TONE_TOKENS).map((t) => `<i style="--c: var(${t})"></i>`).join("")}着色</button>`
     + `<button type="button" class="levels-toggle" aria-pressed="true" title="把结论里的触发价、止损和推翻判断的价位画成虚线">价位线</button>`
+    + `<button type="button" class="struct-toggle" aria-pressed="true">结构</button>`
+    + `<button type="button" class="gaps-toggle" aria-pressed="true">缺口</button>`
     + `<button type="button" class="chart-help-toggle" aria-expanded="false">怎么用</button>`;
   legendEl.after(tools);
 
@@ -160,15 +161,18 @@ export function createChart(box, legendEl) {
     paint();
   });
   const applyRange = () => {
-    tools.querySelectorAll(".range-btn").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.range === rangeKey)));
+    tools.querySelectorAll(".range-btn").forEach((b) => {
+      b.setAttribute("aria-pressed", String(b.dataset.range === rangeKeys[frame]));
+      b.disabled = frame === "week" && WEEK_OFF.has(b.dataset.range);
+    });
     if (!view?.candles.length) return;
-    const days = RANGES.find(([k]) => k === rangeKey)[2];
+    const days = RANGES.find(([k]) => k === rangeKeys[frame])[2];
     const last = view.candles.length - 1; // 回放时以回放到的那天为准
     const from = new Date(view.candles[last].time);
     from.setDate(from.getDate() - (days ?? Infinity));
     const first = days ? Math.max(0, view.candles.findIndex((c) => c.time >= from.toISOString().slice(0, 10))) : 0;
     // 右边留几根的空位；下一次财报在三周内就留到能看见它的 E
-    const next = earningsMarks(earnings, view.candles[last].time).find((m) => m.next);
+    const next = frame === "day" && earningsMarks(earnings, view.candles[last].time).find((m) => m.next);
     const ahead = next ? logicalOf(next.date, view.candles) - last : 0;
     const room = ahead > 0 && ahead <= NEXT_EARNINGS_ROOM ? Math.max(RIGHT_ROOM, ahead + 1) : RIGHT_ROOM;
     chart.timeScale().setVisibleLogicalRange({ from: first, to: last + room });
@@ -176,7 +180,7 @@ export function createChart(box, legendEl) {
   tools.addEventListener("click", (e) => {
     const b = e.target.closest(".range-btn");
     if (!b) return;
-    if (b.dataset.range !== "reset") rangeKey = b.dataset.range;
+    if (b.dataset.range !== "reset") rangeKeys[frame] = b.dataset.range;
     applyRange();
   });
 
@@ -188,7 +192,7 @@ export function createChart(box, legendEl) {
     const r = ts.getVisibleLogicalRange();
     if (!r) return;
     const span = r.to - r.from;
-    const next = Math.min(Math.max(span * Math.exp(e.deltaY / 300), 5), (data?.candles.length ?? 500) + 10);
+    const next = Math.min(Math.max(span * Math.exp(e.deltaY / 300), 5), (view?.candles.length ?? 500) + 10);
     ts.setVisibleLogicalRange({ from: r.to - next, to: r.to }); // 以最右边（最新一天）为锚
   }, { passive: false });
 
@@ -212,6 +216,57 @@ export function createChart(box, legendEl) {
     paintLevels();
   });
 
+  // ---------- 结构标注：波段、最近的顶部 / 底部构造、M 顶 / W 底 / 2B（skill 的 structure.py 算好的，这里只画） ----------
+  const structLayer = createOverlay(chart, candles, box);
+  let structure = null;
+  let structOn = true;
+  try { structOn = localStorage.getItem("dma-struct") !== "0"; } catch { /* 隐私模式 */ }
+  const structBtn = tools.querySelector(".struct-toggle");
+  const STRUCT_TITLE = "结构标注：波段连线、最近的顶部 / 底部构造和它的状态、M 顶 / W 底 / 2B；点图上的标记看规则原文";
+  /** 结构属于分析那一天：回放时收起（会露出之后才知道的构造），练习、揭晓时没有（免得提前看到答案）。 */
+  const structWhyOff = () => (frame === "week" ? "结构按日线算：切回日线看"
+    : rs.mode === "replay" ? "回放时收起：结构是按最新一天算的，会露出之后的走势"
+    : !structure?.available ? "这份数据没有结构标注（练习里不画，免得提前看到答案）" : null);
+  const overlayColors = () => ({ swing: css("--muted"), neck: css("--neutral"), up: css("--up"), down: css("--down"),
+    gap: css("--neutral"), target: css("--accent"), bg: css("--card"), font: css("--mono") });
+  // 缺口：没补的向下缺口画成色带（和交易计划找目标位同一个定义，tradeplan.unfilled_gaps）；被用作目标位的标出来
+  let gaps = null; // { list, targets }
+  let gapsOn = true;
+  try { gapsOn = localStorage.getItem("dma-gaps") !== "0"; } catch { /* 隐私模式 */ }
+  const gapsBtn = tools.querySelector(".gaps-toggle");
+  const GAPS_TITLE = "没补的向下缺口：从跳空那天画到现在的色带，上沿是跳空前一天的最低价，下沿是还没补的那段的底；交易计划拿它当目标位的标「目标位」";
+  const gapsWhyOff = () => (frame === "week" ? "缺口按日线算：切回日线看"
+    : rs.mode === "replay" ? "回放时收起：缺口补没补要看之后的 K 线"
+    : !gaps ? "这份数据没有缺口（练习里不画，免得提前看到答案）"
+    : !gaps.list.length ? "上方没有没补的缺口" : null);
+  /** 一个开关的状态：不能用时按钮灰掉并写明原因，能用时按开关。 */
+  const syncToggle = (btn, on, why, title) => {
+    btn.disabled = Boolean(why);
+    btn.title = why ?? title;
+    btn.setAttribute("aria-pressed", String(on && !why));
+    return on && !why;
+  };
+  function paintOverlay() {
+    const showStruct = syncToggle(structBtn, structOn, structWhyOff(), STRUCT_TITLE);
+    const showGaps = syncToggle(gapsBtn, gapsOn, gapsWhyOff(), GAPS_TITLE);
+    const bars = view?.candles ?? [];
+    const scene = {
+      ...(showStruct ? structureScene(structure, bars) : {}),
+      bands: showGaps ? gapBands(gaps.list, gaps.targets, bars) : [],
+    };
+    structLayer.set(scene, overlayColors(), bars);
+  }
+  gapsBtn.addEventListener("click", () => {
+    gapsOn = !gapsOn;
+    try { localStorage.setItem("dma-gaps", gapsOn ? "1" : "0"); } catch { /* 忽略 */ }
+    paintOverlay();
+  });
+  structBtn.addEventListener("click", () => {
+    structOn = !structOn;
+    try { localStorage.setItem("dma-struct", structOn ? "1" : "0"); } catch { /* 忽略 */ }
+    paintOverlay();
+  });
+
   // ---------- 怎么用：四种常见用法，在这套方法里看什么 ----------
   const help = document.createElement("div");
   help.className = "chart-help";
@@ -227,6 +282,13 @@ export function createChart(box, legendEl) {
       第一根黑柱就是 20 线破线拐头；连续黑柱、收不回去，才说明拐头确认了。点工具栏里的「着色」可以关掉。</p>
     <p><b>测量</b>：点「测量」，在图上按住从一点拖到另一点，框里写涨跌多少、涨跌幅、隔几根 K 线（几个自然日），和这段距离是几个 ATR(14)。
       用来看止损离进场几个 ATR：不到 1 个 ATR 的止损，平常的波动就可能扫到。回放时一样能用；Esc 或再点一次「测量」清掉。</p>
+    <p><b>日 / 周</b>：「周」换成周 K 线和周线的 6 条线（5 年），看大一级的趋势（规则 J11 看的就是它）；读数条写那一周的开高低收和比上一周的涨跌，没走完的本周会注明。
+      小黄点是周线的抵扣价（"20周扣"）。回放、测量、结构、缺口只在日线上，切到周线时这几个按钮不能点；价位线和自己画的线照常显示。</p>
+    <p><b>结构</b>：灰色折线是波段，把顶部构造的最高点连到底部构造的最低点，最后一段虚线是还在形成的那个构造。
+      「顶·已完成」「底·形成中」这类标记是最近的顶部、底部构造；形成中时旁边的短虚线写着下一根 K 线怎样就完成（比如"下一根低 &lt; 412.30"）。
+      「M顶」「W底」「2B顶」「2B底」标在收盘越过颈线（2B 是越过前高 A）的那根，带"?"的是还没确认；点标记看它的日期、价位和规则原文。回放时收起，练习里不画。</p>
+    <p><b>缺口</b>：没补上的向下跳空缺口画成浅色带，从跳空那天一直画到现在：上沿是跳空前一天的最低价，下沿是之后涨回去还没补到的位置。
+      交易计划拿上方最近的缺口当目标位（P25），被用作目标位的那条颜色深一点、写着「目标位」。回放时收起，练习里不画。</p>
     <p><b>财报 E</b>：时间轴上方的小 E 是财报日，实心的是下一次。财报后常常跳空开盘，止损单按开盘价成交，可能比止损价差很多；
       下一次财报在 10 个交易日内时，结论卡片会提醒。只是提醒，不改打法。</p>
     <p><b>看量</b>：底部的量柱，黄色是超过 50 日均量 2 倍的大量。看两种情况：横盘末期突然放量，是要变盘的信号；
@@ -298,12 +360,13 @@ export function createChart(box, legendEl) {
     for (const s of SPECS) series[s.key].applyOptions({ color: css(s.token) });
     paintLevels();
     paintMarkers();
+    paintOverlay();
   }
   const volBar = (v) => ({ time: v.time, value: v.value, color: css(v.spike ? "--drop" : "--line") });
   function paintMarkers() {
     const drop = css("--drop");
     candles.setMarkers(view.drops.slice().sort((a, b) => (a.time < b.time ? -1 : 1)).map((d) => ({
-      time: d.time, position: "belowBar", color: drop, shape: "circle", text: `${d.period}扣`,
+      time: d.time, position: "belowBar", color: drop, shape: "circle", text: `${d.period}${frame === "week" ? "周" : ""}扣`,
     })));
     paintEarnings();
     paintRuler();
@@ -319,7 +382,8 @@ export function createChart(box, legendEl) {
     const width = ts.width();
     eLayer.style.bottom = `${ts.height()}px`;
     eLayer.style.width = `${width}px`;
-    const marks = view?.candles.length ? earningsMarks(earnings, view.candles.at(-1).time) : [];
+    // 周线上财报标在那一周；下一次在右边留白里，按天数排的位置在周线上不对，不标
+    const marks = view?.candles.length ? earningsMarks(earnings, view.candles.at(-1).time).filter((m) => frame === "day" || !m.next) : [];
     eLayer.innerHTML = marks.map(({ date, next }) => {
       const i = logicalOf(date, view.candles);
       const x = i === null ? null : ts.logicalToCoordinate(i);
@@ -338,6 +402,41 @@ export function createChart(box, legendEl) {
     showReadout(null);
   }
 
+  // ---------- 日 / 周：周线是分析 JSON 里 chart.weekly（5 年周 K 线和周线均线）；回放、测量只在日线上 ----------
+  let frame = "day";
+  const frameData = (d) => (frame === "week" ? d.weekly : d);
+  const weekBtn = tools.querySelector('[data-frame="week"]');
+  function setFrame(next) {
+    if (next === frame || (next === "week" && !data?.weekly)) return;
+    if (next === "week") {
+      leaveReplay();
+      if (tool === "measure") setTool("none");
+    }
+    frame = next;
+    show(frameData(data));
+    applyRange();
+    syncTool();
+  }
+  tools.querySelector(".frame-toggle").addEventListener("click", (e) => {
+    const f = e.target.closest("[data-frame]")?.dataset.frame;
+    if (f) setFrame(f);
+  });
+  /** 日 / 周按钮和只在日线上能用的按钮（回放、测量、MA200）。 */
+  function syncFrame() {
+    const week = frame === "week";
+    tools.querySelectorAll("[data-frame]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.frame === frame)));
+    const head = box.closest(".chart-card")?.querySelector(".chart-frame");
+    if (head) head.textContent = week ? "周线" : "日线";
+    weekBtn.disabled = !data?.weekly;
+    weekBtn.title = data?.weekly ? "周 K 线和周线的 MA / EMA 20、60、120（5 年）" : "这份数据没有周线（练习里只看日线，周线会用到之后的 K 线）";
+    replayBtn.disabled = week;
+    replayBtn.title = week ? "回放只在日线上：切回日线" : REPLAY_TITLE;
+    measureBtn.disabled = week;
+    measureBtn.title = week ? "测量按日线的 ATR(14) 算止损远近：切回日线再量" : MEASURE_TITLE;
+    const ma200 = legendEl.querySelector('[data-line="MA200"]');
+    if (ma200) ma200.disabled = week;
+  }
+
   // ---------- 回放：从过去某一天开始，一根一根往后放（状态机在 replay.js） ----------
   let rs = OFF;
   let timer = null;
@@ -346,6 +445,7 @@ export function createChart(box, legendEl) {
   try { speed = SPEEDS.find((x) => String(x) === localStorage.getItem("dma-replay-speed")) ?? DEFAULT_SPEED; } catch { /* 隐私模式 */ }
 
   const replayBtn = tools.querySelector(".replay-toggle");
+  const REPLAY_TITLE = replayBtn.title;
   const badge = document.createElement("span");
   badge.className = "replay-badge";
   badge.textContent = "回放中";
@@ -423,7 +523,7 @@ export function createChart(box, legendEl) {
       if (away) chart.timeScale().setVisibleLogicalRange(r);
       else windowAt(rs.index, r ? r.to - r.from : 120);
     }
-    if ((prev.mode === "replay") !== (rs.mode === "replay")) paintLevels();
+    if ((prev.mode === "replay") !== (rs.mode === "replay")) { paintLevels(); paintOverlay(); }
     syncReplay();
   }
 
@@ -547,6 +647,7 @@ export function createChart(box, legendEl) {
     syncTool();
   }
   function syncTool() {
+    syncFrame();
     drawBtn.setAttribute("aria-pressed", String(tool === "draw"));
     drawBtn.textContent = tool === "draw" ? "点图上的价位…" : "画线";
     box.classList.toggle("drawing", tool === "draw");
@@ -559,6 +660,7 @@ export function createChart(box, legendEl) {
 
   // ---------- 测量：按住从 A 拖到 B，量涨跌、根数、自然日、几个 ATR（照 TradingView 的标尺）；回放时一样能用 ----------
   const measureBtn = tools.querySelector(".measure-toggle");
+  const MEASURE_TITLE = measureBtn.title;
   measureBtn.addEventListener("click", () => setTool(tool === "measure" ? "none" : "measure"));
   const mLayer = document.createElement("div");
   mLayer.className = "measure-layer";
@@ -646,16 +748,18 @@ export function createChart(box, legendEl) {
       data = d;
       const index = at ? indexOnOrBefore(d.candles, at) : -1;
       rs = index >= 0 ? { mode: "replay", index, playing: false } : OFF;
+      if (rs.mode === "replay" || !d.weekly) frame = "day"; // 回放只在日线上；没有周线（练习）就回日线
       if (tool === "pick-start") tool = "none"; // 换了数据：选到一半的起点作废
       ruler = null; // 量的两点属于旧数据
       arm();
       if (!sameTicker) { drawKey = key; loadDrawn(); }
+      structure = gaps = null; // 结构、缺口属于上一份分析；app 随后用 setStructure 给这份的（练习、揭晓时不给）
       paintDrawn();
       if (rs.mode === "replay") {
         show(sliceAt(d, index));
         if (r) chart.timeScale().setVisibleLogicalRange(r);
       } else {
-        show(d);
+        show(frameData(d));
         applyRange();
       }
       paintLevels();
@@ -695,6 +799,18 @@ export function createChart(box, legendEl) {
       if (rs.mode === "replay") paintEarnings(); // 回放中重新载入：视图留在原处
       else applyRange(); // 右边的空位要不要放宽到下一次财报
     },
+    /** 结构标注：分析 JSON 的 structure；练习、揭晓时传 null，不画。 */
+    setStructure(s) {
+      structure = s ?? null;
+      paintOverlay();
+    },
+    /** 缺口：分析 JSON 的 gaps 和交易计划的目标位（被用作目标的缺口标出来）；练习、揭晓时传 null，不画。 */
+    setGaps(list, targets = []) {
+      gaps = list ? { list, targets } : null;
+      paintOverlay();
+    },
+    /** 现在画着的结构标注和缺口（测试用）：{ segments, levels, marks, bands }，见 overlays.js。 */
+    structure: () => structLayer.scene(),
     /** 价位线：[{ kind: trigger | stop | target | invalid, price, title }]，来自 viz.js 的 chartLevels。 */
     setLevels(list) {
       levels = list;
@@ -705,6 +821,8 @@ export function createChart(box, legendEl) {
     /** 自己画的线（价格列表）。 */
     drawn: () => [...drawn],
     /** 回放状态（测试用）：mode / index / playing，加上速度、回放到的日期、图上几根 K 线。 */
+    /** 日线还是周线（测试用）：day | week。 */
+    frame: () => frame,
     /** 图上的交互模式（测试用）：none | draw | measure | pick-start。 */
     tool: () => tool,
     /** 测量的结果（测试用）：没有在量时为 null。 */

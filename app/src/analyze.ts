@@ -22,6 +22,8 @@ export interface ChartData {
   volume: { time: string; value: number; spike: boolean; ratio?: number }[];
   lines: Record<string, { time: string; value: number }[]>;
   drops: { time: string; period: number }[];
+  /** 周线图（dma_analyze 的 weekly_chart）：周 K 线、周线均线和抵扣价；partial 是最新一周还没走完。练习、揭晓的图没有。 */
+  weekly?: Omit<ChartData, "weekly"> & { partial: boolean };
 }
 
 export interface AnalyzeResult {

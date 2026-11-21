@@ -962,3 +962,20 @@ body.practice-revealed #verdict, body.practice-revealed #steps, body.practice-re
   .bt-side { border-right: 0; border-bottom: 1px solid var(--line); }
   .bt-main { overflow: visible; }
 }
+
+/* 结构标注：图上的构造、M 顶 / W 底 / 2B 标记（线和色带画在图表画布里） */
+.struct-layer { position: absolute; inset: 0; pointer-events: none; z-index: 2; overflow: hidden; }
+.struct-mark.cite { position: absolute; transform: translateX(-50%); pointer-events: auto; margin: 0; padding: 0 5px;
+  font: 600 10.5px/16px var(--mono); border: 1px solid currentColor; background: var(--card); vertical-align: 0; }
+.struct-mark.down { color: var(--down); }
+.struct-mark.up { color: var(--up); }
+.struct-mark.faint { color: var(--faint); }
+.struct-mark[hidden] { display: none; }
+.popover .pop-lead { margin: 6px 0; font-size: 13px; line-height: 1.6; }
+
+/* 日 / 周：两个按钮拼成一组 */
+.chart-tools .frame-toggle { display: inline-flex; }
+.chart-tools .frame-toggle button { border-radius: 0; padding: 1px 9px; }
+.chart-tools .frame-toggle button:first-child { border-radius: 999px 0 0 999px; }
+.chart-tools .frame-toggle button + button { border-radius: 0 999px 999px 0; margin-left: -1px; }
+.chart-tools button:disabled { opacity: .45; cursor: not-allowed; }

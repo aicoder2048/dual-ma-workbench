@@ -32,8 +32,21 @@ const CHART = (() => {
   }
   const close = days.map((_, i) => 200 + 30 * Math.sin(i / 25) - i * 0.1);
   const line = (k: number) => days.map((time, i) => ({ time, value: close[i] + k }));
+  const candles = days.map((time, i) => ({ time, open: close[i] - 1, high: close[i] + 2, low: close[i] - 2, close: close[i] }));
+  // 周线：按周五结束的自然周合并，时间是那一周最后一个交易日（和 skill 的 weekly.to_weekly 一样）；最后一周没走完
+  const friday = (t: string) => { const d = new Date(`${t}T00:00:00Z`); d.setUTCDate(d.getUTCDate() + 5 - d.getUTCDay()); return d.toISOString().slice(0, 10); };
+  const groups = new Map<string, typeof candles>();
+  for (const c of candles) groups.set(friday(c.time), [...(groups.get(friday(c.time)) ?? []), c]);
+  const weeks = [...groups.values()].map((g) => ({ time: g.at(-1)!.time, open: g[0].open, high: Math.max(...g.map((c) => c.high)),
+    low: Math.min(...g.map((c) => c.low)), close: g.at(-1)!.close }));
+  const wline = (k: number) => weeks.map((w) => ({ time: w.time, value: w.close + k }));
+  const weekly = {
+    candles: weeks, volume: weeks.map((w) => ({ time: w.time, value: 169e6, spike: false })),
+    lines: { MA20: wline(6), EMA20: wline(5), MA60: wline(12), EMA60: wline(11), MA120: wline(18).slice(30), EMA120: wline(17).slice(30) },
+    drops: [{ time: weeks.at(-20)!.time, period: 20 }], partial: true,
+  };
   return {
-    candles: days.map((time, i) => ({ time, open: close[i] - 1, high: close[i] + 2, low: close[i] - 2, close: close[i] })),
+    candles, weekly,
     // 量 33.8M、1.2 倍均量；最后一根是大量（2.4 倍，读数条标黄）
     volume: days.map((time, i) => (i === 299 ? { time, value: 81.1e6, spike: true, ratio: 2.4 } : { time, value: 33.8e6, spike: false, ratio: 1.2 })),
     lines: { MA20: line(5), EMA20: line(4), MA60: line(10), EMA60: line(9), MA120: line(15), EMA120: line(14), MA200: line(20).slice(199) },
@@ -48,6 +61,29 @@ const EARN_NEXT = (() => {
   return d.toISOString().slice(0, 10);
 })();
 const EARNINGS = { available: true, past: [CHART.candles[120].time, CHART.candles[183].time, CHART.candles[246].time], next: EARN_NEXT, days_to_next: 3, source: "yfinance" };
+
+/** 结构标注替身：落在 CHART 上的波段、完成的顶部构造、只差一根的底部构造、已形成的 M 顶和 2B 顶。 */
+const STRUCTURE = (() => {
+  const d = (i: number) => CHART.candles[i].time;
+  const hi = (i: number) => CHART.candles[i].high, lo = (i: number) => CHART.candles[i].low;
+  const construct = { extreme: false, broken_date: null, complete_at: null, next_at: null, bars_left: null };
+  const next = (nvda as Analysis).structure.bottom!.next_at; // 找打法里"还差"读这个价位，要和 NVDA 替身的规则对得上
+  return {
+    available: true,
+    top: { ...construct, side: "顶部构造", state: "已完成", pivot_date: d(240), pivot_price: hi(240), lh_date: d(241), done_date: d(242), invalidation: hi(240) },
+    bottom: { ...construct, side: "底部构造", state: "形成中", pivot_date: d(290), pivot_price: lo(290), lh_date: d(291), done_date: null,
+      invalidation: lo(290), complete_at: next, next_at: next, bars_left: 1 },
+    pivots: [{ kind: "低", date: d(200), price: lo(200) }, { kind: "高", date: d(215), price: hi(215) },
+      { kind: "低", date: d(225), price: lo(225) }, { kind: "高", date: d(240), price: hi(240) }],
+    patterns: [
+      { name: "M 顶", state: "已形成", dates: [d(215), d(225), d(240)], level: lo(225), confirmed: d(250) },
+      { name: "2B 顶", state: "已形成", dates: [d(255), d(262)], level: hi(255), confirmed: d(264) },
+    ],
+  };
+})();
+
+/** 缺口替身：第 150、270 根跳空向下，之后没补满（下沿是之后最高价够到的地方）。 */
+const GAPS = [150, 270].map((i) => ({ date: CHART.candles[i].time, top: CHART.candles[i - 1].low + 6, bottom: CHART.candles[i - 1].low + 1 }));
 
 const MP3 = readFileSync(resolve(import.meta.dir, "../test/fixtures/tts-sample.mp3"));
 const ttsCalls: { text: string; voice: string }[] = [];
@@ -85,6 +121,11 @@ beforeAll(async () => {
         const flat = { ...n.trade_plan.flat, entry: null, stop: null, targets: [], rr: null, rr_verdict: null, rr_gap: null, risk_pct: null, size: null };
         return JSON.stringify({ analysis: { ...n, label: "BOUNCE", play: { ...n.play, key: "空头结构反弹中", rules: ["P17", "J18", "J17"] },
           trade_plan: { ...n.trade_plan, key: "空头结构反弹中", flat } }, chart: CHART });
+      }
+      if (args[0] === "STRUCT") { // 结构标注和缺口：两个没补的缺口，近的那个是交易计划的目标位
+        const n = nvda as Analysis;
+        const flat = { ...n.trade_plan.flat, targets: [{ price: GAPS[1].bottom, kind: "缺口", rule: "P25", source: "视频" as const, date: GAPS[1].date }] };
+        return JSON.stringify({ analysis: { ...n, label: "STRUCT", structure: STRUCTURE, gaps: GAPS, trade_plan: { ...n.trade_plan, flat } }, chart: CHART });
       }
       if (args[0] === "EARN") { // 3 天后财报：图上标 E，结论卡片提醒跳空
         const n = nvda as Analysis;
@@ -842,6 +883,152 @@ describe("财报日", () => {
     expect(await nv.page.locator("#chart .e-mark").count()).toBe(0);
     expect(await nv.page.locator("#verdict [data-item=earnings]").count()).toBe(0);
     await nv.page.close();
+  }, 30_000);
+});
+
+describe("结构标注", () => {
+  const scene = (page: Page) => page.evaluate(async () => (await import("/app.js")).getChart().structure());
+  const shown = (page: Page) => page.$$eval("#chart .struct-mark", (els) => els.filter((e) => !(e as HTMLElement).hidden).map((e) => e.textContent));
+
+  test("默认画：波段、最近的构造、M 顶和 2B 顶；「结构」看得见、没被挡，点一下全收起，再点回来", async () => {
+    const { page, errors } = await open(undefined, "STRUCT");
+    await page.waitForSelector("#chart .struct-mark");
+    await scrollIntoCenter(page, ".chart-card"); // 像用户一样滚到图
+    expect(await notCovered(page, ".struct-toggle")).toBe(true);
+    expect(await page.getAttribute(".struct-toggle", "aria-pressed")).toBe("true");
+    expect(await shown(page)).toEqual(["顶·已完成", "底·形成中", "M顶", "2B顶"]);
+    for (const rule of ["J25", "J26"]) expect(await notCovered(page, `#chart .struct-mark[data-ref="rules#${rule}"]`)).toBe(true);
+    const s = await scene(page);
+    expect(s.segments.filter((x: any) => x.kind === "swing")).toHaveLength(3);
+    expect(s.segments.filter((x: any) => x.kind === "neck").map((x: any) => x.label)).toEqual(["颈线", "A"]);
+    expect(s.levels.map((x: any) => x.text)).toEqual([`下一根高 > ${STRUCTURE.bottom.next_at!.toFixed(2)} 底构造完成`]);
+    await page.click(".struct-toggle");
+    expect(await page.getAttribute(".struct-toggle", "aria-pressed")).toBe("false");
+    expect(await shown(page)).toEqual([]);
+    expect((await scene(page)).segments).toEqual([]);
+    await page.click(".struct-toggle");
+    expect(await shown(page)).toHaveLength(4);
+    expect(errors).toEqual([]);
+    await page.close();
+  }, 30_000);
+
+  test("点 M 顶标记：弹窗先说颈线和跌破那天，下面是 rules.md J25 原文", async () => {
+    const { page, errors } = await open(undefined, "STRUCT");
+    await page.waitForSelector("#chart .struct-mark");
+    await scrollIntoCenter(page, ".chart-card");
+    await page.click('#chart .struct-mark[data-ref="rules#J25"]');
+    await page.waitForSelector("#popover .pop-body p");
+    const pop = (await page.textContent("#popover"))!;
+    expect(pop).toContain(`颈线 ${STRUCTURE.patterns[0].level.toFixed(2)}`);
+    expect(pop).toContain(`${STRUCTURE.patterns[0].confirmed} 收盘跌破`);
+    expect(pop).toContain("rules.md");
+    expect(pop).toContain("J25");
+    expect(errors).toEqual([]);
+    await page.close();
+  }, 30_000);
+
+  test("回放时收起（结构按最新一天算，会露出之后的走势），按钮不能点；退出回放画回来", async () => {
+    const { page, errors } = await open(undefined, "STRUCT");
+    await page.waitForSelector("#chart .struct-mark");
+    await scrollIntoCenter(page, ".chart-card");
+    await page.click(".replay-toggle");
+    await page.click(".replay-start");
+    await page.click('[data-start="earliest"]');
+    await page.waitForFunction(async () => (await import("/app.js")).getChart().replay().mode === "replay");
+    expect(await page.isDisabled(".struct-toggle")).toBe(true);
+    expect(await page.getAttribute(".struct-toggle", "title")).toContain("回放时收起");
+    expect(await shown(page)).toEqual([]);
+    await page.click(".replay-exit");
+    expect(await page.isDisabled(".struct-toggle")).toBe(false);
+    expect(await shown(page)).toHaveLength(4);
+    expect(errors).toEqual([]);
+    await page.close();
+  }, 30_000);
+});
+
+describe("缺口", () => {
+  test("没补的缺口画成色带，被交易计划用作目标的标「目标位」；「缺口」看得见、没被挡，点一下收起；周线上不画", async () => {
+    const { page, errors } = await open(undefined, "STRUCT");
+    await page.waitForSelector("#chart canvas");
+    await scrollIntoCenter(page, ".chart-card");
+    const bands = async () => (await page.evaluate(async () => (await import("/app.js")).getChart().structure())).bands;
+    expect(await notCovered(page, ".gaps-toggle")).toBe(true);
+    expect(await page.getAttribute(".gaps-toggle", "aria-pressed")).toBe("true");
+    expect((await bands()).map((b: any) => [b.date, b.from, b.to, b.target])).toEqual([
+      [GAPS[0].date, 150, CHART.candles.length - 1, false], [GAPS[1].date, 270, CHART.candles.length - 1, true],
+    ]);
+    expect((await bands())[1].label).toBe(`缺口 ${GAPS[1].bottom.toFixed(2)}–${GAPS[1].top.toFixed(2)} · 目标位`);
+    // 色带真的画在图上：关掉缺口后图的样子变了（结构标注没动）
+    const shot = () => page.locator("#chart").screenshot();
+    const on = await shot();
+    await page.click(".gaps-toggle");
+    expect(await page.getAttribute(".gaps-toggle", "aria-pressed")).toBe("false");
+    expect(await bands()).toEqual([]);
+    expect(Buffer.compare(on, await shot())).not.toBe(0);
+    await page.click(".gaps-toggle");
+    await page.click('[data-frame="week"]');
+    expect(await page.isDisabled(".gaps-toggle")).toBe(true);
+    expect(await bands()).toEqual([]);
+    expect(errors).toEqual([]);
+    await page.close();
+  }, 30_000);
+});
+
+describe("日 / 周切换", () => {
+  const chartApi = <T,>(page: Page, fn: string) => page.evaluate(async (fn) => (await import("/app.js")).getChart()[fn](), fn) as Promise<T>;
+  const W = CHART.weekly;
+
+  test("点「周」：周 K 线、读数写那一周和比上一周的涨跌；只在日线上的按钮不能点；点「日」回来", async () => {
+    const { page, errors } = await open();
+    await page.waitForSelector("#chart canvas");
+    await scrollIntoCenter(page, ".chart-card");
+    for (const sel of ['[data-frame="day"]', '[data-frame="week"]']) expect({ sel, ok: await notCovered(page, sel) }).toEqual({ sel, ok: true });
+    expect(await page.getAttribute('[data-frame="day"]', "aria-pressed")).toBe("true");
+    await page.click('[data-frame="week"]');
+    expect(await chartApi(page, "frame")).toBe("week");
+    expect((await chartApi<any>(page, "replay")).bars).toBe(W.candles.length);
+    expect(await page.textContent(".chart-card .chart-frame")).toBe("周线");
+    const [prev, last] = W.candles.slice(-2);
+    const ro = (await page.textContent("#chart-readout"))!;
+    expect(ro).toContain(`周 ${last.time}（本周未完）`);
+    expect(ro).toContain(`${((last.close / prev.close - 1) * 100).toFixed(2).replace("-", "−")}%`);
+    expect(ro).toContain(`MA20 ${W.lines.MA20.at(-1)!.value.toFixed(2)}`);
+    expect(ro).not.toContain("MA200");
+    for (const sel of [".replay-toggle", ".measure-toggle", ".struct-toggle", ".range-btn[data-range='1w']", ".range-btn[data-range='1m']"]) {
+      expect({ sel, off: await page.isDisabled(sel) }).toEqual({ sel, off: true });
+    }
+    expect(await page.getAttribute(".range-btn[data-range='all']", "aria-pressed")).toBe("true");
+    expect(await page.isDisabled(".draw-toggle")).toBe(false); // 画线、价位线是价格，周线上照常
+    await page.click('[data-frame="day"]');
+    expect(await chartApi(page, "frame")).toBe("day");
+    expect((await chartApi<any>(page, "replay")).bars).toBe(CHART.candles.length);
+    expect(await page.textContent("#chart-readout")).toContain(CHART.candles.at(-1)!.time);
+    expect(await page.getAttribute(".range-btn[data-range='1y']", "aria-pressed")).toBe("true");
+    expect(await page.isDisabled(".replay-toggle")).toBe(false);
+    expect(errors).toEqual([]);
+    await page.close();
+  }, 30_000);
+
+  test("测量中、回放中切到周线：先退出（模式互斥，回放只在日线上）", async () => {
+    const { page, errors } = await open();
+    await page.waitForSelector("#chart canvas");
+    await scrollIntoCenter(page, ".chart-card");
+    await page.click(".measure-toggle");
+    expect(await chartApi(page, "tool")).toBe("measure");
+    await page.click('[data-frame="week"]');
+    expect(await chartApi(page, "tool")).toBe("none");
+    expect(await page.getAttribute(".measure-toggle", "aria-pressed")).toBe("false");
+    await page.click('[data-frame="day"]');
+    await page.click(".replay-toggle");
+    await page.click(".replay-start");
+    await page.click('[data-start="earliest"]');
+    await page.waitForFunction(async () => (await import("/app.js")).getChart().replay().mode === "replay");
+    await page.click('[data-frame="week"]');
+    expect((await chartApi<any>(page, "replay")).mode).toBe("off");
+    expect(await page.isVisible(".replay-bar")).toBe(false);
+    expect(await chartApi(page, "frame")).toBe("week");
+    expect(errors).toEqual([]);
+    await page.close();
   }, 30_000);
 });
 
@@ -1772,6 +1959,12 @@ describe("盲测练习", () => {
     expect(await page.isVisible(".replay-toggle")).toBe(false);
     // 图上的时间写成 T+n
     expect(await page.textContent("#chart-readout")).toContain("T0");
+    // 结构标注不画（会提前说出答案），按钮不能点
+    expect(await page.locator("#chart .struct-mark").count()).toBe(0);
+    expect(await page.isDisabled(".struct-toggle")).toBe(true);
+    expect(await page.isDisabled(".gaps-toggle")).toBe(true);
+    // 周线不能切（练习的图只到现在那根，周线会用到之后的 K 线）
+    expect(await page.isDisabled('[data-frame="week"]')).toBe(true);
     for (const sel of ['[data-act="plan"]', '[data-act="step"]', '[data-act="play"]', '[data-act="reveal"]']) {
       expect({ sel, ok: await usable(page, `#practice ${sel}`) }).toEqual({ sel, ok: true });
     }

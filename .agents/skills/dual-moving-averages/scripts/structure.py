@@ -61,6 +61,7 @@ class Pattern:
     state: str                  # 已形成 / 待确认
     dates: list[str]            # 构成它的几个构造的新高（新低）日期
     level: float                # M/W：颈线；2B：前高 A（前低 A）
+    confirmed: str | None       # 收盘越过 level 的第一根（已形成）；待确认为 None
 
 
 @dataclass(frozen=True)
@@ -186,6 +187,11 @@ def _beyond(side: Side, value: float, level: float) -> bool:
     return value < level if side == Side.TOP else value > level
 
 
+def _first_beyond(side: Side, close: list[float], start: int, stop: int, level: float) -> int | None:
+    """close[start:stop] 里第一根收盘越过 level 的序号，没有为 None。"""
+    return next((i for i in range(start, min(stop, len(close))) if _beyond(side, close[i], level)), None)
+
+
 def _patterns(records: list[_Record], kept: list[_Record], close: list[float], dates: list[str]) -> list[Pattern]:
     found: list[tuple[int, Pattern]] = []
     # M 顶：顶、底、顶，之后（下一个端点完成前）收盘跌破中间那个底（颈线）。W 底镜像。
@@ -193,21 +199,21 @@ def _patterns(records: list[_Record], kept: list[_Record], close: list[float], d
         a, b, c = kept[j:j + 3]
         nxt = kept[j + 3] if j + 3 < len(kept) else None
         neck = b.price
-        window = close[c.pivot + 1:(nxt.done + 1) if nxt else len(close)]
+        hit = _first_beyond(a.side, close, c.pivot + 1, (nxt.done + 1) if nxt else len(close), neck)
         name = "M 顶" if a.side == Side.TOP else "W 底"
         when = [dates[r.pivot] for r in (a, b, c)]
-        if any(_beyond(a.side, v, neck) for v in window):
-            found.append((c.pivot, Pattern(name, "已形成", when, neck)))
+        if hit is not None:
+            found.append((c.pivot, Pattern(name, "已形成", when, neck, dates[hit])))
         elif nxt is None:
-            found.append((c.pivot, Pattern(name, "待确认", when, neck)))
+            found.append((c.pivot, Pattern(name, "待确认", when, neck, None)))
     # 2B：构造 A 被新高 C 破坏（中间没有反向构造），C 之后几根内收盘又跌回 A 之下。
     for r, nxt in zip(records, records[1:]):
         if r.broken is None:
             continue
-        window = close[nxt.pivot + 1:nxt.pivot + 1 + TWO_B_BARS]
-        if any(_beyond(r.side, v, r.price) for v in window):
+        hit = _first_beyond(r.side, close, nxt.pivot + 1, nxt.pivot + 1 + TWO_B_BARS, r.price)
+        if hit is not None:
             name = "2B 顶" if r.side == Side.TOP else "2B 底"
-            found.append((nxt.pivot, Pattern(name, "已形成", [dates[r.pivot], dates[nxt.pivot]], r.price)))
+            found.append((nxt.pivot, Pattern(name, "已形成", [dates[r.pivot], dates[nxt.pivot]], r.price, dates[hit])))
     return [p for _, p in sorted(found, key=lambda t: t[0])]
 
 

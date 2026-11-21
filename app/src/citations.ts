@@ -113,7 +113,15 @@ export interface Construct {
   lh_date: string | null; done_date: string | null; broken_date: string | null;
   complete_at: number | null; next_at: number | null; bars_left: number | null;
 }
-export interface StructureOut { available: boolean; top?: Construct | null; bottom?: Construct | null }
+/** 波段端点（高低交替）。 */
+export interface Pivot { kind: "高" | "低"; date: string; price: number }
+/** M 顶 / W 底 / 2B（rules.md J25、J26）：level 是颈线（2B 是前高 A），confirmed 是收盘越过它的那根，待确认为 null。 */
+export interface Pattern {
+  name: "M 顶" | "W 底" | "2B 顶" | "2B 底"; state: "已形成" | "待确认"; dates: string[]; level: number; confirmed?: string | null;
+}
+export interface StructureOut {
+  available: boolean; top?: Construct | null; bottom?: Construct | null; pivots?: Pivot[]; patterns?: Pattern[];
+}
 
 export interface FrameLine { period: number; ma: number; ema: number }
 export type Unavailable = { available: false; reason: string };
@@ -202,6 +210,8 @@ export interface Analysis {
   thresholds: Record<string, { value: number; source: string }>;
   projection: ProjectionOut;
   structure: StructureOut;
+  /** 没补的向下缺口（tradeplan.unfilled_gaps，和找目标位同一个定义）：top 是跳空前一根的最低价，bottom 是没补的那段的底。旧数据没有。 */
+  gaps?: { date: string; top: number; bottom: number }[];
   weekly: Weekly;
   hourly: Hourly;
   ma200: Ma200;
