@@ -147,6 +147,47 @@ uv run .agents/skills/dual-moving-averages/scripts/dma_analyze.py TSLA --asof 20
 uv run .agents/skills/dual-moving-averages/scripts/dma_analyze.py NVDA --source yfinance
 ```
 
+## 换一套自己的着色规则
+
+工作台按破线拐头信号给 K 线上色。自带的规则只看 MA20 的破线和拐头，是 LEI 黑绿线指标第一个因子的简化版。想用自己的规则，就在本机放一个着色插件，不用改仓库里的代码。背景和取舍见 [ADR 0020](docs/adr/0020.md)。
+
+着色插件是一个 Python 文件，暴露三样：
+
+```python
+import pandas as pd
+
+NAME = "我的着色"                      # 图例里显示的名字
+LEGEND = ["绿：……", "黑：……"]          # 图例的几行说明
+
+
+def tones(df: pd.DataFrame) -> pd.Series:
+    """df 是算好均线的 K 线，至少有 Open High Low Close Volume。日线图给日线，周线图给周线。
+
+    返回的 Series 索引和 df.index 相同，值是 "bull"、"bear"、"mixed" 或空值，空值表示这根不上色。
+    """
+    ...
+```
+
+插件放在哪，按这个顺序找：
+
+1. 环境变量 `DMA_TONE_PLUGIN`，值是插件文件的路径。相对路径从仓库根目录算起。
+2. 仓库根目录 `.env` 里的 `DMA_TONE_PLUGIN`。
+3. 仓库根目录下的 `private/tone_plugin.py`，文件存在就用。`private/` 不进仓库。
+
+`DMA_TONE_PLUGIN` 设成空值表示不用插件。
+
+- **换了插件要重启工作台**：分析结果缓存在服务端内存里。最新行情的结果 10 分钟后会重算，回放某一天的结果要重启才重算。
+- **插件出错**：退回自带规则，分析照常出。原因在图表数据的 `tone_source.warning` 里，命令行会把它打到 stderr。
+- **图例还没接**：图上的颜色已经是插件的，按钮上的说明暂时还是自带规则的那几行。
+- **练习不读插件**：盲测回放和识别题只用自带规则，题目在每台机器上一样。网页报告（`--html`）也只用自带规则。
+- **回测和规则不读颜色**：换着色规则不改变打法、交易计划和回测结果。
+
+确认插件生效：
+
+```bash
+uv run .agents/skills/dual-moving-averages/scripts/dma_analyze.py NVDA --json | python3 -c "import json, sys; print(json.load(sys.stdin)['chart']['tone_source'])"
+```
+
 ## 目录
 
 ```
