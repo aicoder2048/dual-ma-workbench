@@ -126,7 +126,7 @@ def run_chunk(job: tuple[str, str, int, int, int]) -> tuple[str, int, list[dict]
 
 # 不影响每天计划的脚本：改了它们缓存照用
 NOT_RULES = ("fullplan.py", "plansim.py", "planrun.py", "evaluate.py", "evalstats.py", "backtest.py", "html_report.py",
-             "holdout.py")
+             "holdout.py", "tones.py")
 
 
 def fingerprint(csv: Path, cfg: dict) -> str:

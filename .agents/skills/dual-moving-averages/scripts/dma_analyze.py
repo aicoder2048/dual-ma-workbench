@@ -593,6 +593,8 @@ def main() -> None:
     p.add_argument("--risk-amount", type=float, help="每笔可承受亏损的固定金额；给了就不用 --risk-pct")
     p.add_argument("--json", action="store_true",
                    help="改为输出 JSON：{analysis, chart}，给网页工作台和 agent 工具用")
+    p.add_argument("--builtin-tones", action="store_true",
+                   help="--json 的 K 线着色只用自带规则，不读本机的着色插件（见 tones.py）；盲测练习用，题目在每台机器上一样")
     a = p.parse_args()
     if not a.ticker and not a.csv:
         p.error("需要 ticker 或 --csv")
@@ -615,7 +617,8 @@ def main() -> None:
     if a.json:
         from html_report import CHART_BARS, chart_data, weekly_chart
 
-        chart = {**chart_data(df, result, a.chart_bars or CHART_BARS), "weekly": weekly_chart(history, result)}
+        chart = {**chart_data(df, result, a.chart_bars or CHART_BARS, a.builtin_tones),
+                 "weekly": weekly_chart(history, result, a.builtin_tones)}
         print(json.dumps({"analysis": result, "chart": chart},
                          ensure_ascii=False, allow_nan=False))
         return

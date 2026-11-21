@@ -1,6 +1,7 @@
 """测试共用：把 scripts/ 加进导入路径，读提交进仓库的真实行情（tests/fixtures，不联网）。"""
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
@@ -9,6 +10,8 @@ import pandas as pd
 SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
 sys.path.insert(0, str(SCRIPTS))
+# 不用着色插件：本机放了 private/tone_plugin.py 或 .env 里配了也不改变测试结果（子进程跑的脚本继承这个环境变量）
+os.environ["DMA_TONE_PLUGIN"] = ""
 
 from indicators import add_indicators  # noqa: E402
 

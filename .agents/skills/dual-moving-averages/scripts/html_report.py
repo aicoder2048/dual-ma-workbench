@@ -19,6 +19,7 @@ from __future__ import annotations
 import html
 import json
 import re
+from dataclasses import asdict
 from datetime import datetime
 from pathlib import Path
 
@@ -26,6 +27,7 @@ import pandas as pd
 
 from indicators import NAIVE_MA
 from rules import VOLUME_SPIKE
+from tones import bar_tones
 from weekly import partial_week, weekly_frame
 
 CHART_BARS = 260  # 图上显示最近多少根日 K 线
@@ -56,19 +58,8 @@ def _bullets(items: list[str] | None, cls: str = "notes") -> str:
     return f'<ul class="{cls}">' + "".join(f"<li>{_t(i)}</li>" for i in items) + "</ul>"
 
 
-def bar_tones(df: pd.DataFrame) -> pd.Series:
-    """破线拐头着色：收盘 >= 20 日抵扣价（MA20 不降）且 >= MA20 为 bull，两样都不满足为 bear，只满足一样为 mixed。"""
-    close = df["Close"]
-    drop = close.shift(20)
-    above_drop = close >= drop
-    above_ma = close >= df["MA20"]
-    tone = pd.Series("mixed", index=df.index, dtype=object)
-    tone[above_drop & above_ma] = "bull"
-    tone[~above_drop & ~above_ma] = "bear"
-    return tone.where(drop.notna() & df["MA20"].notna())
-
-
-def chart_data(df: pd.DataFrame, a: dict, bars: int = CHART_BARS) -> dict:
+def chart_data(df: pd.DataFrame, a: dict, bars: int = CHART_BARS, builtin_only: bool = False) -> dict:
+    """图表数据。K 线的颜色和来源（tone_source）出自 tones.bar_tones；builtin_only 只用自带的着色规则，不读着色插件。"""
     view = df.tail(bars)
     dates = [d.strftime("%Y-%m-%d") for d in view.index]
 
@@ -78,7 +69,8 @@ def chart_data(df: pd.DataFrame, a: dict, bars: int = CHART_BARS) -> dict:
     candles = [{"time": t, "open": float(r.get("Open", r["Close"])), "high": float(r.get("High", r["Close"])),
                 "low": float(r.get("Low", r["Close"])), "close": float(r["Close"])}
                for t, (_, r) in zip(dates, view.iterrows())]
-    for c, tone in zip(candles, bar_tones(df).reindex(view.index)):
+    tones, tone_source = bar_tones(df, builtin_only)
+    for c, tone in zip(candles, tones.reindex(view.index)):
         if isinstance(tone, str):
             c["tone"] = tone
     volume = []
@@ -93,15 +85,15 @@ def chart_data(df: pd.DataFrame, a: dict, bars: int = CHART_BARS) -> dict:
     lines = {f"{k}{ln['period']}": line(view[f"{k}{ln['period']}"]) for ln in a["lines"] for k in ("MA", "EMA")}
     # MA200 朴素规则的对照线（工作台默认不画）；日线窗口前 199 根没有值
     lines[f"MA{NAIVE_MA}"] = line(df["Close"].rolling(NAIVE_MA).mean().reindex(view.index))
-    return {"candles": candles, "volume": volume, "lines": lines, "drops": drops}
+    return {"candles": candles, "volume": volume, "lines": lines, "drops": drops, "tone_source": asdict(tone_source)}
 
 
-def weekly_chart(history: pd.DataFrame, a: dict) -> dict:
+def weekly_chart(history: pd.DataFrame, a: dict, builtin_only: bool = False) -> dict:
     """工作台的周线图：周线判断用的那段历史（实时取 5 年）全画，均线、抵扣价、着色照日线的算法跑在周 K 线上。
 
     MA200 是日线朴素规则的对照，周线不画；大量是按 50 日均量定的，周线不标，也不给量比。
     """
-    out = chart_data(weekly_frame(history), a, len(history))
+    out = chart_data(weekly_frame(history), a, len(history), builtin_only)
     del out["lines"][f"MA{NAIVE_MA}"]
     out["volume"] = [{"time": v["time"], "value": v["value"], "spike": False} for v in out["volume"]]
     return {**out, "partial": partial_week(history)}
@@ -119,7 +111,8 @@ def render_html(a: dict, df: pd.DataFrame, commentary: dict | None = None) -> st
     against = "空" if lean["score"] >= 0 else "多"
     flip = next((f["text"] for f in lean["flips"] if f["toward"] == against), "暂无：方向不明，等均线理顺")
     chg_cls = "up" if a["change_pct"] >= 0 else "down"
-    chart_json = json.dumps(chart_data(df, a), ensure_ascii=False).replace("</", "<\\/")
+    # 报告可能发布出去，页面也不按 tone 上色：只用自带规则，本机着色插件的名字和说明不写进文件
+    chart_json = json.dumps(chart_data(df, a, builtin_only=True), ensure_ascii=False).replace("</", "<\\/")
 
     line_rows = "".join(
         f"<tr><th>{ln['period']}</th><td>{ln['ma']:.2f}</td><td>{ln['ema']:.2f}</td>"

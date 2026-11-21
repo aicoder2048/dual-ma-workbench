@@ -16,6 +16,7 @@
 
 输出一行 JSON：{"chart": 到最后一天的图表数据（整段）, "analyses": [每一天的 analysis，按 --dates 的顺序]}。
 图表的均线、着色、放量都只看当天及以前，题库按题目那一根切开用，不会看到之后的 K 线。
+着色只用自带规则，不读本机的着色插件（见 tones.py）：题目在每台机器上一样。
 """
 from __future__ import annotations
 
@@ -65,7 +66,7 @@ def main() -> None:
     else:
         analyses = [analyze_at(df, d, a.csv) for d in days]
     last = dma.windows(df, pd.Timestamp(max(days)))[0]
-    chart = chart_data(add_indicators(last.copy()), analyses[days.index(max(days))], 100_000)
+    chart = chart_data(add_indicators(last.copy()), analyses[days.index(max(days))], 100_000, builtin_only=True)
     print(json.dumps({"chart": chart, "analyses": analyses}, ensure_ascii=False, allow_nan=False))
 
 

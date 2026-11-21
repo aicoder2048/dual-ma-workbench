@@ -220,8 +220,9 @@ export class Practice {
     return b;
   }
 
+  /** 练习的 K 线只用自带的着色规则，不读本机的着色插件：同一道题在每台机器上一样。 */
   private async python(args: string[]): Promise<AnalyzeResult> {
-    return JSON.parse(await this.o.run(args)) as AnalyzeResult;
+    return JSON.parse(await this.o.run([...args, "--builtin-tones"])) as AnalyzeResult;
   }
 
   /**
@@ -291,6 +292,7 @@ export class Practice {
       volume: within(full.volume),
       lines: Object.fromEntries(Object.entries(full.lines).map(([k, xs]) => [k, within(xs)])),
       drops: PERIODS.filter((n) => index - n + 1 >= from).map((n) => ({ time: full.candles[index - n + 1 - first].time, period: n })),
+      tone_source: full.tone_source,
     };
   }
 
@@ -506,6 +508,7 @@ export class Practice {
         volume: within(full.volume).map((v) => ({ ...v, time: day(v.time) })),
         lines: Object.fromEntries(Object.entries(full.lines).map(([n, xs]) => [n, within(xs).map((p) => ({ time: day(p.time), value: p.value * k }))])),
         drops: [],
+        tone_source: full.tone_source,
       },
     };
   }

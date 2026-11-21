@@ -175,7 +175,7 @@ def day_of(a: dict) -> tr.Day:
 def _fingerprint(files: list[Path], start: str) -> str:
     h = hashlib.sha256((start + ",".join(tr.Day.__dataclass_fields__)).encode())
     for p in sorted(SCRIPTS.glob("*.py")):
-        if p.name not in ("backtest.py", "trades.py", "html_report.py"):
+        if p.name not in ("backtest.py", "trades.py", "html_report.py", "tones.py"):
             h.update(p.read_bytes())
     for f in files:
         h.update(f.read_bytes())
