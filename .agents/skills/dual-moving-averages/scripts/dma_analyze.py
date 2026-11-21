@@ -438,7 +438,7 @@ def analyze(df: pd.DataFrame, label: str, src: str, history: pd.DataFrame | None
         "play": play, "trade_plan": tp.plan_json(plan), "rules": results,
         "thresholds": {k: {"value": v, "source": s} for k, (v, s) in THRESHOLDS.items()},
         "drops": drops, "lean": lean,
-        "projection": projection(df), "structure": structure_json(df), "weekly": weekly,
+        "projection": projection(df), "structure": structure_json(df), "gaps": tp.gaps_json(df), "weekly": weekly,
         "hourly": hourly, "ma200": ma200_of(df, regime),
         "earnings": earnings or NO_EARNINGS,
     }

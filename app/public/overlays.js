@@ -113,3 +113,19 @@ export function structureScene(s, candles) {
   }
   return { segments, levels, marks };
 }
+
+/**
+ * 没补的缺口（分析 JSON 的 gaps，和交易计划找目标位同一个定义）→ 色带：从跳空那根画到最新一根，上沿是前一根最低价，
+ * 下沿是还没补的那段的底。targets 是交易计划的目标位，缺口被用作目标的标出来。跳空在图的第一根之前时从第一根画起。
+ */
+export function gapBands(gaps, targets, candles) {
+  if (!gaps?.length || !candles.length) return [];
+  const used = (g) => (targets ?? []).some((t) => t.kind === "缺口" && t.date === g.date && Math.abs(t.price - g.bottom) < 1e-6);
+  const last = candles.length - 1;
+  return gaps.filter((g) => g.date <= candles[last].time).map((g) => {
+    const from = candles.findIndex((c) => c.time >= g.date);
+    const target = used(g);
+    return { from, to: last, top: g.top, bottom: g.bottom, target, date: g.date,
+      label: `缺口 ${f2(g.bottom)}–${f2(g.top)}${target ? " · 目标位" : ""}` };
+  });
+}

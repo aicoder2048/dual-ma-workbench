@@ -210,6 +210,8 @@ export interface Analysis {
   thresholds: Record<string, { value: number; source: string }>;
   projection: ProjectionOut;
   structure: StructureOut;
+  /** 没补的向下缺口（tradeplan.unfilled_gaps，和找目标位同一个定义）：top 是跳空前一根的最低价，bottom 是没补的那段的底。旧数据没有。 */
+  gaps?: { date: string; top: number; bottom: number }[];
   weekly: Weekly;
   hourly: Hourly;
   ma200: Ma200;

@@ -125,10 +125,17 @@ def test_unfilled_gap_down_target_is_the_unfilled_bottom():
     assert [(g.price, g.date) for g in gaps] == [(107, "2024-01-03")]
 
 
+def test_gap_list_for_the_chart_is_the_same_gap_with_its_unfilled_part():
+    idx = pd.bdate_range("2024-01-01", periods=6)
+    df = pd.DataFrame({"High": [112, 111, 105, 107, 104, 103], "Low": [109, 110, 101, 102, 100, 99]}, index=idx)
+    assert tp.gaps_json(df) == [{"date": "2024-01-03", "top": 110, "bottom": 107}]
+
+
 def test_filled_gap_is_not_a_target():
     idx = pd.bdate_range("2024-01-01", periods=4)
     df = pd.DataFrame({"High": [112, 105, 111, 104], "Low": [110, 101, 103, 100]}, index=idx)
     assert tp.gaps_above(df, 100) == []
+    assert tp.gaps_json(df) == []
 
 
 def test_previous_high_when_nothing_above():
@@ -226,6 +233,14 @@ def test_googl_bottom_turn_plan_targets_the_gap(plans):
     assert f["rr"] == pytest.approx(1.33, abs=0.01) and f["rr_verdict"] == "不做"
     assert f["rr_gap"]["target_for_min"] == pytest.approx(193.34, abs=0.01)
     assert plans["GOOGL"]["trade_plan"]["holding"]["stop"] is None
+
+
+def test_gap_target_is_one_of_the_gaps_the_chart_draws(plans):
+    a = plans["GOOGL"]
+    target = a["trade_plan"]["flat"]["targets"][0]
+    drawn = {(g["date"], g["bottom"]) for g in a["gaps"]}
+    assert (target["date"], target["price"]) in drawn
+    assert all(g["bottom"] < g["top"] and g["bottom"] > a["close"] for g in a["gaps"])
 
 
 # ---------- 到第一目标（P25）：检查点，不是自动离场 ----------

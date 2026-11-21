@@ -226,6 +226,8 @@ export function showAnalysis(data, asof = null) {
   chartApi?.setData(practiceChart ?? data.chart, a.label);
   chartApi?.setEarnings(practiceChart ? null : a.earnings);
   chartApi?.setStructure(practiceChart ? null : a.structure); // 练习里不画：结构标注会提前说出答案
+  const tp = a.trade_plan;
+  chartApi?.setGaps(practiceChart ? null : a.gaps, [...tp.flat.targets, ...tp.holding.targets]);
 
   const steps = $("steps");
   steps.innerHTML = "";

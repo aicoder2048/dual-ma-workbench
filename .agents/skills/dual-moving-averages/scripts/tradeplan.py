@@ -149,8 +149,15 @@ def size_position(entry: float | None, stop: float | None, sizing: Sizing) -> tu
 
 # ---------- 目标位（P25） ----------
 
-def gaps_above(df: pd.DataFrame, price: float) -> list[Target]:
-    """还没补上的向下缺口：某根最高价低于前一根最低价，之后最高价一直没回到前一根最低价。目标是缺口下沿（没补的那段的底）。"""
+@dataclass(frozen=True)
+class Gap:
+    date: str              # 跳空那根
+    top: float             # 前一根的最低价
+    bottom: float          # 没补的那段的底：跳空以来的最高价
+
+
+def unfilled_gaps(df: pd.DataFrame) -> list[Gap]:
+    """还没补上的向下缺口：某根最高价低于前一根最低价，之后最高价一直没回到前一根最低价。"""
     if not {"High", "Low"} <= set(df.columns):
         return []
     hi, lo = df["High"].to_numpy(), df["Low"].to_numpy()
@@ -159,9 +166,19 @@ def gaps_above(df: pd.DataFrame, price: float) -> list[Target]:
         if hi[i] >= lo[i - 1]:
             continue
         top, bottom = lo[i - 1], hi[i:].max()
-        if bottom < top and bottom > price:
-            out.append(Target(float(bottom), "缺口", "P25", "视频", str(df.index[i].date())))
+        if bottom < top:
+            out.append(Gap(str(df.index[i].date()), float(top), float(bottom)))
     return out
+
+
+def gaps_json(df: pd.DataFrame) -> list[dict]:
+    """JSON 里的 gaps：图上画成从跳空那天到现在的色带。"""
+    return [asdict(g) for g in unfilled_gaps(df)]
+
+
+def gaps_above(df: pd.DataFrame, price: float) -> list[Target]:
+    """价格上方没补的缺口，目标是缺口下沿（没补的那段的底）。"""
+    return [Target(g.bottom, "缺口", "P25", "视频", g.date) for g in unfilled_gaps(df) if g.bottom > price]
 
 
 def dense_zones_above(df: pd.DataFrame, price: float) -> list[Target]:

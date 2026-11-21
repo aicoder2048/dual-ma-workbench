@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { SWING_PIVOTS, structureScene } from "../public/overlays.js";
+import { gapBands, SWING_PIVOTS, structureScene } from "../public/overlays.js";
 import type { Analysis } from "../src/citations.ts";
 import nvda from "./fixtures/nvda-analysis.json";
 
@@ -92,5 +92,31 @@ describe("结构标注：structure → 图上的线和标记", () => {
     const m = structureScene(broken, CANDLES).marks.find((x) => x.text.startsWith("顶·"))!;
     expect([m.text, m.rule, m.tone]).toEqual(["顶·已破坏", "J22", "faint"]);
     expect(m.lead).toContain("2026-10-20 又创新高，构造作废");
+  });
+});
+
+describe("缺口：gaps → 色带", () => {
+  const GAPS = [{ date: "2026-04-10", top: 260, bottom: 251.5 }, { date: "2026-10-27", top: 232.4, bottom: 221.94 }];
+  const TARGETS = [{ price: 221.94, kind: "缺口", rule: "P25", source: "视频" as const, date: "2026-10-27" }];
+
+  test("从跳空那根画到最新一根；上沿是前一根最低价，下沿是没补的那段的底；被交易计划用作目标的标出来", () => {
+    expect(gapBands(GAPS, TARGETS, CANDLES)[1]).toEqual({
+      from: at("2026-10-27"), to: LAST, top: 232.4, bottom: 221.94, target: true, date: "2026-10-27", label: "缺口 221.94–232.40 · 目标位",
+    });
+  });
+
+  test("跳空在图的第一根之前：从第一根画起，不当目标", () => {
+    const b = gapBands(GAPS, TARGETS, CANDLES)[0];
+    expect([b.from, b.target, b.label]).toEqual([0, false, "缺口 251.50–260.00"]);
+  });
+
+  test("同一天别的目标（均线密集、前高）不算缺口目标；没有缺口、练习里不画", () => {
+    expect(gapBands(GAPS, [{ ...TARGETS[0], kind: "前高" }], CANDLES)[1].target).toBe(false);
+    expect(gapBands([], TARGETS, CANDLES)).toEqual([]);
+    expect(gapBands(null, TARGETS, CANDLES)).toEqual([]);
+  });
+
+  test("回放截到跳空之前：之后才出现的缺口不画", () => {
+    expect(gapBands(GAPS, TARGETS, CANDLES.slice(0, at("2026-10-26") + 1))).toHaveLength(1);
   });
 });

@@ -82,6 +82,9 @@ const STRUCTURE = (() => {
   };
 })();
 
+/** 缺口替身：第 150、270 根跳空向下，之后没补满（下沿是之后最高价够到的地方）。 */
+const GAPS = [150, 270].map((i) => ({ date: CHART.candles[i].time, top: CHART.candles[i - 1].low + 6, bottom: CHART.candles[i - 1].low + 1 }));
+
 const MP3 = readFileSync(resolve(import.meta.dir, "../test/fixtures/tts-sample.mp3"));
 const ttsCalls: { text: string; voice: string }[] = [];
 const wsSent: any[] = [];
@@ -119,7 +122,11 @@ beforeAll(async () => {
         return JSON.stringify({ analysis: { ...n, label: "BOUNCE", play: { ...n.play, key: "空头结构反弹中", rules: ["P17", "J18", "J17"] },
           trade_plan: { ...n.trade_plan, key: "空头结构反弹中", flat } }, chart: CHART });
       }
-      if (args[0] === "STRUCT") return JSON.stringify({ analysis: { ...(nvda as Analysis), label: "STRUCT", structure: STRUCTURE }, chart: CHART });
+      if (args[0] === "STRUCT") { // 结构标注和缺口：两个没补的缺口，近的那个是交易计划的目标位
+        const n = nvda as Analysis;
+        const flat = { ...n.trade_plan.flat, targets: [{ price: GAPS[1].bottom, kind: "缺口", rule: "P25", source: "视频" as const, date: GAPS[1].date }] };
+        return JSON.stringify({ analysis: { ...n, label: "STRUCT", structure: STRUCTURE, gaps: GAPS, trade_plan: { ...n.trade_plan, flat } }, chart: CHART });
+      }
       if (args[0] === "EARN") { // 3 天后财报：图上标 E，结论卡片提醒跳空
         const n = nvda as Analysis;
         return JSON.stringify({ analysis: { ...n, label: "EARN", earnings: EARNINGS,
@@ -934,6 +941,34 @@ describe("结构标注", () => {
     await page.click(".replay-exit");
     expect(await page.isDisabled(".struct-toggle")).toBe(false);
     expect(await shown(page)).toHaveLength(4);
+    expect(errors).toEqual([]);
+    await page.close();
+  }, 30_000);
+});
+
+describe("缺口", () => {
+  test("没补的缺口画成色带，被交易计划用作目标的标「目标位」；「缺口」看得见、没被挡，点一下收起；周线上不画", async () => {
+    const { page, errors } = await open(undefined, "STRUCT");
+    await page.waitForSelector("#chart canvas");
+    await scrollIntoCenter(page, ".chart-card");
+    const bands = async () => (await page.evaluate(async () => (await import("/app.js")).getChart().structure())).bands;
+    expect(await notCovered(page, ".gaps-toggle")).toBe(true);
+    expect(await page.getAttribute(".gaps-toggle", "aria-pressed")).toBe("true");
+    expect((await bands()).map((b: any) => [b.date, b.from, b.to, b.target])).toEqual([
+      [GAPS[0].date, 150, CHART.candles.length - 1, false], [GAPS[1].date, 270, CHART.candles.length - 1, true],
+    ]);
+    expect((await bands())[1].label).toBe(`缺口 ${GAPS[1].bottom.toFixed(2)}–${GAPS[1].top.toFixed(2)} · 目标位`);
+    // 色带真的画在图上：关掉缺口后图的样子变了（结构标注没动）
+    const shot = () => page.locator("#chart").screenshot();
+    const on = await shot();
+    await page.click(".gaps-toggle");
+    expect(await page.getAttribute(".gaps-toggle", "aria-pressed")).toBe("false");
+    expect(await bands()).toEqual([]);
+    expect(Buffer.compare(on, await shot())).not.toBe(0);
+    await page.click(".gaps-toggle");
+    await page.click('[data-frame="week"]');
+    expect(await page.isDisabled(".gaps-toggle")).toBe(true);
+    expect(await bands()).toEqual([]);
     expect(errors).toEqual([]);
     await page.close();
   }, 30_000);
@@ -1927,6 +1962,7 @@ describe("盲测练习", () => {
     // 结构标注不画（会提前说出答案），按钮不能点
     expect(await page.locator("#chart .struct-mark").count()).toBe(0);
     expect(await page.isDisabled(".struct-toggle")).toBe(true);
+    expect(await page.isDisabled(".gaps-toggle")).toBe(true);
     // 周线不能切（练习的图只到现在那根，周线会用到之后的 K 线）
     expect(await page.isDisabled('[data-frame="week"]')).toBe(true);
     for (const sel of ['[data-act="plan"]', '[data-act="step"]', '[data-act="play"]', '[data-act="reveal"]']) {
