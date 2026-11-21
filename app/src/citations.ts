@@ -354,6 +354,8 @@ export function buildFacts(a: Analysis): Facts {
   if (a.bwl) put("黑绿线", `黑绿线读数（P40–P45，颜色：${a.bwl.source.name}；只是读数，交易计划没用它）`, a.bwl.text);
   for (const [k, label, value] of profileFacts(a)) put(k, label, value);
   const fc = buildForecast(a, plans);
+  put("推演.结论", "模糊判断翻成的一句话：均线接下来几周往哪走，回撤 / 反弹该怎么看", fc.headline);
+  for (const g of fc.groups) put(`推演.${g.group}线组`, `${g.group} 线组最近的关键变化：现在朝哪走、收盘不变哪天拐头、明天站上 / 跌破哪就拐头`, `${g.now}：${g.text}${g.aux ? `${g.aux}（推演求解，辅助）` : ""}`);
   put("推演.保持", `类型线 MA60、MA120 未来 ${fc.days} 天能保持多久、守在哪`, fc.hold);
   put("推演.最早", "这套打法的条件最早哪天能齐", fc.earliest);
   put("推演.失效", "什么价位推翻这个判断", fc.invalid.text);
