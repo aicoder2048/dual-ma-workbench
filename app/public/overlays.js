@@ -49,8 +49,9 @@ function patternLead(p) {
  * - levels：形成中的构造"下一根怎样"的价位（J27），从新高（新低）那根画到最新一根
  * - marks：最近的顶部、底部构造和 M 顶 / W 底 / 2B 的标记，点开看规则原文
  * 点用 { i: 第几根, price }；不在图上的点所在的线、标记不画。
+ * parts：三个图层各画不画（layers.js）。swings：波段连线；constructs：构造的标记和 levels；patterns：M / W / 2B 的标记和颈线。
  */
-export function structureScene(s, candles) {
+export function structureScene(s, candles, parts = { constructs: true, patterns: true, swings: true }) {
   const empty = { segments: [], levels: [], marks: [] };
   if (!s?.available || !candles.length) return empty;
   const idx = indexer(candles);
@@ -60,7 +61,7 @@ export function structureScene(s, candles) {
     const i = idx(date);
     return i === null ? null : { i, price };
   };
-  const pivots = (s.pivots ?? []).slice(-SWING_PIVOTS);
+  const pivots = parts.swings ? (s.pivots ?? []).slice(-SWING_PIVOTS) : [];
   for (let k = 1; k < pivots.length; k++) {
     const a = pt(pivots[k - 1].date, pivots[k - 1].price), b = pt(pivots[k].date, pivots[k].price);
     if (a && b) segments.push({ kind: "swing", a, b });
@@ -73,8 +74,9 @@ export function structureScene(s, candles) {
     const a = pt(end.date, end.price), b = pt(forming.pivot_date, forming.pivot_price);
     if (a && b) segments.push({ kind: "tentative", a, b });
   }
+  const marked = parts.constructs ? constructs : [];
   const levels = [];
-  for (const c of constructs) {
+  for (const c of marked) {
     const price = c.complete_at ?? c.next_at;
     const i = idx(c.pivot_date);
     if (c.state !== "形成中" || price == null || i === null) continue;
@@ -83,7 +85,7 @@ export function structureScene(s, candles) {
       text: `下一根${cond} ${c.side === TOP ? "顶" : "底"}构造${c.bars_left === 1 ? "完成" : "进一步"}` });
   }
   const marks = [];
-  for (const c of constructs) {
+  for (const c of marked) {
     const i = idx(c.pivot_date);
     if (i === null) continue;
     const top = c.side === TOP;
@@ -93,7 +95,7 @@ export function structureScene(s, candles) {
   }
   // M / W 和 2B 各只标最近的一个：五个全标会把最近几根 K 线盖住
   const latest = (two) => (s.patterns ?? []).filter((p) => p.name.startsWith("2B") === two).at(-1);
-  for (const p of [latest(false), latest(true)].filter(Boolean)) {
+  for (const p of parts.patterns ? [latest(false), latest(true)].filter(Boolean) : []) {
     const top = p.name.endsWith("顶");
     const at = idx(p.confirmed ?? p.dates.at(-1));
     if (at === null) continue;
