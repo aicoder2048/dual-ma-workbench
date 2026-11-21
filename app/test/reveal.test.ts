@@ -41,7 +41,7 @@ describe("推演揭晓的对照", () => {
     expect(dir.real).toBe("T+5 当天 MA20 上、MA60 上");
     expect(dir.agree).toBe(false);
     expect(dir.why).toContain("价格没有收平");
-    expect(dir.why).toContain("T+5 收盘 110.00，比 T0 的 100.00涨了 10.0%");
+    expect(dir.why).toContain("T+5 收盘 110.00，比 T0 的 100.00 涨了 10.0%");
     const [same] = revealOf({ close: 100, parts: [{ q: "dir", n: 5 }] }, ["MA20 上、MA60 上"], s);
     expect(same).toMatchObject({ agree: true, why: null });
   });

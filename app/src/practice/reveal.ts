@@ -85,7 +85,7 @@ function drift(s: Series, n: number, close: number): string {
   const xs = s.close.slice(1, n + 1);
   const end = xs.at(-1)!;
   const pct = (end / close - 1) * 100;
-  return `价格没有收平：${tl(n)} 收盘 ${f2(end)}，比 T0 的 ${f2(close)}${pct >= 0 ? "涨" : "跌"}了 ${Math.abs(pct).toFixed(1)}%，这 ${n} 天收在 ${f2(Math.min(...xs))} ~ ${f2(Math.max(...xs))}；推演假设每天都收在 ${f2(close)}`;
+  return `价格没有收平：${tl(n)} 收盘 ${f2(end)}，比 T0 的 ${f2(close)} ${pct >= 0 ? "涨" : "跌"}了 ${Math.abs(pct).toFixed(1)}%，这 ${n} 天收在 ${f2(Math.min(...xs))} ~ ${f2(Math.max(...xs))}；推演假设每天都收在 ${f2(close)}`;
 }
 
 /** 每一问的对照。system 是题目里对的那个选项（drills.ts 传进来），turn 那一问另写推演的结论。 */

@@ -401,7 +401,8 @@ const project: Generator = (c) => {
   // 3. 要让 MA20（或 MA60）几天内拐头，收盘持平在哪：推演求解的临界价位，就是门槛路径前几天的最高（最低）价（A2）
   const p = pick([20, 60] as const, rand), days = pick(TURN_DAYS, rand);
   const s = a.projection.solves.find((x) => x.event.startsWith(`MA${p} 拐头向`) && x.happen && x.days === days);
-  if (s?.status === "有临界价位") {
+  // 临界价位就是 T0 收盘时不问：MA20 第 20 天扣的是 T0 自己，这时答案和「现价」分不开
+  if (s?.status === "有临界价位" && Math.abs(s.level! / a.close - 1) > 0.003) {
     const way = s.event.endsWith("向下") ? "下" : "上";
     const h = hurdle(p), path = h.prices.slice(0, days);
     const edge = way === "下" ? Math.max(...path) : Math.min(...path);

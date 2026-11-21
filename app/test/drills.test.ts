@@ -161,6 +161,7 @@ describe("推演揭晓、五步点图：答案也从分析的字段来", () => {
           const path = h(r.period).prices.slice(0, r.days);
           expect(picked(d, i)).toBe((r.way === "下" ? Math.max(...path) : Math.min(...path)).toFixed(2));
           expect(picked(d, i)).toBe(r.level.toFixed(2));
+          expect(Math.abs(r.level / a.close - 1)).toBeGreaterThan(0.003); // 答案不是现价本身
         }
       });
     }
