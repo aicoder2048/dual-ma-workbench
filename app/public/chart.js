@@ -1,4 +1,5 @@
 // K 线 + 6 条均线 + 抵扣价小黄点 + 成交量（TradingView lightweight-charts 4.2.0）。
+import { baseCandleStyle, candleBar as styledBar } from "./candles.js";
 import { DEFAULT_SPEED, OFF, SPEEDS, appendDelta, earliestIndex, indexOnOrBefore, randomIndex, sliceAt, speedMs, step } from "./replay.js";
 
 const SPECS = [];
@@ -264,13 +265,7 @@ export function createChart(box, legendEl) {
   let view = null; // 图上画着的：平时就是 data，回放时是截到那天的
   let toneColors = {}; // tone → 颜色，换主题时在 paint 里重取
 
-  /** 一根 K 线 → 图表库的数据点（新对象：图表库会把 time 就地改成 {year, month, day}）。阳线空心、阴线实心。 */
-  function candleBar(c) {
-    const bar = { time: c.time, open: c.open, high: c.high, low: c.low, close: c.close };
-    const color = toneOn && toneColors[c.tone];
-    if (!color) return bar;
-    return { ...bar, color: c.close >= c.open ? "rgba(0,0,0,0)" : color, borderColor: color, wickColor: color };
-  }
+  const candleBar = (c) => styledBar(c, toneOn, toneColors);
 
   function paint() {
     if (!view) return;
@@ -280,7 +275,7 @@ export function createChart(box, legendEl) {
       grid: { vertLines: { color: css("--grid") }, horzLines: { color: css("--grid") } },
       rightPriceScale: { borderColor: css("--line") }, timeScale: { borderColor: css("--line") },
     });
-    candles.applyOptions({ upColor: "rgba(0,0,0,0)", downColor: muted, borderUpColor: muted, borderDownColor: muted, wickUpColor: muted, wickDownColor: muted });
+    candles.applyOptions(baseCandleStyle({ up: css("--up"), down: css("--down") }));
     toneColors = Object.fromEntries(Object.entries(TONE_TOKENS).map(([k, t]) => [k, css(t)]));
     candles.setData(view.candles.map(candleBar));
     vol.setData(view.volume.map(volBar));
