@@ -729,6 +729,11 @@ RULES: tuple[Rule, ...] = (
     Rule("J42", Kind.VERDICT, "突破多次试探的位置，占领筹码峰", None),
     Rule("J43", Kind.VERDICT, "分歧越大，确定性越强", None),
     Rule("J44", Kind.VERDICT, "收盘高于所有爆量日，恐怕要往上", None),
+    Rule("J45", Kind.VERDICT, "筹码分布：按价格统计的成交量，每座山峰是密集成交区", None),
+    Rule("J46", Kind.VERDICT, "山脚、山顶是筹码山的价格下沿、上沿", None),
+    Rule("J47", Kind.VERDICT, "超跌反弹的目标是上方最近那座筹码山", None),
+    Rule("J48", Kind.VERDICT, "收盘翻过山顶，可能开启大行情", None),
+    Rule("J49", Kind.VERDICT, "筹码山在上方爬山难，在下方山路轻松", None),
     Rule("P1", Kind.ACTION, "横盘中段不做", p1_range_wait),
     Rule("P2", Kind.ACTION, "横盘末期埋伏", p2_ambush),
     Rule("P3", Kind.ACTION, "埋伏的底线", p3_ambush_stop),
@@ -765,6 +770,8 @@ RULES: tuple[Rule, ...] = (
     Rule("P35", Kind.ACTION, "走不好在原级别解决", None),
     Rule("P36", Kind.ACTION, "周期共振第一时间反应", None),
     Rule("P37", Kind.ACTION, "周线 2B 先看日线呼应", None),
+    Rule("P38", Kind.ACTION, "筹码山也是目标位来源，和缺口、均线密集并列", None),
+    Rule("P39", Kind.ACTION, "进了目标筹码山照 P25 看中长线", None),
 )
 BY_ID = {r.id: r for r in RULES}
 
