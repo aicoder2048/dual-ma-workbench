@@ -6,6 +6,7 @@ evaluate 为 None 的规则脚本算不了，状态固定为"需看图"。公理
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from functools import cached_property
 from enum import Enum
 from typing import TYPE_CHECKING, Callable
 
@@ -15,9 +16,10 @@ from indicators import PERIODS, arrangement
 from projection import HURDLE_DAYS, Event, EventKind, SolveStatus, hurdle_path, solve
 from regime import DENSE_PCT, RANGE_MIN_DAYS, PairProgress, Regime, Stage, Step, Transition, TrendType, Turn
 from structure import State, Structure
+from volprofile import Mountain, Profile, plan_profile
 
 if TYPE_CHECKING:
-    from tradeplan import PlanSet
+    from tradeplan import PlanSet, TradePlan
 
 VOLUME_SPIKE = 2.0       # 脚本自定：成交量 > 50 日均量 2 倍算大量
 VOLUME_PERSIST = 3       # 脚本自定：近 20 日大量 ≥ 3 天算持续放量
@@ -68,6 +70,11 @@ class Ctx:
     @property
     def row(self) -> pd.Series:
         return self.df.iloc[-1]
+
+    @cached_property
+    def profile(self) -> Profile | None:
+        """最近 1 年的筹码分布（volprofile.plan_profile）：J45–J49、P38、P39 和计划的参考筹码山读它。"""
+        return plan_profile(self.df)
 
 
 @dataclass(frozen=True)
@@ -615,6 +622,99 @@ def p20_second_chance(c: Ctx) -> Result:
                 {"MA20 明天抵扣价": float(c.df["Close"].iloc[-20])})
 
 
+# ---------- 筹码分布（视频 O）：统计区间固定为最近 1 年，见 volprofile.py ----------
+
+def _band(m: Mountain) -> str:
+    return f"{_f(m.foot)}–{_f(m.top)}"
+
+
+def _no_volume() -> Result:
+    return Result(Status.CHART, "数据里没有最高价、最低价或成交量，算不了筹码分布")
+
+
+def _with_mountains(c: Ctx) -> tuple[Profile | None, Result | None]:
+    p = c.profile
+    if p is None:
+        return None, _no_volume()
+    if not p.mountains:
+        return None, _met(False, f"{p.start} ~ {p.end} 没有哪一档的量高过平均，没有筹码山")
+    return p, None
+
+
+def j45_profile(c: Ctx) -> Result:
+    p, out = _with_mountains(c)
+    if out:
+        return out
+    big = p.largest()
+    return _met(True, f"{p.start} ~ {p.end}（{p.bars} 根，和图默认的 1 年同一段）按价格分 {len(p.volumes)} 档："
+                      f"{len(p.mountains)} 座筹码山，最大的 {_band(big)}（占 {big.share:.0%}）",
+                {"最大筹码山 山脚": big.foot, "最大筹码山 山顶": big.top})
+
+
+def j46_foot_top(c: Ctx) -> Result:
+    p, out = _with_mountains(c)
+    if out:
+        return out
+    mts = "；".join(f"山脚 {_f(m.foot)}、山顶 {_f(m.top)}（{m.share:.0%}）" for m in p.mountains)
+    return _met(True, f"量降到平均以下就出了山（PROFILE_EDGE）：{mts}")
+
+
+def j47_bounce_target(c: Ctx) -> Result:
+    p, out = _with_mountains(c)
+    if out:
+        return out
+    up = p.above(c.close)
+    if not up:
+        return _met(False, f"收盘 {_f(c.close)} 上方没有整座的筹码山")
+    m = up[0]
+    return _met(True, f"上方最近的筹码山 {_band(m)}：反弹的目标区间是这条带。J47 说的是超跌反弹，现在是{c.regime.name}",
+                {"山脚": m.foot, "山顶": m.top})
+
+
+def j48_over_the_top(c: Ctx) -> Result:
+    p, out = _with_mountains(c)
+    if out:
+        return out
+    big = p.largest()
+    prev = float(c.df["Close"].iloc[-2])
+    lv = {"最大筹码山 山顶": big.top}
+    if c.close > big.top:
+        when = "今天刚翻过去" if prev <= big.top else "已经在山顶上方"
+        return _met(True, f"收盘 {_f(c.close)} 在最大那座山 {_band(big)}（占 {big.share:.0%}）的山顶上方，{when}", lv)
+    where = "里" if c.close >= big.foot else "下方"
+    return _met(False, f"收盘 {_f(c.close)} 在最大那座山 {_band(big)}（占 {big.share:.0%}）{where}，还没翻过山顶", lv)
+
+
+def j49_mountain_side(c: Ctx) -> Result:
+    p, out = _with_mountains(c)
+    if out:
+        return out
+    up, down = sum(m.share for m in p.above(c.close)), sum(m.share for m in p.below(c.close))
+    split = f"整座在上方的筹码山占 {up:.0%}，在下方的占 {down:.0%}"
+    if up > down:
+        return _met(True, f"{split}：主要筹码在价格上方，往上是爬山，越近山顶越难")
+    if down > up:
+        return _met(False, f"{split}：主要筹码在价格下方，山路轻松（镜像）")
+    return _met(False, f"{split}：上下一样多")
+
+
+def p39_in_mountain(c: Ctx) -> Result:
+    p, out = _with_mountains(c)
+    if out:
+        return out
+    m = p.containing(c.close)
+    if m is None:
+        return _met(False, f"收盘 {_f(c.close)} 不在哪座筹码山里")
+    if c.plan is None:
+        return _no_plan()
+    from tradeplan import holds_past_target   # tradeplan 导入本模块，这里晚一点导入
+    key = c.plan.key
+    then = ("中长线完好，继续拿，按止损和失效离场" if holds_past_target(key)
+            else "中长线不完好，在山里走")
+    return _met(True, f"收盘 {_f(c.close)} 在筹码山 {_band(m)} 里：照 P25，现在是{key}，{then}",
+                {"山脚": m.foot, "山顶": m.top})
+
+
 # ---------- 交易计划：价位在 tradeplan.build，这里只把空仓那份计划写成规则状态 ----------
 
 def _no_plan() -> Result:
@@ -668,14 +768,35 @@ def p24_reward_risk(c: Ctx) -> Result:
     return _met(False, f"{f.rr:.2f}:1，{f.rr_verdict}（≥ 3:1 可做，≥ 5:1 理想）", lv)
 
 
+def _target_plan(c: Ctx) -> TradePlan:
+    """P25、P38 看哪份计划：空仓有进场价看空仓的，否则看持仓的。"""
+    f = c.plan.flat
+    return f if f.entry is not None and f.entry.price is not None else c.plan.holding
+
+
 def p25_targets(c: Ctx) -> Result:
     if c.plan is None:
         return _no_plan()
-    p = c.plan.flat if c.plan.flat.entry is not None and c.plan.flat.entry.price is not None else c.plan.holding
+    p = _target_plan(c)
     if not p.targets:
         return _met(False, next((n for n in p.notes if "目标" in n), "上方没有目标位"))
     basis = "；".join(f"目标 {i} {t.kind} {_f(t.price)}（{t.date}）" for i, t in enumerate(p.targets, 1))
     return _met(True, f"{basis}。{p.at_target}", {f"目标 {i}": t.price for i, t in enumerate(p.targets, 1)})
+
+
+def p38_profile_reference(c: Ctx) -> Result:
+    """上方有整座筹码山就满足。它只作参考：不排进第一目标、不算盈亏比（docs/adr/0018.md）。"""
+    if c.plan is None:
+        return _no_plan()
+    if c.profile is None:
+        return _no_volume()
+    p = _target_plan(c)
+    ref = f"进场价 {_f(p.entry.price)}" if p is c.plan.flat else f"现价 {_f(c.close)}"
+    m = p.mountain
+    if m is None:
+        return _met(False, f"{ref} 上方没有整座的筹码山")
+    return _met(True, f"{ref} 上方最近的筹码山 {_f(m.foot)}–{_f(m.top)}（山脚到山顶这条带，J47，{m.date}）。"
+                      "只作参考，不排进第一目标、不算盈亏比（ADR 0018）", {"山脚": m.foot, "山顶": m.top})
 
 
 RULES: tuple[Rule, ...] = (
@@ -729,11 +850,11 @@ RULES: tuple[Rule, ...] = (
     Rule("J42", Kind.VERDICT, "突破多次试探的位置，占领筹码峰", None),
     Rule("J43", Kind.VERDICT, "分歧越大，确定性越强", None),
     Rule("J44", Kind.VERDICT, "收盘高于所有爆量日，恐怕要往上", None),
-    Rule("J45", Kind.VERDICT, "筹码分布：按价格统计的成交量，每座山峰是密集成交区", None),
-    Rule("J46", Kind.VERDICT, "山脚、山顶是筹码山的价格下沿、上沿", None),
-    Rule("J47", Kind.VERDICT, "超跌反弹的目标是上方最近那座筹码山", None),
-    Rule("J48", Kind.VERDICT, "收盘翻过山顶，可能开启大行情", None),
-    Rule("J49", Kind.VERDICT, "筹码山在上方爬山难，在下方山路轻松", None),
+    Rule("J45", Kind.VERDICT, "筹码分布：按价格统计的成交量，每座山峰是密集成交区", j45_profile),
+    Rule("J46", Kind.VERDICT, "山脚、山顶是筹码山的价格下沿、上沿", j46_foot_top),
+    Rule("J47", Kind.VERDICT, "超跌反弹的目标是上方最近那座筹码山", j47_bounce_target),
+    Rule("J48", Kind.VERDICT, "收盘翻过山顶，可能开启大行情", j48_over_the_top),
+    Rule("J49", Kind.VERDICT, "筹码山在上方爬山难，在下方山路轻松", j49_mountain_side),
     Rule("P1", Kind.ACTION, "横盘中段不做", p1_range_wait),
     Rule("P2", Kind.ACTION, "横盘末期埋伏", p2_ambush),
     Rule("P3", Kind.ACTION, "埋伏的底线", p3_ambush_stop),
@@ -770,8 +891,8 @@ RULES: tuple[Rule, ...] = (
     Rule("P35", Kind.ACTION, "走不好在原级别解决", None),
     Rule("P36", Kind.ACTION, "周期共振第一时间反应", None),
     Rule("P37", Kind.ACTION, "周线 2B 先看日线呼应", None),
-    Rule("P38", Kind.ACTION, "筹码山也是目标位来源，和缺口、均线密集并列", None),
-    Rule("P39", Kind.ACTION, "进了目标筹码山照 P25 看中长线", None),
+    Rule("P38", Kind.ACTION, "筹码山也是目标位来源，和缺口、均线密集并列", p38_profile_reference),
+    Rule("P39", Kind.ACTION, "进了目标筹码山照 P25 看中长线", p39_in_mountain),
     Rule("P40", Kind.ACTION, "黑绿线：20 在 60 上方，绿色做多", None),
     Rule("P41", Kind.ACTION, "黑绿线：20 在 60 上方，变黑平仓不做空", None),
     Rule("P42", Kind.ACTION, "黑绿线：20 在 60 下方，黑色做空", None),

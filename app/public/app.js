@@ -228,6 +228,7 @@ export function showAnalysis(data, asof = null) {
   chartApi?.setStructure(practiceChart ? null : a.structure); // 练习里不画：结构标注会提前说出答案
   const tp = a.trade_plan;
   chartApi?.setGaps(practiceChart ? null : a.gaps, [...tp.flat.targets, ...tp.holding.targets]);
+  chartApi?.setProfileRef(practiceChart ? null : tp.flat.mountain ?? tp.holding.mountain); // 练习里没有计划的参考带
 
   const steps = $("steps");
   steps.innerHTML = "";
