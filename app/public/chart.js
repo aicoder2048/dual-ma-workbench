@@ -4,7 +4,7 @@ import { createOverlay } from "./chartoverlay.js";
 import { earningsMarks, logicalOf } from "./earnings.js";
 import { measure, measureLines } from "./measure.js";
 import { BAND_ALPHA, CANDLE_ALPHA, GROUPS, SPECS, alpha, bandPoints, lineStyle, nextFocus } from "./lines.js";
-import { gapBands, structureScene } from "./overlays.js";
+import { gapBands, pickGaps, structureScene } from "./overlays.js";
 import { ohlcRow, weekLabel } from "./readout.js";
 import { DEFAULT_SPEED, OFF, SPEEDS, appendDelta, earliestIndex, indexOnOrBefore, randomIndex, sliceAt, speedMs, step } from "./replay.js";
 
@@ -147,7 +147,8 @@ export function createChart(box, legendEl) {
     + `${Object.values(TONE_TOKENS).map((t) => `<i style="--c: var(${t})"></i>`).join("")}着色</button>`
     + `<button type="button" class="levels-toggle" aria-pressed="true" title="把结论里的触发价、止损和推翻判断的价位画成虚线">价位线</button>`
     + `<button type="button" class="struct-toggle" aria-pressed="true">结构</button>`
-    + `<button type="button" class="gaps-toggle" aria-pressed="true">缺口</button>`
+    + `<span class="gaps-pair"><button type="button" class="gaps-toggle" aria-pressed="true">缺口</button>`
+    + `<button type="button" class="gaps-all" aria-pressed="false" hidden></button></span>`
     + `<button type="button" class="chart-help-toggle" aria-expanded="false">怎么用</button>`;
   legendEl.after(tools);
 
@@ -210,7 +211,11 @@ export function createChart(box, legendEl) {
       price: lv.price, color: css(LEVEL_COLOR[lv.kind]), lineWidth: 1, lineStyle: 2,
       axisLabelVisible: true, title: lv.title,
     })) : [];
+    syncGuides();
   };
+  /** 图上的小字（缺口、颈线……）避开价位线和自己画的线。 */
+  const guidePrices = () => [...(levelsShown() ? levels.map((lv) => lv.price) : []), ...drawn];
+  const syncGuides = () => structLayer.setGuides(guidePrices());
   const levelsBtn = tools.querySelector(".levels-toggle");
   levelsBtn.addEventListener("click", () => {
     levelsOn = !levelsOn;
@@ -234,9 +239,15 @@ export function createChart(box, legendEl) {
   // 缺口：没补的向下缺口画成色带（和交易计划找目标位同一个定义，tradeplan.unfilled_gaps）；被用作目标位的标出来
   let gaps = null; // { list, targets }
   let gapsOn = true;
-  try { gapsOn = localStorage.getItem("dma-gaps") !== "0"; } catch { /* 隐私模式 */ }
+  // 默认只画要紧的缺口（目标位 + 离现价最近的上下各一个），「+N」画出所有的
+  let gapsAll = false;
+  try {
+    gapsOn = localStorage.getItem("dma-gaps") !== "0";
+    gapsAll = localStorage.getItem("dma-gaps-all") === "1";
+  } catch { /* 隐私模式 */ }
   const gapsBtn = tools.querySelector(".gaps-toggle");
-  const GAPS_TITLE = "没补的向下缺口：从跳空那天画到现在的色带，上沿是跳空前一天的最低价，下沿是还没补的那段的底；交易计划拿它当目标位的标「目标位」";
+  const gapsAllBtn = tools.querySelector(".gaps-all");
+  const GAPS_TITLE = "没补的向下缺口：从跳空那天画到现在的色带，上沿是跳空前一天的最低价，下沿是还没补的那段的底；交易计划拿它当目标位的标「目标位」。默认只画目标位和离现价最近的上下各一个";
   const gapsWhyOff = () => (frame === "week" ? "缺口按日线算：切回日线看"
     : rs.mode === "replay" ? "回放时收起：缺口补没补要看之后的 K 线"
     : !gaps ? "这份数据没有缺口（练习里不画，免得提前看到答案）"
@@ -252,12 +263,25 @@ export function createChart(box, legendEl) {
     const showStruct = syncToggle(structBtn, structOn, structWhyOff(), STRUCT_TITLE);
     const showGaps = syncToggle(gapsBtn, gapsOn, gapsWhyOff(), GAPS_TITLE);
     const bars = view?.candles ?? [];
+    const all = showGaps && bars.length ? gaps.list.filter((g) => g.date <= bars.at(-1).time) : [];
+    const picked = pickGaps(all, gaps?.targets, bars.at(-1)?.close);
+    const more = all.length - picked.length;
+    gapsAllBtn.hidden = !more;
+    gapsAllBtn.setAttribute("aria-pressed", String(gapsAll));
+    gapsAllBtn.textContent = gapsAll ? "全部" : `+${more}`;
+    gapsAllBtn.title = gapsAll ? "现在画着所有没补的缺口；点一下只留目标位和离现价最近的上下各一个"
+      : `还有 ${more} 个离得远、不是目标位的缺口没画；点一下全画出来`;
     const scene = {
       ...(showStruct ? structureScene(structure, bars) : {}),
-      bands: showGaps ? gapBands(gaps.list, gaps.targets, bars) : [],
+      bands: gapBands(gapsAll ? all : picked, gaps?.targets, bars),
     };
     structLayer.set(scene, overlayColors(), bars);
   }
+  gapsAllBtn.addEventListener("click", () => {
+    gapsAll = !gapsAll;
+    try { localStorage.setItem("dma-gaps-all", gapsAll ? "1" : "0"); } catch { /* 忽略 */ }
+    paintOverlay();
+  });
   gapsBtn.addEventListener("click", () => {
     gapsOn = !gapsOn;
     try { localStorage.setItem("dma-gaps", gapsOn ? "1" : "0"); } catch { /* 忽略 */ }
@@ -292,7 +316,8 @@ export function createChart(box, legendEl) {
       「顶·已完成」「底·形成中」这类标记是最近的顶部、底部构造；形成中时旁边的短虚线写着下一根 K 线怎样就完成（比如"下一根低 &lt; 412.30"）。
       「M顶」「W底」「2B顶」「2B底」标在收盘越过颈线（2B 是越过前高 A）的那根，带"?"的是还没确认；点标记看它的日期、价位和规则原文。回放时收起，练习里不画。</p>
     <p><b>缺口</b>：没补上的向下跳空缺口画成浅色带，从跳空那天一直画到现在：上沿是跳空前一天的最低价，下沿是之后涨回去还没补到的位置。
-      交易计划拿上方最近的缺口当目标位（P25），被用作目标位的那条颜色深一点、写着「目标位」。回放时收起，练习里不画。</p>
+      交易计划拿上方最近的缺口当目标位（P25），被用作目标位的那条颜色深一点、写着「目标位」。
+      默认只画目标位和离现价最近的上下各一个，其余的点「缺口」旁边的「+N」才画；图上的小字放不下时会往上下挪一行，再放不下就不写。回放时收起，练习里不画。</p>
     <p><b>财报 E</b>：时间轴上方的小 E 是财报日，实心的是下一次。财报后常常跳空开盘，止损单按开盘价成交，可能比止损价差很多；
       下一次财报在 10 个交易日内时，结论卡片会提醒。只是提醒，不改打法。</p>
     <p><b>看量</b>：底部的量柱，黄色是超过 50 日均量 2 倍的大量。看两种情况：横盘末期突然放量，是要变盘的信号；
@@ -325,6 +350,7 @@ export function createChart(box, legendEl) {
     drawnLines = drawn.map((price) => candles.createPriceLine({
       price, color: css("--accent"), lineWidth: 1, lineStyle: 0, axisLabelVisible: true, title: "我的线",
     }));
+    syncGuides();
   };
   const drawBtn = tools.querySelector(".draw-toggle");
   drawBtn.addEventListener("click", () => setTool(tool === "draw" ? "none" : "draw"));
@@ -847,6 +873,8 @@ export function createChart(box, legendEl) {
     },
     /** 现在画着的结构标注和缺口（测试用）：{ segments, levels, marks, bands }，见 overlays.js。 */
     structure: () => structLayer.scene(),
+    /** 图上的小字摆在哪（测试用）：[{ text, left, top, width, height, hidden }] 和价位线的 y。 */
+    labels: () => ({ labels: structLayer.labels(), guides: guidePrices().map((p) => candles.priceToCoordinate(p)) }),
     /** 价位线：[{ kind: trigger | stop | target | invalid, price, title }]，来自 viz.js 的 chartLevels。 */
     setLevels(list) {
       levels = list;

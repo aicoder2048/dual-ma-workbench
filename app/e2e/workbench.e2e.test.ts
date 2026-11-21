@@ -85,6 +85,9 @@ const STRUCTURE = (() => {
 /** 缺口替身：第 150、270 根跳空向下，之后没补满（下沿是之后最高价够到的地方）。 */
 const GAPS = [150, 270].map((i) => ({ date: CHART.candles[i].time, top: CHART.candles[i - 1].low + 6, bottom: CHART.candles[i - 1].low + 1 }));
 
+/** 挤的替身（像 NVDA）：8 个没补的缺口挤在 200 ~ 220，和结论的价位线（触发 212.21、判断失效 206.26……）叠在一起；最远那个是目标位。 */
+const CROWD_GAPS = [60, 90, 110, 130, 160, 180, 200, 230].map((i, k) => ({ date: CHART.candles[i].time, bottom: 200 + k * 2.5, top: 202 + k * 2.5 }));
+
 const MP3 = readFileSync(resolve(import.meta.dir, "../test/fixtures/tts-sample.mp3"));
 const ttsCalls: { text: string; voice: string }[] = [];
 const wsSent: any[] = [];
@@ -126,6 +129,12 @@ beforeAll(async () => {
         const n = nvda as Analysis;
         const flat = { ...n.trade_plan.flat, targets: [{ price: GAPS[1].bottom, kind: "缺口", rule: "P25", source: "视频" as const, date: GAPS[1].date }] };
         return JSON.stringify({ analysis: { ...n, label: "STRUCT", structure: STRUCTURE, gaps: GAPS, trade_plan: { ...n.trade_plan, flat } }, chart: CHART });
+      }
+      if (args[0] === "CROWD") {
+        const n = nvda as Analysis;
+        const far = CROWD_GAPS.at(-1)!;
+        const flat = { ...n.trade_plan.flat, targets: [{ price: far.bottom, kind: "缺口", rule: "P25", source: "视频" as const, date: far.date }] };
+        return JSON.stringify({ analysis: { ...n, label: "CROWD", structure: STRUCTURE, gaps: CROWD_GAPS, trade_plan: { ...n.trade_plan, flat } }, chart: CHART });
       }
       if (args[0] === "EARN") { // 3 天后财报：图上标 E，结论卡片提醒跳空
         const n = nvda as Analysis;
@@ -1052,6 +1061,57 @@ describe("聚焦一组", () => {
     expect(await at()).toBe(idx + 1);
     await page.click(".replay-exit");
     expect(await at()).toBe(CHART.candles.length - 1);
+    expect(errors).toEqual([]);
+    await page.close();
+  }, 30_000);
+});
+
+describe("图面去杂：缺口只画要紧的，小字不压在一起", () => {
+  const api = <T,>(page: Page, fn: string) => page.evaluate(async (fn) => (await import("/app.js")).getChart()[fn](), fn) as Promise<T>;
+  const bandDates = async (page: Page) => (await api<any>(page, "structure")).bands.map((b: any) => b.date);
+  /** 画出来的小字两两不重叠，也不压在价位线上。 */
+  const tidy = async (page: Page) => {
+    const { labels, guides } = await api<any>(page, "labels");
+    const shown = labels.filter((l: any) => !l.hidden);
+    const hit = (a: any, b: any) => a.left < b.left + b.width && b.left < a.left + a.width && a.top < b.top + b.height && b.top < a.top + a.height;
+    const pairs = shown.flatMap((a: any, k: number) => shown.slice(k + 1).filter((b: any) => hit(a, b)).map((b: any) => [a.text, b.text]));
+    const onLine = shown.filter((l: any) => guides.some((y: number) => y > l.top && y < l.top + l.height)).map((l: any) => l.text);
+    return { count: shown.length, pairs, onLine };
+  };
+
+  test("默认只画目标位和离现价最近的缺口；「+6」看得见、没被挡，点开画全部、小字照样不重叠；再点收回", async () => {
+    const { page, errors } = await open(undefined, "CROWD");
+    await page.waitForSelector("#chart .struct-mark");
+    await scrollIntoCenter(page, ".chart-card");
+    expect(await bandDates(page)).toEqual([CROWD_GAPS[0].date, CROWD_GAPS[7].date]);
+    expect(await page.textContent(".gaps-all")).toBe("+6");
+    expect(await notCovered(page, ".gaps-all")).toBe(true);
+    const before = await tidy(page);
+    expect(before).toMatchObject({ pairs: [], onLine: [] });
+    expect(before.count).toBeGreaterThan(2);
+    await page.click(".gaps-all");
+    expect(await bandDates(page)).toEqual(CROWD_GAPS.map((g) => g.date));
+    expect(await page.getAttribute(".gaps-all", "aria-pressed")).toBe("true");
+    await page.waitForTimeout(100); // 等图重画一帧，小字重新摆过
+    const all = await tidy(page);
+    expect(all).toMatchObject({ pairs: [], onLine: [] });
+    // 目标位那条一定写出来
+    expect((await api<any>(page, "labels")).labels.find((l: any) => l.text.includes("目标位")).hidden).toBe(false);
+    await page.click(".gaps-all");
+    expect(await bandDates(page)).toHaveLength(2);
+    // 「缺口」关掉时「+6」也收起
+    await page.click(".gaps-toggle");
+    expect(await page.isVisible(".gaps-all")).toBe(false);
+    expect(errors).toEqual([]);
+    await page.close();
+  }, 30_000);
+
+  test("关掉价位线：小字就不用再躲它们", async () => {
+    const { page, errors } = await open(undefined, "CROWD");
+    await page.waitForSelector("#chart .struct-mark");
+    expect((await api<any>(page, "labels")).guides.length).toBeGreaterThan(0);
+    await page.click(".levels-toggle");
+    expect((await api<any>(page, "labels")).guides).toEqual([]);
     expect(errors).toEqual([]);
     await page.close();
   }, 30_000);

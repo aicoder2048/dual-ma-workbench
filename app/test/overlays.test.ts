@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { gapBands, SWING_PIVOTS, structureScene } from "../public/overlays.js";
+import { gapBands, pickGaps, SWING_PIVOTS, structureScene } from "../public/overlays.js";
 import type { Analysis } from "../src/citations.ts";
 import nvda from "./fixtures/nvda-analysis.json";
 
@@ -118,5 +118,35 @@ describe("缺口：gaps → 色带", () => {
 
   test("回放截到跳空之前：之后才出现的缺口不画", () => {
     expect(gapBands(GAPS, TARGETS, CANDLES.slice(0, at("2026-10-26") + 1))).toHaveLength(1);
+  });
+});
+
+describe("默认画哪些缺口", () => {
+  const gap = (date: string, bottom: number, top: number) => ({ date, bottom, top });
+  // 现价 100：上方 3 个、下方 2 个
+  const above = [gap("2026-01-05", 140, 145), gap("2026-02-02", 110, 112), gap("2026-03-02", 125, 130)];
+  const below = [gap("2025-11-03", 80, 85), gap("2025-12-01", 90, 95)];
+  const target = (g: { date: string; bottom: number }) => ({ kind: "缺口", date: g.date, price: g.bottom, rule: "P25" });
+
+  test("离现价最近的上方、下方各一个，按原来的顺序", () => {
+    expect(pickGaps([...below, ...above], [], 100)).toEqual([below[1], above[1]]);
+  });
+
+  test("交易计划当目标位的缺口总在，哪怕离得远", () => {
+    expect(pickGaps([...below, ...above], [target(above[0])], 100)).toEqual([below[1], above[0], above[1]]);
+  });
+
+  test("价格在缺口里面：它就是上方最近的那个", () => {
+    const inside = gap("2026-04-01", 98, 103);
+    expect(pickGaps([...above, inside], [], 100)).toEqual([inside]);
+  });
+
+  test("目标位要日期和下沿都对上：同一天但下沿不同的不算", () => {
+    expect(pickGaps(above, [{ ...target(above[0]), price: 141 }], 100)).toEqual([above[1]]);
+  });
+
+  test("没有缺口：空", () => {
+    expect(pickGaps([], [], 100)).toEqual([]);
+    expect(pickGaps(null, [], 100)).toEqual([]);
   });
 });
