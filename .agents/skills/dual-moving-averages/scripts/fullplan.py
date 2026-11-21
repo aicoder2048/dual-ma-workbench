@@ -212,13 +212,15 @@ class Variant:
     skip_hourly: bool = False       # 还要看小时线的进场不做（小时线当不满足）
     waypoint: bool = False          # P11 的回撤价也当限价单买
     intraday_stop: bool = False     # 止损看盘中最低价（PR #42 的口径），不按收盘
+    position_cap: bool = True       # 单票持仓金额上限（evaluation.toml 的 fullplan.max_position）
 
 
 FULL = Variant("完整计划")
 ABLATIONS = (Variant("关盈亏比过滤", rr_filter=False), Variant("关目标（拿到止损或失效）", targets=False),
              Variant("关仓位（每笔等金额）", equal_notional=True))
 EXTRA = (Variant("要看小时线的不进", skip_hourly=True), Variant("回撤到 60 线组就买（P11）", waypoint=True),
-         Variant("止损看盘中最低价", intraday_stop=True))
+         Variant("止损看盘中最低价", intraday_stop=True), Variant("不设单票仓位上限", position_cap=False),
+         Variant("PR #42 口径（盘中止损、不设上限）", intraday_stop=True, position_cap=False))
 VARIANTS = (FULL, *ABLATIONS, *EXTRA)
 
 
@@ -355,14 +357,15 @@ def _random_summary(reps: list[dict]) -> dict:
 
 
 def run_group(job: tuple) -> tuple[str, dict]:
-    name, tickers, recs, cal, bars, sigs, bc, cost = job
+    name, tickers, recs, cal, bars, sigs, bc, cost, max_position = job
     pos = {d: k for k, d in enumerate(cal)}
     inval = inval_for(recs, pos, len(cal))
     start = min(pos[rs[0]["d"]] for rs in recs.values())
     runs, trades = {}, {}
 
     def go(v: Variant, notional_pct: float | None = None) -> None:
-        cfg = ps.Config(cost=cost, notional_pct=notional_pct, stop_on_close=not v.intraday_stop)
+        cfg = ps.Config(cost=cost, notional_pct=notional_pct, stop_on_close=not v.intraday_stop,
+                        max_position=max_position if v.position_cap else None)
         res = ps.simulate(len(cal), bars, orders_for(recs, pos, bars, v), inval, start, cfg)
         runs[v.name], trades[v.name] = summarize(res, cal, bc), res.trades
 
@@ -375,7 +378,8 @@ def run_group(job: tuple) -> tuple[str, dict]:
         if v.equal_notional:
             go(v, notional)
     rng = np.random.default_rng(RANDOM_SEED)
-    rand = [summarize(ps.simulate(len(cal), bars, random_orders(full, recs, pos, bars, rng), inval, start, ps.Config(cost=cost)),
+    rand = [summarize(ps.simulate(len(cal), bars, random_orders(full, recs, pos, bars, rng), inval, start,
+                                  ps.Config(cost=cost, max_position=max_position)),
                       cal, bc) for _ in range(RANDOM_REPS)] if full else []
     halves = {}
     for label, keep in (("2013–2019", lambda d: d <= HALF), ("2020–2026", lambda d: d > HALF)):
@@ -504,6 +508,7 @@ LIMITS = [
 def render(groups: dict[str, dict], meta: dict, checks: list[dict]) -> str:
     pool = groups[POOLED]
     full = pool["runs"][FULL.name]
+    cfg_pos = meta["config"]["max_position"]
     scope = "用户的核心名单" if meta["remaining"] else "2026-11-20 评估的开发集 + 旧验证集"
     out = [f"# 完整计划逐笔回测：{'核心名单' if meta['remaining'] else '开发集'}（{meta['first']} ~ {meta['last']}）", "",
            "回答\"照结论卡片的交易计划下单，结果怎样\"。只作风险提示，不改定位：归雁是把双均线交易系统用到真实交易上的工具。", "",
@@ -523,6 +528,7 @@ def render(groups: dict[str, dict], meta: dict, checks: list[dict]) -> str:
             "  - P12（底部构造完成再加小时线）、P13（只差小时线）触发之后还要小时线多头排列。回放没有小时线，按卡片的价位下单，"
             "当作小时线满足；\"要看小时线的不进\"一行当作不满足。",
             "- **股数**：每笔可承受亏损 = 前一天收盘净值的 1%，股数 = 向下取整(可承受亏损 ÷ (计划进场价 − 止损))（A6）。"
+            f"单票持仓金额不超过净值的 {cfg_pos * 100:.0f}%（视频没有这一条，回测自定，见 evaluation.toml；\"不设单票仓位上限\"一行去掉它）。"
             "所有持仓的初始风险加起来不超过净值的 6%（超了这笔不做）；现金不够就按现金能买的股数，不加杠杆。同一天几笔按票代码排序。",
             "- **离场**（先到先走）：止损按收盘，收盘低于止损价就第二天开盘走（计划写的都是\"收盘跌回 / 收盘低于 / 收盘跌破\"，P23 什么原则进就什么原则出）；"
             "目标（第一目标）是挂着的卖单，看盘中最高价，开盘已经越过就按开盘价；进场那一根不算目标。"
@@ -643,7 +649,7 @@ def main() -> None:
         ts = [t for t in tickers if gof.get(t) in gs]
         if ts:
             jobs.append((name, ts, {t: recs[t] for t in ts}, cal, {t: bars[t] for t in ts}, {t: sigs[t] for t in ts},
-                         cfg["bootstrap"], cost))
+                         cfg["bootstrap"], cost, cfg["fullplan"]["max_position"]))
     with ProcessPoolExecutor(max_workers=min(a.jobs, len(jobs))) as ex:
         groups = dict(ex.map(run_group, jobs))
     groups = {name: groups[name] for name, _ in GROUPS if name in groups}
@@ -655,7 +661,7 @@ def main() -> None:
             "first": min(days), "last": max(days), "days": len(days),
             "checked": sum(1 for rs in recs.values() for k in range(0, len(rs), CHECK_EVERY)), "jobs": a.jobs,
             "seconds": {"plans": round(t_plans, 1), "sim": round(time.time() - t0 - t_plans, 1)},
-            "config": asdict(ps.Config()), "random_reps": RANDOM_REPS,
+            "config": asdict(ps.Config(cost=cost, max_position=cfg["fullplan"]["max_position"])), "random_reps": RANDOM_REPS,
             "day_range": day_range({t: bars[t] for t in lead["tickers"]}, cal.index(lead["start"])),
             "remaining": sorted(set(gof) - set(tickers)) if a.core else []}
     md = render(groups, meta, checks)

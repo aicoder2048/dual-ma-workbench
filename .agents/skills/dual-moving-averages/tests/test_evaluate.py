@@ -30,6 +30,7 @@ def test_committed_config_loads():
     (lambda s: s.replace("horizon = 20\nbull", "horizon = \"20\"\nbull", 1), "[H1].horizon"),
     (lambda s: s.replace("[H6]", "[H6]\ntypo = 1", 1), "不认识的键"),
     (lambda s: s.replace("ticker_share = 0.7", "ticker_share = 70", 1), "H3.ticker_share 要在 (0, 1]"),
+    (lambda s: s.replace("max_position = 0.25", "max_position = 25", 1), "fullplan.max_position 要在 (0, 1]"),
     (lambda s: s.replace("[verdict]", "[verdict", 1), "TOML 语法错误"),
     (lambda s: s.replace("[bootstrap]", "[bootstrapp]", 1), "缺 [bootstrap]"),
 ])

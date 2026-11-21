@@ -216,6 +216,25 @@ def test_no_leverage_shares_capped_by_cash():
     assert t.shares == 9995
 
 
+def test_position_cap_limits_a_tiny_stop_trade_to_a_share_of_equity():
+    # 止损只差 0.1：按风险要 10000 股（10 万元，整个账户）；单票上限 25% → 2.5 万元，2500 股
+    (t,) = run({"AAA": bars(WIN)}, {0: [order(stop=9.9)]}, cfg=ps.Config(cost=0.0, equity0=100_000, max_position=0.25)).trades
+    assert t.shares == 2500 and t.notional == pytest.approx(0.25)
+
+
+def test_position_cap_leaves_a_normal_stop_sized_by_risk():
+    (t,) = run({"AAA": bars(WIN)}, {0: [order()]}, cfg=ps.Config(cost=0.0, equity0=100_000, max_position=0.25)).trades
+    assert t.shares == 1000
+
+
+def test_open_risk_counts_the_capped_shares():
+    # 第一笔被单票上限压到 2500 股，占用风险 2500 × 0.1 = 250，不是按风险算的 10000 股的 1000；第二笔（风险 1000）还放得下 1.5% 的总上限
+    b = {t: bars(WIN) for t in ("AAA", "BBB")}
+    cfg = ps.Config(cost=0.0, equity0=100_000, cap_pct=1.5, max_position=0.25)
+    res = run(b, {0: [order("AAA", stop=9.9), order("BBB")]}, cfg=cfg)
+    assert [(t.ticker, t.shares) for t in res.trades] == [("AAA", 2500), ("BBB", 1000)]
+
+
 def test_equal_notional_ignores_the_stop_distance():
     (t,) = run({"AAA": bars(WIN)}, {0: [order(stop=9.9)]}, cfg=ps.Config(cost=0.0, equity0=100_000, notional_pct=0.2)).trades
     assert t.shares == 2000 and t.notional == pytest.approx(0.2)

@@ -33,6 +33,7 @@ SCHEMA: dict[str, dict[str, object]] = {
                  "D_min_drop": NUM, "too_short": STRS},
     "bootstrap": {"level": NUM, "reps": int, "block_days": int, "seed": int, "min_points": int, "min_blocks": int},
     "verdict": {"holdout_min_ratio": NUM},
+    "fullplan": {"max_position": NUM},
     "H1": {"horizon": int, "bull": STRS, "bear": STRS, "min_meaningful": NUM, "aux_horizons": NUMS},
     "H2": {"horizon": int, "up_types": STRS, "down_types": STRS, "min_meaningful": NUM},
     "H3": {"hold_types": STRS, "random_reps": int, "mdd_pctl": NUM, "ticker_share": NUM, "naive_ma": NUMS, "seed": int,
@@ -91,7 +92,8 @@ def load_config(path: Path) -> dict:
         raise ConfigError(f"{path}：不认识的段 {sorted(extra)}")
     for where, v in (("bootstrap.level", cfg["bootstrap"]["level"]), ("H3.mdd_pctl", cfg["H3"]["mdd_pctl"]),
                      ("H3.ticker_share", cfg["H3"]["ticker_share"]), ("H4.min_rate", cfg["H4"]["min_rate"]),
-                     ("verdict.holdout_min_ratio", cfg["verdict"]["holdout_min_ratio"])):
+                     ("verdict.holdout_min_ratio", cfg["verdict"]["holdout_min_ratio"]),
+                     ("fullplan.max_position", cfg["fullplan"]["max_position"])):
         if not 0 < v <= 1:
             raise ConfigError(f"{path}：{where} 要在 (0, 1]，拿到 {v}")
     return cfg
