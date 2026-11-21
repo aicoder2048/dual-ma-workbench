@@ -149,8 +149,8 @@ h1 { margin: 0; font-size: 30px; line-height: 1.15; }
 .legend { display: flex; flex-wrap: wrap; gap: 6px; }
 .legend button { font: 12px var(--mono); background: transparent; border: 1px solid var(--line); border-radius: 999px; padding: 1px 10px 1px 8px; cursor: pointer; display: inline-flex; gap: 6px; align-items: center; }
 .legend button[aria-pressed="false"] { opacity: .4; }
-.legend i { width: 14px; border-top: 2px solid var(--c); }
-.legend i.dash { border-top-style: dashed; }
+.legend i { width: 14px; border-top: 3px solid var(--c); }
+.legend i.ema { border-top-width: 1.5px; }
 .caption { font-size: 12px; color: var(--muted); margin: 8px 0 0; }
 
 /* ===================== 对话 ===================== */
@@ -456,7 +456,7 @@ body.offline .status-pill .dot { background: var(--bad); }
 .lean-arrows .la { display: flex; align-items: center; gap: 6px; }
 .lean-arrows .la b { font-size: 15px; line-height: 1; margin-left: auto; }
 .lean-arrows .sw { width: 14px; border-top: 2px solid var(--c); display: inline-block; }
-.lean-arrows .sw.dash { border-top-style: dashed; }
+.lean-arrows .sw.ema { border-top-width: 1.5px; }
 .lean-pairs { width: 100%; border-collapse: collapse; font-size: 12px; }
 .lean-pairs th, .lean-pairs td { padding: 2px 4px; text-align: left; font-weight: 400; }
 .lean-pairs thead th { color: var(--faint); font-size: 11px; }
@@ -522,7 +522,7 @@ body.offline .status-pill .dot { background: var(--bad); }
 .chart-readout .down { color: var(--down); }
 .chart-readout b { color: var(--fg); font-weight: 600; }
 .chart-readout i { display: inline-block; width: 12px; border-top: 2px solid var(--c); margin-right: 4px; vertical-align: middle; }
-.chart-readout i.dash { border-top-style: dashed; }
+.chart-readout i.ema { border-top-width: 1.5px; }
 .chart-readout .ro-ohlc span > b { margin-left: 2px; }  /* 开152.00：标签和数紧挨着（照 TradingView 的 O152.00），省出地方放量 */
 .chart-readout .ro-ratio { margin-left: 4px; }
 .chart-readout .ro-ohlc.tight .ro-abs { display: none; }

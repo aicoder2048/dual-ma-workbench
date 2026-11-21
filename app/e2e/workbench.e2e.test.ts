@@ -646,6 +646,24 @@ describe("K 线图工具", () => {
     await page.close();
   }, 30_000);
 
+  test("均线都是实线：MA 粗、EMA 细；右端价格轴写 MA 的名字；换主题颜色跟着换", async () => {
+    const { page, errors } = await open();
+    await page.waitForSelector("#chart canvas");
+    const styles = () => page.evaluate(async () => (await import("/app.js")).getChart().lineStyles());
+    const light = await styles();
+    for (const [key, s] of Object.entries<any>(light)) expect({ key, style: s.lineStyle }).toEqual({ key, style: 0 });
+    for (const n of [20, 60, 120]) expect(light[`MA${n}`].lineWidth).toBeGreaterThan(light[`EMA${n}`].lineWidth);
+    expect(["MA20", "EMA20", "MA60", "MA120"].map((k) => light[k].title)).toEqual(["MA20", "", "MA60", "MA120"]);
+    // 图例和读数条的小样：EMA 也是实线
+    const swatches = await page.$$eval("#legend i, #chart-readout i", (els) => els.map((e) => getComputedStyle(e).borderTopStyle));
+    expect(new Set(swatches)).toEqual(new Set(["solid"]));
+    await page.click('#theme [data-value="dark"]');
+    await page.waitForFunction(async (c) => (await import("/app.js")).getChart().lineStyles().MA20.color !== c, light.MA20.color);
+    expect((await styles()).MA20.color).toBe("#e5e9f0");
+    expect(errors).toEqual([]);
+    await page.close();
+  }, 30_000);
+
   test("价位线：结论里的触发、止损、目标和推翻判断的价位画在图上，可以关掉", async () => {
     const { page } = await open();
     await page.waitForSelector("#chart canvas");

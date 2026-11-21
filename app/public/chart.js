@@ -3,15 +3,10 @@ import { baseCandleStyle, candleBar as styledBar } from "./candles.js";
 import { createOverlay } from "./chartoverlay.js";
 import { earningsMarks, logicalOf } from "./earnings.js";
 import { measure, measureLines } from "./measure.js";
+import { CANDLE_ALPHA, SPECS, alpha, lineStyle } from "./lines.js";
 import { gapBands, structureScene } from "./overlays.js";
 import { ohlcRow, weekLabel } from "./readout.js";
 import { DEFAULT_SPEED, OFF, SPEEDS, appendDelta, earliestIndex, indexOnOrBefore, randomIndex, sliceAt, speedMs, step } from "./replay.js";
-
-const SPECS = [];
-[20, 60, 120].forEach((n) => ["MA", "EMA"].forEach((k) =>
-  SPECS.push({ key: k + n, token: `--${k.toLowerCase()}${n}`, dashed: k === "EMA", width: k === "MA" ? 2 : 1 })));
-// MA200 朴素规则的对照线：默认不画，在图例里点开
-SPECS.push({ key: "MA200", token: "--ma200", dashed: false, width: 1, off: true });
 
 /** 图表库传来的时间（"2026-10-22"、{year,month,day} 或 UTC 秒）→ "2026-10-22"。 */
 function isoDate(t) {
@@ -62,8 +57,7 @@ export function createChart(box, legendEl) {
   chart.priceScale("vol").applyOptions({ scaleMargins: { top: 0.8, bottom: 0 } });
   const series = {};
   for (const s of SPECS) {
-    series[s.key] = chart.addLineSeries({ lineWidth: s.width, lineStyle: s.dashed ? 2 : 0, visible: !s.off,
-      priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false });
+    series[s.key] = chart.addLineSeries({ visible: !s.off, priceLineVisible: false, crosshairMarkerVisible: false });
   }
 
   legendEl.innerHTML = "";
@@ -73,7 +67,7 @@ export function createChart(box, legendEl) {
     b.setAttribute("aria-pressed", String(!s.off));
     b.dataset.line = s.key;
     if (s.off) b.title = "MA200 朴素规则的对照线（收盘在上方持有，否则空仓），默认不画";
-    b.innerHTML = `<i class="${s.dashed ? "dash" : ""}" style="--c: var(${s.token})"></i>${s.key}`;
+    b.innerHTML = `<i class="${s.kind.toLowerCase()}" style="--c: var(${s.token})"></i>${s.key}`;
     b.addEventListener("click", () => {
       const on = b.getAttribute("aria-pressed") !== "true";
       b.setAttribute("aria-pressed", String(on));
@@ -117,7 +111,7 @@ export function createChart(box, legendEl) {
     // 照 TradingView：第一行日期 + 开高低收 + 比前一根涨跌 + 量和量比，第二行各条均线的值
     const label = frame === "week" ? weekLabel(showTime(c.time), view.partial && c === view.candles.at(-1)) : showTime(c.time);
     const lines = SPECS.filter((sp) => series[sp.key].options().visible && (frame === "day" || !sp.off))
-      .map((sp) => `<span><i class="${sp.dashed ? "dash" : ""}" style="--c: var(${sp.token})"></i>${sp.key} ${f2(at(sp.key))}</span>`).join("");
+      .map((sp) => `<span><i class="${sp.kind.toLowerCase()}" style="--c: var(${sp.token})"></i>${sp.key} ${f2(at(sp.key))}</span>`).join("");
     readout.innerHTML = `<div class="ro-ohlc">${ohlcRow(label, c, prev, view.volume.find((v) => v.time === c.time))}</div><div class="ro-lines">${lines}</div>`;
     const row = readout.firstChild;
     if (row.scrollWidth > row.clientWidth) row.classList.add("tight"); // 窄栏（默认视口）：量和量比比涨跌额要紧
@@ -353,11 +347,14 @@ export function createChart(box, legendEl) {
       grid: { vertLines: { color: css("--grid") }, horzLines: { color: css("--grid") } },
       rightPriceScale: { borderColor: css("--line") }, timeScale: { borderColor: css("--line") },
     });
-    candles.applyOptions(baseCandleStyle({ up: css("--up"), down: css("--down") }));
-    toneColors = Object.fromEntries(Object.entries(TONE_TOKENS).map(([k, t]) => [k, css(t)]));
+    // K 线淡一点（着色时也一样），均线浮在上面
+    const faded = (token) => alpha(css(token), CANDLE_ALPHA);
+    candles.applyOptions(baseCandleStyle({ up: faded("--up"), down: faded("--down") }));
+    toneColors = Object.fromEntries(Object.entries(TONE_TOKENS).map(([k, t]) => [k, faded(t)]));
     candles.setData(view.candles.map(candleBar));
     vol.setData(view.volume.map(volBar));
-    for (const s of SPECS) series[s.key].applyOptions({ color: css(s.token) });
+    const colors = Object.fromEntries(SPECS.map((s) => [s.token, css(s.token)]));
+    for (const s of SPECS) series[s.key].applyOptions(lineStyle(s, colors));
     paintLevels();
     paintMarkers();
     paintOverlay();
@@ -816,6 +813,11 @@ export function createChart(box, legendEl) {
       levels = list;
       paintLevels();
     },
+    /** 各条线现在的样式（测试用）：{ MA20: { color, lineWidth, lineStyle, visible, lastValueVisible, title }, … }。 */
+    lineStyles: () => Object.fromEntries(SPECS.map((s) => {
+      const { color, lineWidth, lineStyle: style, visible, lastValueVisible, title } = series[s.key].options();
+      return [s.key, { color, lineWidth, lineStyle: style, visible, lastValueVisible, title }];
+    })),
     /** 当前画在图上的价位线（测试和问鸿雁用）。 */
     levels: () => (levelsShown() ? levels.map(({ kind, title, price }) => ({ kind, title, price })) : []),
     /** 自己画的线（价格列表）。 */

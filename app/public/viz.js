@@ -46,7 +46,7 @@ function leanArrows(l) {
   return `<div class="lean-arrows">${keys.map((k) => {
     const [g, cls, word] = ARROW[l.dirs[k]];
     const n = k.replace(/\D/g, "");
-    return `<span class="la" ${tip(`${k} ${word}`)}><i class="sw ${k.startsWith("E") ? "dash" : ""}" style="--c: var(--${k.toLowerCase()})"></i>${k.startsWith("E") ? "E" : ""}${n}<b class="${cls}">${g}</b></span>`;
+    return `<span class="la" ${tip(`${k} ${word}`)}><i class="sw ${k.startsWith("E") ? "ema" : ""}" style="--c: var(--${k.toLowerCase()})"></i>${k.startsWith("E") ? "E" : ""}${n}<b class="${cls}">${g}</b></span>`;
   }).join("")}</div>`;
 }
 
