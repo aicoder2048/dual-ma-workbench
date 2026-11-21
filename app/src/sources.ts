@@ -207,10 +207,14 @@ export class SourceLibrary {
   }
 }
 
+/**
+ * 「的」是词和词之间的连接，二字组跨过它就是噪声：「抵扣价的公式」里的「价的」「的公」
+ * 会命中「EMA 的公式」这类无关句子，让命中词数虚高。所以中文先在「的」处断开再切二字组。
+ */
 export function queryTerms(query: string): string[] {
   const q = query.toLowerCase();
   const words = q.match(/[a-z0-9]+/g) ?? [];
-  const cjk = q.match(/[\p{Script=Han}]+/gu) ?? [];
+  const cjk = (q.match(/[\p{Script=Han}]+/gu) ?? []).flatMap((run) => run.split("的")).filter(Boolean);
   const grams = cjk.flatMap((run) =>
     run.length === 1 ? [run] : Array.from({ length: run.length - 1 }, (_, i) => run.slice(i, i + 2)),
   );
