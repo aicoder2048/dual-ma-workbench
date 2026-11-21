@@ -481,8 +481,9 @@ def plan_lines(tpj: dict) -> list[str]:
     for name, p in (("空仓", tpj["flat"]), ("持仓", tpj["holding"])):
         items = [_level(p["stop"], "止损")] if name == "持仓" else [_level(p["entry"], "进场"), _level(p["stop"], "止损")]
         if p["targets"]:
-            items.append("目标：" + "；".join(f"{t['price']:.2f}（{t['kind']}，{t['date']}{'，解读' if t['source'] == '解读' else ''}）"
-                                            for t in p["targets"]))
+            items.append("目标：" + "；".join(
+                f"{t['price']:.2f}{'–' + format(t['top'], '.2f') if t.get('top') is not None else ''}"
+                f"（{t['kind']}，{t['date']}{'，解读' if t['source'] == '解读' else ''}）" for t in p["targets"]))
             items.append(p["at_target"])
         if name == "空仓" and p["entry"]:
             items.append(f"盈亏比：{p['rr']:.2f}:1，{p['rr_verdict']}" if p["rr"] is not None else "盈亏比：算不了")

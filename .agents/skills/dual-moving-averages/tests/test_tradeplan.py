@@ -14,6 +14,7 @@ import dma_analyze as dma
 import rules
 import tradeplan as tp
 from structure import Pivot
+from volprofile import Mountain, Profile
 
 
 # ---------- 仓位（A6） ----------
@@ -145,6 +146,34 @@ def test_previous_high_when_nothing_above():
     assert [(x.kind, x.price, x.source) for x in t] == [("前高", 140.0, "解读")]
 
 
+# ---------- 筹码山也是目标位来源（P38） ----------
+
+def profile_with(*bands: tuple[float, float]) -> Profile:
+    return Profile("2023-01-02", "2024-02-23", 250, [], [], [Mountain(a, b, 1.0, 0.1) for a, b in bands])
+
+
+def test_mountain_nearer_than_the_dense_zone_is_the_first_target_as_a_band():
+    t = tp.find_targets(lines_frame(), None, 100, profile_with((110, 115)))
+    assert [(x.kind, round(x.price, 2), x.top, x.rule) for x in t] == [
+        ("筹码山", 110, 115, "P38"), ("20、60、120 全部汇聚", 130.0, None, "P25")]
+
+
+def test_mountain_farther_than_the_dense_zone_does_not_replace_it():
+    t = tp.find_targets(lines_frame(), None, 100, profile_with((125, 128)))
+    assert t[0].kind == "20、60 均线密集"
+
+
+def test_mountain_fills_the_gap_before_falling_back_to_the_previous_high():
+    df = lines_frame().iloc[:20]
+    st = SimpleNamespace(pivots=[Pivot("高", "2024-01-20", 140.0)])
+    t = tp.find_targets(df, st, 100, profile_with((150, 160)))
+    assert [(x.kind, x.price, x.top, x.source) for x in t] == [("筹码山", 150, 160, "解读")]
+
+
+def test_mountain_the_price_is_already_in_is_not_a_target():
+    assert tp.mountains_above(profile_with((95, 105)), 100) == []
+
+
 # ---------- 进场和止损 ----------
 
 def ctx_of(closes: list[float], ema20: float) -> SimpleNamespace:
@@ -203,6 +232,19 @@ def test_j37_weekly_bias_70_percent():
 def plans() -> dict:
     return {t: dma.analyze(load_fixture(t, d), t, "fixture")
             for t, d in (("SPY", "2024-04-19"), ("TSLA", "2021-04-14"), ("GOOGL", "2025-04-08"))}
+
+
+def test_p38_spy_crash_bottom_targets_the_mountain_band_above():
+    a = dma.analyze(load_fixture("SPY", "2020-03-23"), "SPY", "fixture")
+    t = a["trade_plan"]["flat"]["targets"][0]
+    assert (t["kind"], round(t["price"], 2), round(t["top"], 2)) == ("筹码山", 318.94, 323.98)
+    p38 = next(r for r in a["rules"] if r["id"] == "P38")
+    assert p38["status"] == "满足" and p38["levels"] == {"山脚": t["price"], "山顶": t["top"]}
+
+
+def test_p38_unmet_when_a_gap_comes_first(plans):
+    p38 = next(r for r in plans["GOOGL"]["rules"] if r["id"] == "P38")
+    assert p38["status"] == "不满足" and "比它近的是缺口 178.74" in p38["basis"]
 
 
 def test_spy_pullback_plan_is_short_of_3_to_1(plans):

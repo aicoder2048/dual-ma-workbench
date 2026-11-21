@@ -386,9 +386,12 @@ export function playKey(a: Analysis): string {
 
 const ratio = (x: number) => `${x.toFixed(1)}:1`;
 
-/** 目标位一句：价位、是什么、离现价多远；解读的标出来。 */
+/** 目标位一句：价位、是什么、离现价多远；筹码山写成山脚到山顶的一条带（J47）；解读的标出来。 */
 function targetsText(t: TradePlan, close: number): string {
-  return t.targets.map((x, i) => `目标 ${i + 1}：${x.kind} ${at(x.price, close)}${x.source === "解读" ? "（解读）" : ""}`).join("；");
+  return t.targets.map((x, i) => {
+    const price = x.top != null ? `${at(x.price, close)} 到山顶 ${x.top.toFixed(2)} 这条带` : at(x.price, close);
+    return `目标 ${i + 1}：${x.kind} ${price}${x.source === "解读" ? "（解读）" : ""}`;
+  }).join("；");
 }
 
 /** 盈亏比一句：几比几、哪一档；不做时写差多少。 */
@@ -412,7 +415,7 @@ export function sizeText(t: TradePlan): string | null {
 /** 空仓会买时，计划里多四条：目标、到目标怎么办、盈亏比、股数；持仓只多前两条。 */
 function tradeItems(t: TradePlan, close: number, flat: boolean): PlanItem[] {
   const out: PlanItem[] = [];
-  if (t.targets.length) out.push({ label: "目标", text: targetsText(t, close), rules: ["P25"] });
+  if (t.targets.length) out.push({ label: "目标", text: targetsText(t, close), rules: t.targets.some((x) => x.top != null) ? ["P25", "P38"] : ["P25"] });
   if (t.at_target) out.push({ label: "到目标", text: t.at_target, rules: ["P25"] });
   if (!flat) return out;
   const rr = rrText(t);

@@ -165,7 +165,8 @@ export interface Play { key: string; text: string; rules: string[] }
 export type PlanSource = "视频" | "解读";
 export interface PlanEntry { price: number | null; condition: string; rule: string }
 export interface PlanStop { price: number | null; reason: string; rule: string; source: PlanSource }
-export interface PlanTarget { price: number; kind: string; rule: string; source: PlanSource; date: string | null }
+/** 筹码山（P38）的目标是一条带：price 是山脚，top 是山顶；其他目标没有 top。 */
+export interface PlanTarget { price: number; kind: string; rule: string; source: PlanSource; date: string | null; top?: number | null }
 /** shares 为 null 时没填账户，看 per_10k（每 1 万元风险对应多少股）。 */
 export interface PlanSize { shares: number | null; risk_amount: number | null; per_10k: number; unit_risk: number; capped: boolean; basis: string }
 export type RrVerdict = "不做" | "可做" | "理想";

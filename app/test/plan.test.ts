@@ -614,3 +614,15 @@ describe("交易计划的盈亏比档位和股数照脚本说（P24、A6）", ()
     expect(p.flat.items.find((i) => i.label === "股数")!.text).toBe("80 股：1000 ÷ 单位亏损 12.43 = 80 股。");
   });
 });
+
+describe("筹码山当目标位（P38）：说成山脚到山顶的一条带", () => {
+  test("目标一句写出山脚、山顶和规则 P38", () => {
+    const a = structuredClone(spy);
+    const mountain = { price: 510, top: 520, kind: "筹码山", rule: "P38", source: "解读" as const, date: "2023-04-19~2024-04-19" };
+    a.trade_plan = { ...a.trade_plan, flat: { ...a.trade_plan.flat, targets: [mountain] } };
+    const item = buildPlans(a).flat.items.find((i) => i.label === "目标")!;
+    expect(item.text).toContain("目标 1：筹码山 510.00");
+    expect(item.text).toContain("到山顶 520.00 这条带（解读）");
+    expect(item.rules).toEqual(["P25", "P38"]);
+  });
+});
