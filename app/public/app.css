@@ -515,7 +515,11 @@ body.offline .status-pill .dot { background: var(--bad); }
 .chart-tools button { font-size: 12px; background: transparent; border: 1px solid var(--line); border-radius: 999px; padding: 1px 10px; cursor: pointer; color: var(--muted); }
 .chart-tools button[aria-pressed="true"] { color: var(--fg); border-color: var(--faint); background: var(--panel); }
 .chart-tools .levels-toggle { margin-left: auto; }
-.chart-readout { display: flex; flex-wrap: wrap; gap: 4px 12px; font: 12px var(--mono); color: var(--muted); min-height: 20px; margin-bottom: 4px; }
+.chart-readout { display: grid; gap: 2px; font: 12px var(--mono); color: var(--muted); min-height: 36px; margin-bottom: 4px; }
+/* 两行：开高低收 + 涨跌一行，均线值一行；放不下就横向省略，不折行把图往下挤 */
+.chart-readout > div { display: flex; gap: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.chart-readout .up { color: var(--up); }
+.chart-readout .down { color: var(--down); }
 .chart-readout b { color: var(--fg); font-weight: 600; }
 .chart-readout i { display: inline-block; width: 12px; border-top: 2px solid var(--c); margin-right: 4px; vertical-align: middle; }
 .chart-readout i.dash { border-top-style: dashed; }

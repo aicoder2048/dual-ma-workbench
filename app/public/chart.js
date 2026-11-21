@@ -101,9 +101,18 @@ export function createChart(box, legendEl) {
   const showReadout = (time) => {
     if (!view?.candles.length) { readout.textContent = ""; return; }
     const c = view.candles.find((x) => x.time === time) ?? view.candles.at(-1);
+    const prev = view.candles[view.candles.indexOf(c) - 1];
     const at = (k) => (view.lines[k] || []).find((p) => p.time === c.time)?.value;
-    readout.innerHTML = `<b>${showTime(c.time)}</b><span>收 <b>${f2(c.close)}</b></span>`
-      + SPECS.filter((sp) => series[sp.key].options().visible).map((sp) => `<span><i class="${sp.dashed ? "dash" : ""}" style="--c: var(${sp.token})"></i>${sp.key} ${f2(at(sp.key))}</span>`).join("");
+    // 照 TradingView：第一行日期 + 开高低收 + 比前一天涨跌，第二行各条均线的值
+    const chg = prev ? c.close - prev.close : null;
+    const tone = chg == null ? "" : chg >= 0 ? "up" : "down";
+    const sign = (x) => (x >= 0 ? "+" : "−") + Math.abs(x).toFixed(2);
+    const chgText = chg == null ? "" : `<span class="ro-chg ${tone}">${sign(chg)}（${sign((chg / prev.close) * 100)}%）</span>`;
+    const ohlc = [["开", c.open], ["高", c.high], ["低", c.low], ["收", c.close]]
+      .map(([k, v]) => `<span>${k} <b class="${tone}">${f2(v)}</b></span>`).join("");
+    const lines = SPECS.filter((sp) => series[sp.key].options().visible)
+      .map((sp) => `<span><i class="${sp.dashed ? "dash" : ""}" style="--c: var(${sp.token})"></i>${sp.key} ${f2(at(sp.key))}</span>`).join("");
+    readout.innerHTML = `<div class="ro-ohlc"><b>${showTime(c.time)}</b>${ohlc}${chgText}</div><div class="ro-lines">${lines}</div>`;
   };
   chart.subscribeCrosshairMove((param) => showReadout(param.time));
 

@@ -560,6 +560,27 @@ describe("K 线图工具", () => {
     expect(text).toMatch(/\d{4}-\d{2}-\d{2}/);
     for (const k of ["收", "MA20", "EMA120"]) expect(text).toContain(k);
     await page.close();
+  });
+
+  test("读数条照 TradingView：开高低收和涨跌一行，均线值一行，各占一行不挤", async () => {
+    const { page } = await open();
+    await page.waitForSelector("#chart canvas");
+    await page.locator("#chart-readout").scrollIntoViewIfNeeded();  // 图在结论卡片下面，用户往下滚就看到读数条
+    const c = CHART.candles.at(-1)!, prev = CHART.candles.at(-2)!;
+    const ohlc = (await page.textContent("#chart-readout .ro-ohlc"))!;
+    for (const [k, v] of [["开", c.open], ["高", c.high], ["低", c.low], ["收", c.close]] as const) expect(ohlc).toContain(`${k} ${v.toFixed(2)}`);
+    const chg = c.close - prev.close;
+    expect(ohlc).toContain(`${chg >= 0 ? "+" : "−"}${Math.abs(chg).toFixed(2)}`);
+    expect(ohlc).toContain(`${((chg / prev.close) * 100).toFixed(2).replace("-", "−")}%`);
+    expect(await page.textContent("#chart-readout .ro-lines")).toContain("MA20");
+    // 两行各自不换行（默认视图下），且都没被挡住
+    const rows = await page.$$eval("#chart-readout > div", (els) => els.map((el) => {
+      const r = el.getBoundingClientRect(), lh = parseFloat(getComputedStyle(el).lineHeight) || 16;
+      const hit = document.elementFromPoint(r.x + 4, r.y + r.height / 2);
+      return { lines: Math.round(r.height / lh), visible: !!hit && el.contains(hit) };
+    }));
+    expect(rows).toEqual([{ lines: 1, visible: true }, { lines: 1, visible: true }]);
+    await page.close();
   }, 30_000);
 
   test("价位线：结论里的触发、止损、目标和推翻判断的价位画在图上，可以关掉", async () => {
