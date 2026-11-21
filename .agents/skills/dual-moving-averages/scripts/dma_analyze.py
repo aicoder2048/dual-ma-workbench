@@ -51,6 +51,7 @@ from indicators import NAIVE_MA, PERIODS, add_indicators, arrangement
 from projection import HURDLE_DAYS, extend, hurdle_path, projection
 from hourly import load_hourly
 from structure import find_structure, structure_json
+from tones import bar_tones
 from weekly import weekly_json
 
 SLOPE_LOOKBACK = 5          # 方向（拐没拐）：用最近 5 根 K 线
@@ -384,13 +385,15 @@ def lean_after(df: pd.DataFrame) -> dict:
 
 
 def analyze(df: pd.DataFrame, label: str, src: str, history: pd.DataFrame | None = None,
-            hourly: dict | None = None, sizing: tp.Sizing | None = None, earnings: dict | None = None) -> dict:
+            hourly: dict | None = None, sizing: tp.Sizing | None = None, earnings: dict | None = None,
+            tone_plugin: bool = False) -> dict:
     """把三步分析算成结构化数据，Markdown 和 HTML 都从这里渲染。
 
     history 是周线用的更长历史，默认就用 df；hourly 是 hourly.load_hourly 的结果，没有时 P13 需看图。
     sizing 是账户规模和每笔可承受亏损，只影响交易计划的股数；不给时只算每 1 万元风险对应多少股。
     earnings 是 earnings.load_earnings 的结果（只是信息，不进规则）；--csv 和回测、逐根扫描都不取（NO_EARNINGS），
     这样进程内的分析和 --csv 的输出逐字一样。
+    tone_plugin：读本机的着色插件，P40–P45（黑绿线）照它的颜色判；默认不读，P40–P45 需看图，分析在每台机器上一样。
     """
     hourly = hourly or {"available": False, "reason": "没有取小时线"}
     row = df.iloc[-1]
@@ -422,7 +425,9 @@ def analyze(df: pd.DataFrame, label: str, src: str, history: pd.DataFrame | None
     lean = lean_of(df)
     lean["flips"] = flip_levels(lines, drops, c)
     lean["after"] = lean_after(df)
-    ctx = rl.Ctx(df=df, regime=regime, p20=p20, p60=p60, structure=structure, weekly=weekly, hourly=hourly)
+    tones, tone_source = bar_tones(df, builtin_only=not tone_plugin)
+    ctx = rl.Ctx(df=df, regime=regime, p20=p20, p60=p60, structure=structure, weekly=weekly, hourly=hourly,
+                 tones=tones, tone_source=tone_source)
     plan = tp.build(ctx, sizing)
     results = rl.evaluate(replace(ctx, plan=plan))
     play = rl.build_play(regime, results)
@@ -438,7 +443,7 @@ def analyze(df: pd.DataFrame, label: str, src: str, history: pd.DataFrame | None
         "spread_pct": rg.spread6(row), "bias20": float(row["BIAS20"]), "bias_pctl": bias_pctl,
         "crosses": crosses, "volume": volume,
         "regime": _plain(asdict(regime)), "steps": [_plain(asdict(p20)), _plain(asdict(p60))],
-        "play": play, "trade_plan": tp.plan_json(plan), "rules": results,
+        "play": play, "trade_plan": tp.plan_json(plan), "bwl": rl.bwl_json(ctx.bwl, results), "rules": results,
         "thresholds": {k: {"value": v, "source": s} for k, (v, s) in THRESHOLDS.items()},
         "drops": drops, "lean": lean,
         "projection": projection(df), "structure": structure_json(df), "gaps": tp.gaps_json(df),
@@ -553,7 +558,11 @@ def render_markdown(a: dict) -> str:
         mts = "、".join(f"{m['foot']:.2f}–{m['top']:.2f}（{m['share']:.0%}）" for m in pf["mountains"]) or "没有"
         out.append(f"- 筹码山（{pf['start']} ~ {pf['end']}，只当价位和目标参考，不是买卖信号）：{mts}")
     out += ["", "## 2) 定策略", "", a["play"]["text"], "", f"用到的规则：{'、'.join(a['play']['rules'])}", ""]
-    out += plan_lines(a["trade_plan"]) + ["",
+    out += plan_lines(a["trade_plan"])
+    b = a["bwl"]
+    if b["source"]["key"] == "plugin" and b["applicable"]:
+        out += ["", f"黑绿线（{b['source']['name']}）：{b['text']}。只是读数，交易计划没用它（ADR 0022）"]
+    out += ["",
             f"## 3) 看方向：抵扣价推演（未来 {PROJECT_DAYS} 天）", "",
             "| MA | 明天抵扣价 | 明天 MA 方向（价格不变） | 未来扣价均值 | 未来扣价最高 | 低于现价的天数 | 价格不变时 MA 变化 | 第几天首次扣到低于现价 |",
             "|---|---|---|---|---|---|---|---|"]
@@ -594,7 +603,7 @@ def main() -> None:
     p.add_argument("--json", action="store_true",
                    help="改为输出 JSON：{analysis, chart}，给网页工作台和 agent 工具用")
     p.add_argument("--builtin-tones", action="store_true",
-                   help="--json 的 K 线着色只用自带规则，不读本机的着色插件（见 tones.py）；盲测练习用，题目在每台机器上一样")
+                   help="K 线着色只用自带规则，不读本机的着色插件（见 tones.py），黑绿线 P40–P45 因此需看图；盲测练习用，题目在每台机器上一样")
     a = p.parse_args()
     if not a.ticker and not a.csv:
         p.error("需要 ticker 或 --csv")
@@ -613,7 +622,8 @@ def main() -> None:
     elif a.csv:
         hourly = {"available": False, "reason": "CSV 模式不取小时线"}
     earnings = ea.load_earnings(a.ticker.upper(), str(df.index[-1].date()), str(df.index[0].date())) if a.ticker else None
-    result = analyze(df, a.ticker.upper() if a.ticker else a.csv, src, history, hourly, sizing, earnings)
+    result = analyze(df, a.ticker.upper() if a.ticker else a.csv, src, history, hourly, sizing, earnings,
+                     tone_plugin=not a.builtin_tones)
     if a.json:
         from html_report import CHART_BARS, chart_data, weekly_chart
 

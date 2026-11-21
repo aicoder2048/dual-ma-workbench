@@ -237,7 +237,9 @@ CSV_ARGS = ("--csv", str(FIXTURES / "SPY.csv"), "--asof", "2024-04-19", "--json"
 def test_dma_analyze_json_uses_the_plugin_unless_asked_for_builtin_tones(plugin):
     plain = run("dma_analyze.py", *CSV_ARGS, plugin=None)
     colored = run("dma_analyze.py", *CSV_ARGS, plugin=plugin)
-    assert colored["analysis"] == plain["analysis"]
+    # 分析里只有黑绿线（P40–P45 和 bwl）跟着插件变，交易计划不变（test_bwl.py 逐字段比）
+    assert colored["analysis"]["trade_plan"] == plain["analysis"]["trade_plan"]
+    assert colored["analysis"]["bwl"]["source"]["name"] == FAKE_NAME
     for chart in (colored["chart"], colored["chart"]["weekly"]):
         assert follows_fake_rule(chart) and chart["tone_source"]["name"] == FAKE_NAME
     assert run("dma_analyze.py", *CSV_ARGS, "--builtin-tones", plugin=plugin) == plain

@@ -25,9 +25,12 @@ DMA_TONE_PLUGIN 的值是插件文件的路径，相对路径从仓库根目录�
 原因写在 ToneSource.warning 里，同时打到 stderr。分析不会因为着色插件失败。
 
 练习、识别题和网页报告只用自带规则（builtin_only=True），不找插件：题目和答案在每台机器上一样。
+
+黑绿线的规则（rules.md P40–P45）只照插件的颜色判：自带规则不是黑绿线，用它时这几条需看图（docs/adr/0022.md）。
 """
 from __future__ import annotations
 
+import hashlib
 import importlib.util
 import os
 import sys
@@ -99,6 +102,14 @@ def plugin_path() -> Path | None:
         default = ROOT / DEFAULT_PLUGIN
         return default if default.is_file() else None
     return ROOT / Path(value.strip()).expanduser() if value.strip() else None
+
+
+def plugin_fingerprint() -> str:
+    """缓存指纹用：没配插件是 "builtin"，配了是插件文件内容的 sha256（只算哈希，不输出内容），文件不存在是 "missing"。"""
+    path = plugin_path()
+    if path is None:
+        return "builtin"
+    return hashlib.sha256(path.read_bytes()).hexdigest() if path.is_file() else "missing"
 
 
 def _plugin_tones(path: Path, df: pd.DataFrame) -> tuple[pd.Series, ToneSource]:
