@@ -327,7 +327,7 @@ describe("题库", () => {
     expect(r.horizon).toBe(horizon);
     expect(r.level).toBe(stored.reveal.close);
     expect(r.chart.candles.map((c) => [c.time, c.close])).toEqual(csv.slice(i + 1, i + 1 + horizon).map((x) => [x.date, x.close]));
-    for (const xs of Object.values(r.chart.lines)) expect(xs.every((p) => p.time > drill!.t0 && p.time <= r.chart.candles.at(-1)!.time)).toBe(true);
+    for (const xs of [...Object.values(r.chart.lines), r.chart.volume]) expect(xs.every((p) => p.time > drill!.t0 && p.time <= r.chart.candles.at(-1)!.time)).toBe(true);
     expect(r.parts.length).toBe(stored.parts.length);
     stored.reveal.parts.forEach((p, k) => {
       if (p.q !== "turn") expect(r.parts[k].system).toBe(stored.parts[k].choices[stored.parts[k].answer]);

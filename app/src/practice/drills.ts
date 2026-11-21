@@ -168,12 +168,12 @@ export interface DrillView {
 /** 点图题每一步：答案那根、点的那根（时间键），差 tolerance 根以内算对；meaning、rule 是这一步的定义和规则编号。 */
 export interface StepResult { step: string; answer: string; pick: string; ok: boolean; meaning: string; rule: string }
 /**
- * 推演揭晓：T0 之后 horizon 根真实 K 线和均线（只有交卷后给），level 是收平假设的价位；
+ * 推演揭晓：T0 之后 horizon 根真实 K 线、均线和量（只有交卷后给），level 是收平假设的价位；
  * marks 是真实发生的 20/60 交叉；parts 逐问写推演（评分用）和真实走势的对照。
  */
 export interface RevealView {
   horizon: number; level: number;
-  chart: Pick<ChartData, "candles" | "lines">;
+  chart: Pick<ChartData, "candles" | "lines" | "volume">;
   marks: { time: string; text: string }[];
   parts: RevealResult[];
 }
@@ -445,6 +445,7 @@ export class DrillBank {
       horizon, level: d.reveal.close,
       chart: {
         candles: range.slice(1).map(({ time, open, high, low, close }) => ({ time, open, high, low, close })),
+        volume: full.volume.filter((v) => after.has(v.time)),
         lines: Object.fromEntries(Object.entries(full.lines).map(([k, xs]) => [k, xs.filter((p) => after.has(p.time))])),
       },
       marks: crossMarks(series).map((m) => ({ time: times[m.k], text: m.text })),

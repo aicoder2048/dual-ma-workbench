@@ -133,6 +133,8 @@ let server: ReturnType<typeof Bun.serve>;
 let browser: Browser;
 let base = "";
 let practiceDir = "";
+/** 识别题库（测试这边读标准答案，像出题人一样知道答案在哪根）。 */
+let drillBank: DrillBank;
 
 beforeAll(async () => {
   const dir = mkdtempSync(join(tmpdir(), "dma-e2e-"));
@@ -195,6 +197,7 @@ beforeAll(async () => {
   // 识别题库：同一段假"真实"行情，真的 scan.py；先出好几段的题
   const drills = new DrillBank({ prices, dir: join(dir, "drills"), pool: [{ ticker: REAL_TICKER }], random: seeded(5) });
   await drills.fill(3);
+  drillBank = drills;
   // 回测：真的服务端和子进程，planrun.py 换成替身（同样的输出格式，结果是 CLI 真跑出来的 NVDA）
   const backtests = new Backtests({ dir: join(dir, "backtests"), watchlist: () => ["NVDA"],
     command: (args) => ["bun", resolve(import.meta.dir, "../test/fixtures/fake-planrun.ts"), ...args] });
@@ -2619,7 +2622,7 @@ describe("盲测练习", () => {
     expect(await usable(page, "#practice-btn")).toBe(true);
     await page.click("#practice-btn");
     expect(await page.getAttribute("#pp-tab-drill", "aria-selected")).toBe("true");
-    await page.waitForSelector(".dr-choice");
+    await page.waitForSelector("#dr-question[data-drill]");
     expect(await usable(page, "#practice-close")).toBe(true);
     const kinds = [["chart", "看图"], ["signal", "看信号"], ["dropoff", "看抵扣价"], ["construct", "看构造和 2B"], ["play", "看打法"]];
     for (const [kind, label] of kinds) {
@@ -2672,6 +2675,108 @@ describe("盲测练习", () => {
     await page.keyboard.press("Escape");
     await page.waitForSelector("#practice-page", { state: "hidden" });
     expect(await page.textContent("#ticker")).toBe(ticker);
+    expect(errors).toEqual([]);
+    await page.close();
+  }, 120_000);
+
+  test("识别题：推演揭晓交卷后放出 T0 之后的真实走势；五步点图在图上点 K 线、撤销、交卷，标出标准答案", async () => {
+    const { page, errors } = await open();
+    await page.click("#practice-btn");
+    await page.waitForSelector("#dr-question[data-drill]");
+    /** 切到某种题，等新的一题出来。 */
+    const switchTo = async (kind: string, label: string) => {
+      expect({ kind, chip: await usable(page, `.dr-kinds [data-kind="${kind}"]`) }).toEqual({ kind, chip: true });
+      const shown = await page.getAttribute("#dr-question", "data-drill");
+      await page.click(`.dr-kinds [data-kind="${kind}"]`);
+      await page.waitForFunction(([t, was]) => document.querySelector(".dr-kind")?.textContent === t && document.getElementById("dr-question")?.dataset.drill !== was, [label, shown]);
+    };
+    /** 页面上这一题在题库里的样子（带答案）。 */
+    const stored = async () => {
+      const id = await page.getAttribute("#dr-question", "data-drill");
+      return drillBank.drills().find((d) => d.id === id)!;
+    };
+    /** 读数条第一段：鼠标所在那根是 T 几。 */
+    const readT = async () => {
+      const t = (await page.textContent("#dr-readout"))!.split(/\s/)[0];
+      return t === "T0" ? 0 : Number(t.slice(1));
+    };
+
+    // ---- 推演揭晓：选推演的答案 → 交卷 → 放出之后的 K 线（读数条到 T+n），逐问对照推演和真实 ----
+    await switchTo("project", "推演揭晓");
+    const p = await stored();
+    if (p.kind !== "project") throw new Error("kind");
+    expect(await page.textContent(".dr-context")).toContain("不算分");
+    expect(await page.textContent("#dr-readout")).toMatch(/^T0\s/);
+    for (let i = 0; i < p.parts.length; i++) {
+      expect({ i, ok: await usable(page, `.dr-part[data-part="${i}"] .dr-choice[data-choice="${p.parts[i].answer}"]`) }).toEqual({ i, ok: true });
+    }
+    expect(await visibleLeaks(page)).toEqual([]);
+    await shot(page, "drill-project-question");
+    for (let i = 0; i < p.parts.length; i++) await page.click(`.dr-part[data-part="${i}"] .dr-choice[data-choice="${p.parts[i].answer}"]`);
+    await page.waitForSelector(".dr-reveal");
+    const horizon = Math.max(...p.reveal.parts.map((r) => (r.q === "dir" ? r.n : r.q === "cross" ? 30 : r.days)));
+    expect(await page.textContent(".dr-verdict")).toContain("答对了"); // 评分按推演
+    expect(await page.textContent("#dr-readout")).toMatch(new RegExp(`^T\\+${horizon}\\s`)); // 图接上了之后的 K 线
+    for (const sel of [".dr-verdict", ".dr-reveal-note", '.dr-feedback [data-act="next"]']) {
+      expect({ sel, ok: await usable(page, sel) }).toEqual({ sel, ok: true });
+    }
+    expect(await page.locator(".dr-reveal li").count()).toBe(p.parts.length);
+    const reveal = (await page.textContent(".dr-reveal"))!;
+    expect(reveal).toContain("推演（评分）");
+    expect(reveal).toContain("真实走势");
+    expect(await visibleLeaks(page)).toEqual([]);
+    await shot(page, "drill-project-reveal");
+
+    // ---- 五步点图：点错一根 → 撤销 → 依次点对 → 交卷 → 逐步对错、定义、规则编号 ----
+    await switchTo("steps", "五步点图");
+    const s = await stored();
+    if (s.kind !== "steps") throw new Error("kind");
+    for (const sel of [".dr-steps", "#dr-chart"]) expect({ sel, ok: await usable(page, sel) }).toEqual({ sel, ok: true });
+    expect(await page.isDisabled('[data-act="submit"]')).toBe(true);
+    expect(await page.isDisabled('[data-act="undo"]')).toBe(true);
+    const box = (await page.locator("#dr-chart").boundingBox())!;
+    const y = box.y + box.height * 0.4;
+    /** 像用户一样在图上找那一根：鼠标左右移，看读数条的 T 几（K 线从左到右 T 越来越大）。 */
+    const xOf = async (k: number) => {
+      let lo = box.x + 4, hi = box.x + box.width - 80;
+      for (let i = 0; i < 16; i++) {
+        const mid = (lo + hi) / 2;
+        await page.mouse.move(mid, y);
+        await page.waitForTimeout(30);
+        const t = await readT();
+        if (t === k) return mid;
+        if (t < k) lo = mid; else hi = mid;
+      }
+      throw new Error(`图上找不到 T${k}`);
+    };
+    const label = (k: number) => (k === 0 ? "T0" : `T${k}`);
+    const first = s.click.steps[0].t;
+    // 点偏了，还连着点了两下（同一根点两下要记两步，不能被当成双击吞掉）→ 撤销按钮、Backspace 各撤一步
+    const wrongX = await xOf(first - 3);
+    await page.mouse.click(wrongX, y);
+    await page.mouse.click(wrongX, y);
+    expect(await page.textContent('[data-step-at="0"]')).toBe(label(first - 3));
+    if (s.click.steps.length > 1) {
+      expect(await page.textContent('[data-step-at="1"]')).toBe(label(first - 3));
+      await page.click('[data-act="undo"]');
+      expect(await page.textContent('[data-step-at="1"]')).toBe("—");
+    }
+    await page.keyboard.press("Backspace");
+    expect(await page.textContent('[data-step-at="0"]')).toBe("—");
+    for (const [i, step] of s.click.steps.entries()) {
+      await page.mouse.click(await xOf(step.t), y);
+      expect({ i, at: await page.textContent(`[data-step-at="${i}"]`) }).toEqual({ i, at: label(step.t) });
+    }
+    expect(await usable(page, '[data-act="submit"]')).toBe(true);
+    await shot(page, "drill-steps-question");
+    await page.click('[data-act="submit"]');
+    await page.waitForSelector(".dr-stepres");
+    expect(await page.textContent(".dr-verdict")).toContain("答对了");
+    expect(await page.locator(".dr-stepres li.ok").count()).toBe(s.click.steps.length);
+    expect(await usable(page, ".dr-stepres")).toBe(true);
+    expect(await page.locator(".dr-stepres .dr-def .dr-rule b").allTextContents()).toEqual(s.click.steps.map((x) => ({ 破线: "J15", "EMA 拐头": "A3", "MA 拐头": "A1", 第一个交叉: "J15", 双交叉: "J16" })[x.step]));
+    expect(await visibleLeaks(page)).toEqual([]);
+    await shot(page, "drill-steps-feedback");
     expect(errors).toEqual([]);
     await page.close();
   }, 120_000);
