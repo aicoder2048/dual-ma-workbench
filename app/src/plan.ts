@@ -384,7 +384,8 @@ export function playKey(a: Analysis): string {
   return a.trade_plan.key;
 }
 
-const ratio = (x: number) => `${x.toFixed(1)}:1`;
+/** 盈亏比两位小数：0.03:1 写成 0.0:1 会像算错了。 */
+const ratio = (x: number) => `${x.toFixed(2)}:1`;
 
 /** 目标位一句：价位、是什么、离现价多远；解读的标出来。 */
 function targetsText(t: TradePlan, close: number): string {
@@ -481,6 +482,7 @@ export function planFacts(tp: PlanSet, close: number): [string, string, string][
   const price = (x: number | null) => (x === null ? "没有日线价位" : at(x, close));
   const stopText = (s: TradePlan["stop"]) => s ? `${price(s.price)}，${s.reason}（${s.rule}${s.source === "解读" ? "，解读" : ""}）` : null;
   const why = f.notes.join("；");
+  const noTarget = h.notes.find((n) => n.includes("目标")) ?? "上方没有目标位";
   const out: [string, string, string][] = [
     ["计划.进场", "空仓的进场触发价和条件（交易计划）", f.entry ? `${price(f.entry.price)}，${f.entry.condition}（${f.entry.rule}）` : `空仓不进场：${why || "这套打法不买"}`],
   ];
@@ -495,8 +497,8 @@ export function planFacts(tp: PlanSet, close: number): [string, string, string][
   }
   out.push(
     ["计划.持仓止损", "持仓的止损（按进场的原则，不按成本）", stopText(h.stop) ?? h.notes.join("；")],
-    ["计划.持仓目标", "持仓的目标位（P25）", h.targets.length ? targetsText(h, close) : "上方没有目标位"],
-    ["计划.持仓到目标", "持仓到了第一目标怎么办（P25）", h.at_target ?? "上方没有目标位"],
+    ["计划.持仓目标", "持仓的目标位（P25）", h.targets.length ? targetsText(h, close) : noTarget],
+    ["计划.持仓到目标", "持仓到了第一目标怎么办（P25）", h.at_target ?? noTarget],
   );
   return out;
 }

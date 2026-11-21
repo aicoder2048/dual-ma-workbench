@@ -72,6 +72,9 @@ export interface Regime {
   accel: { phase: "起点" | "末端"; by: string } | null;
 }
 
+/** J8 的起点 / 末端是加速出现在趋势哪一头（视频 B 08:59），不是阶段：给人读时写「出现在…」，和脚本的 regime.ACCEL_WHERE 一致。 */
+export const ACCEL_WHERE = { 起点: "趋势刚开始", 末端: "趋势即将结束" } as const;
+
 export interface RuleResult {
   id: string;
   kind: "公理" | "判定" | "动作";

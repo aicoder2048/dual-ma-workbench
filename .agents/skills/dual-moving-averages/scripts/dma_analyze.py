@@ -522,7 +522,7 @@ def render_markdown(a: dict) -> str:
             f"**{r['name']}**" + (f"（{r['depth']}）" if r["depth"] else "") + f"。钟表：{clk}。",
             ""]
     if r["accel"]:
-        out.append(f"- 加速{r['accel']['phase']}（按{r['accel']['by']}）")
+        out.append(f"- 加速出现在{rg.ACCEL_WHERE[r['accel']['phase']]}（按{r['accel']['by']}）")
     if r["range"]:
         g = r["range"]
         box = f"，箱体 {g['box_low']:.2f} ~ {g['box_high']:.2f}" if g["box_low"] and g["box_high"] else ""

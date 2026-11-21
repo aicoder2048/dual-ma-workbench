@@ -30,7 +30,7 @@ describe("卡片问题", () => {
   test("结论卡：问触发价和止损怎么来的", () => {
     const qs = cardQuestions("verdict", a, r).map((q) => q.text).join("\n");
     expect(qs).toContain(r.plans.flat.trigger!.price.toFixed(2));
-    expect(qs).toContain("盈亏比 0.6:1 是怎么算的"); // NVDA 加速下跌：空仓等构造和 20 线组拐头再进，盈亏比不够
+    expect(qs).toContain("盈亏比 0.57:1 是怎么算的"); // NVDA 加速下跌：空仓等构造和 20 线组拐头再进，盈亏比不够
   });
   test("上下文说明用户在看哪张卡", () => {
     expect(cardContext("forecast", a)).toEqual({ kind: "view", what: "3. 做推演", detail: "NVDA 2026-11-18" });

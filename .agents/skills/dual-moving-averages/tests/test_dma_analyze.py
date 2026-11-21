@@ -140,6 +140,18 @@ def test_small_misorder_does_not_hide_a_clear_downtrend():
     assert a["regime"]["accel"]["phase"] == "起点"
 
 
+def test_accel_phase_reads_as_where_in_the_trend_not_as_a_stage():
+    """J8 的起点 / 末端说的是加速出现在趋势哪一头（视频 B 08:59），和 J7 的阶段（延伸）不是一回事：文字说清楚，不写裸的"起点"。"""
+    closes = [100 + i * 0.5 for i in range(200)] + [200 - i * 3 for i in range(30)]
+    a = dma.analyze(make_df(closes), "TEST", "synthetic")
+    rules = {r["id"]: r for r in a["rules"]}
+    assert a["regime"]["name"] == "加速下跌·延伸" and a["regime"]["accel"]["phase"] == "起点"
+    assert a["play"]["text"].startswith("加速下跌（出现在趋势刚开始）：")
+    assert rules["J8"]["basis"] == "加速出现在趋势刚开始"
+    assert rules["J3"]["basis"].startswith("加速下跌，出现在趋势刚开始（按")
+    assert "- 加速出现在趋势刚开始（按" in dma.render_markdown(a)
+
+
 def test_flat_series_has_no_lean():
     closes = [100 + (1 if i % 2 else -1) for i in range(260)]
     lean = dma.analyze(make_df(closes), "TEST", "synthetic")["lean"]

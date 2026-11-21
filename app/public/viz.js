@@ -376,7 +376,7 @@ function rrChip(t) {
   if (t.rr === null) return "";
   const gap = t.rr_gap ? `：要 3:1，目标得到 ${f2(t.rr_gap.target_for_min)}，或止损收紧到 ${f2(t.rr_gap.stop_for_min)}` : "";
   return `<span class="pchip rr ${RR_CLASS[t.rr_verdict]}" data-item="rr" ${tip(`盈亏比 ${t.rr.toFixed(2)}:1，${t.rr_verdict}（P24）${gap}`)}>
-    <span class="ck">盈亏比</span><b class="num">${t.rr.toFixed(1)}:1</b>${esc(t.rr_verdict)}</span>`;
+    <span class="ck">盈亏比</span><b class="num">${t.rr.toFixed(2)}:1</b>${esc(t.rr_verdict)}</span>`;
 }
 
 /** 股数标签：填了账户给股数；没填给每 1 万元风险对应多少股（A6）。 */
@@ -543,7 +543,7 @@ function bigPictureEvidence(v) {
     + check("①", "60/120 线组排好了吗？", `次序${SIDE[r.order]}，60 线组${WAY[r.dir60]}、120 线组${WAY[r.dir120]} → <b>${r.type ? "有类型" : "定不出类型，按 20/60 的结构命名"}</b>`,
       ladder(v))
     + check("②", "60 线几点钟？", `MA60 ${r.clock60.angle >= 0 ? "+" : ""}${r.clock60.angle.toFixed(0)}°，${esc(r.clock60.hour)}（2 点半到 3 点半算走平，1 点钟以上算加速）；6 条线相差 ${v.spread.toFixed(1)}% → <b>${r.type === "横盘" ? "横盘" : r.type ? "有斜率" : "不看"}</b>`)
-    + check("③", "是不是加速？", `离 20 线 ${pct(v.bias.value)}，在自身历史排 ${pctl}% 分位（两端各 ${Math.round((1 - v.bias.extreme) * 100)}% 算大幅乖离）→ <b>${r.accel ? `加速${esc(r.accel.phase)}` : "不是加速"}</b>`,
+    + check("③", "是不是加速？", `离 20 线 ${pct(v.bias.value)}，在自身历史排 ${pctl}% 分位（两端各 ${Math.round((1 - v.bias.extreme) * 100)}% 算大幅乖离）→ <b>${r.accel ? `加速出现在${{ 起点: "趋势刚开始", 末端: "趋势即将结束" }[r.accel.phase] ?? esc(r.accel.phase)}` : "不是加速"}</b>`,
       biasMeter(v))
     + check("④", "20 线组走到哪一步？", `${r.stage ? `${esc(r.stage)}${r.depth ? `（${esc(r.depth)}）` : ""}` : esc(r.name)}：破线、拐头算回撤，交叉了算转折。`,
       fiveSteps(v) + crossTable(v))

@@ -5,7 +5,7 @@
  * 答案直接从分析的字段来，所以练的是系统的规则，不是谁的看法。一份分析可以出 0 到几道题（草稿），
  * 题库（drills.ts）按答案类别配额挑。草稿里的日期还是挪过的日期，入库时换成 T+n。
  */
-import type { Analysis, Construct, StepName } from "../citations.ts";
+import { ACCEL_WHERE, type Analysis, type Construct, type StepName } from "../citations.ts";
 import { buildPlans, playKey } from "../plan.ts";
 import { entryStateOf } from "./discipline.ts";
 
@@ -111,7 +111,7 @@ const chart: Generator = (c) => {
   const evidence = [`60/120 次序${order}，60 线组${dirText(r.dir60)}，120 线组${dirText(r.dir120)}`,
     `MA60 钟表 ${r.clock60.hour}（${r.clock60.angle.toFixed(0)}°），MA20 ${r.clock20.hour}（${r.clock20.angle.toFixed(0)}°）`];
   const ids = ["J1", "J2"];
-  if (r.accel) { evidence.push(`加速：按${r.accel.by}判，在${r.accel.phase}`); ids.push("J3", "J8"); }
+  if (r.accel) { evidence.push(`加速：按${r.accel.by}判，出现在${ACCEL_WHERE[r.accel.phase]}`); ids.push("J3", "J8"); }
   else if (r.type === "稳定上涨" || r.type === "稳定下跌") ids.push("J4");
   if (r.range) { evidence.push(`6 条线相差 ${r.range.spread_pct.toFixed(1)}%，60 线走平 ${r.range.days} 根`); ids.push("J5"); }
   if (r.transition) { evidence.push(`60/120 定不出类型，按 20/60 的结构叫「${r.transition}」`); ids.push("J6"); }

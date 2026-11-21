@@ -14,7 +14,7 @@ import pandas as pd
 
 from indicators import PERIODS, arrangement
 from projection import HURDLE_DAYS, Event, EventKind, SolveStatus, hurdle_path, solve
-from regime import DENSE_PCT, RANGE_MIN_DAYS, PairProgress, Regime, Stage, Step, Transition, TrendType, Turn
+from regime import ACCEL_WHERE, DENSE_PCT, RANGE_MIN_DAYS, PairProgress, Regime, Stage, Step, Transition, TrendType, Turn
 from structure import State, Structure
 from volprofile import Mountain, Profile, plan_profile
 
@@ -162,7 +162,7 @@ def j2_clock(c: Ctx) -> Result:
 def j3_accel(c: Ctx) -> Result:
     r = c.regime
     ok = r.type in (TrendType.ACCEL_UP, TrendType.ACCEL_DOWN)
-    basis = f"{r.type.value}，{r.accel.phase}（按{r.accel.by}）" if ok else f"不是加速（{r.name}）"
+    basis = f"{r.type.value}，出现在{ACCEL_WHERE[r.accel.phase]}（按{r.accel.by}）" if ok else f"不是加速（{r.name}）"
     if ok:
         j37 = j37_extreme_bias(c)
         basis += f"；旁证 J37 {j37.status.value}：{j37.basis}"
@@ -199,7 +199,7 @@ def j7_stage(c: Ctx) -> Result:
 
 def j8_accel_where(c: Ctx) -> Result:
     a = c.regime.accel
-    return _met(a is not None, f"加速{a.phase}" if a else "不是加速")
+    return _met(a is not None, f"加速出现在{ACCEL_WHERE[a.phase]}" if a else "不是加速")
 
 
 def j9_regress(c: Ctx) -> Result:
@@ -968,13 +968,13 @@ def build_play(regime: Regime, results: list[dict]) -> dict:
         ids = ["P10", "P11", "P12", "P13", "P14"]
     elif key in ("加速上涨", "加速下跌"):
         up = key == "加速上涨"
-        phase = regime.accel.phase if regime.accel else ""
+        where = f"（出现在{ACCEL_WHERE[regime.accel.phase]}）" if regime.accel else ""
         if up:
-            text = (f"加速上涨（{phase}）：没仓位不追。有仓位：" +
+            text = (f"加速上涨{where}：没仓位不追。有仓位：" +
                     ("顶部构造没出现，拿着不下车。" if st["P8"]["status"] == "满足"
                      else "顶部构造已出现，只是提醒；等关键性波动（20 线组拐头）再走。"))
         else:
-            text = (f"加速下跌（{phase}）：不抢反弹。等底部构造（J21 {st['J21']['status']}）"
+            text = (f"加速下跌{where}：不抢反弹。等底部构造（J21 {st['J21']['status']}）"
                     "和关键性波动（20 线组拐头向上）。")
         if st["J37"]["status"] == "满足":
             text += f"大幅乖离（J37，旁证）：{st['J37']['basis'].split('；')[0]}，很可能要回归，什么时候回归不知道。"

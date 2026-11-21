@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { Analysis } from "../src/citations.ts";
-import { buildChecklist, buildForecast, buildPlans, ma20Claim, playKey, SOLVER_EVIDENCE } from "../src/plan.ts";
+import { buildChecklist, buildForecast, buildPlans, ma20Claim, planFacts, planLine, playKey, rrText, SOLVER_EVIDENCE } from "../src/plan.ts";
 import nvda from "./fixtures/nvda-analysis.json";
 import spyJson from "./fixtures/spy-2024-04-19-analysis.json";
 
@@ -42,7 +42,7 @@ const bullishPlans = () => buildPlans(bullish());
 describe("定策略：按有没有仓位给出做法和价位", () => {
   const plans = buildPlans(bear);
   test("空仓：一句话做法 + 等什么条件，条件里有具体价位", () => {
-    expect(plans.flat.action).toBe("不做：盈亏比 0.6:1，不到 3:1。"); // 交易计划：进场 212.21、止损 183.08、目标缺口 228.86
+    expect(plans.flat.action).toBe("不做：盈亏比 0.57:1，不到 3:1。"); // 交易计划：进场 212.21、止损 183.08、目标缺口 228.86
     const text = plans.flat.items.map((i) => i.text).join("");
     expect(text).toContain("183.08"); // 先站上 EMA20
     expect(text).toContain("212.21"); // 再站上 MA20 抵扣价
@@ -69,7 +69,7 @@ describe("结论：做法跟着阶段走，带触发价、止损和风险（SPY 
     for (const k of ["flat", "holding"] as const) expect(p[k].action).not.toContain("等回调");
   });
   test("盈亏比不到 3:1：空仓的做法改成不做，写出差多少", () => {
-    expect(p.flat.action).toBe("不做：盈亏比 1.9:1，不到 3:1。");
+    expect(p.flat.action).toBe("不做：盈亏比 1.94:1，不到 3:1。");
     const rr = p.flat.items.find((i) => i.label === "盈亏比")!;
     expect(rr.text).toContain("目标得到 537.73");
     expect(rr.text).toContain("止损收紧到 492.40");
@@ -606,12 +606,41 @@ describe("交易计划的盈亏比档位和股数照脚本说（P24、A6）", ()
   test("3:1 可做：做法不改成不做，盈亏比写档位", () => {
     const p = withRr(3, "可做", null);
     expect(p.flat.action).not.toContain("不做");
-    expect(p.flat.items.find((i) => i.label === "盈亏比")!.text).toBe("3.0:1，可做（不到 3:1 不做，5:1 以上理想）。");
+    expect(p.flat.items.find((i) => i.label === "盈亏比")!.text).toBe("3.00:1，可做（不到 3:1 不做，5:1 以上理想）。");
   });
   test("5:1 理想；填了账户给股数", () => {
     const p = withRr(5.2, "理想", 80);
     expect(p.flat.items.find((i) => i.label === "盈亏比")!.text).toContain("理想");
     expect(p.flat.items.find((i) => i.label === "股数")!.text).toBe("80 股：1000 ÷ 单位亏损 12.43 = 80 股。");
+  });
+});
+
+describe("盈亏比两位小数：0.03:1 不会读成 0.0:1", () => {
+  const short = structuredClone(spy);
+  short.trade_plan = { ...short.trade_plan, flat: { ...short.trade_plan.flat, rr: 0.0349, rr_verdict: "不做" } };
+  const p = buildPlans(short);
+  test("不做：做法、盈亏比一行、结论一行都写 0.03:1", () => {
+    expect(p.flat.action).toBe("不做：盈亏比 0.03:1，不到 3:1。");
+    expect(rrText(short.trade_plan.flat)).toStartWith("0.03:1，不到 3:1，不做");
+    expect(planLine(p.flat, short.close, true)).toContain("盈亏比 0.03:1（不做）");
+    expect(planFacts(short.trade_plan, short.close).find(([k]) => k === "计划.盈亏比")![2]).toStartWith("0.03:1");
+  });
+});
+
+describe("下跌趋势的持仓没有目标位：数据字段照脚本的说明写（P25）", () => {
+  const why = "下跌趋势还没拐头向上，持仓不找目标位：上方的缺口、均线密集是拐头向上以后才当目标的（P25）";
+  const a = structuredClone(bear);
+  a.trade_plan = { ...a.trade_plan, holding: { ...a.trade_plan.holding, targets: [], at_target: null,
+    notes: ["下跌趋势里下方没有均线托底，止损不靠均线：反弹到 EMA20 一带就是离场点", why, "止损按进场的原则给，成本价只用来算仓位"] } };
+  const facts = Object.fromEntries(planFacts(a.trade_plan, a.close).map(([k, , v]) => [k, v]));
+  test("持仓目标、持仓到目标写为什么没有，不写「上方没有目标位」", () => {
+    expect(facts["计划.持仓目标"]).toBe(why);
+    expect(facts["计划.持仓到目标"]).toBe(why);
+  });
+  test("持仓那份计划不列「目标」「到目标」两行", () => {
+    const labels = buildPlans(a).holding.items.map((i) => i.label);
+    expect(labels).not.toContain("目标");
+    expect(labels).not.toContain("到目标");
   });
 });
 
