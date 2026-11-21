@@ -772,6 +772,11 @@ RULES: tuple[Rule, ...] = (
     Rule("P37", Kind.ACTION, "周线 2B 先看日线呼应", None),
     Rule("P38", Kind.ACTION, "筹码山也是目标位来源，和缺口、均线密集并列", None),
     Rule("P39", Kind.ACTION, "进了目标筹码山照 P25 看中长线", None),
+    Rule("P40", Kind.ACTION, "黑绿线：20 在 60 上方，绿色做多", None),
+    Rule("P41", Kind.ACTION, "黑绿线：20 在 60 上方，变黑平仓不做空", None),
+    Rule("P42", Kind.ACTION, "黑绿线：20 在 60 下方，黑色做空", None),
+    Rule("P43", Kind.ACTION, "黑绿线：20 在 60 下方，变绿平仓不做多", None),
+    Rule("P44", Kind.ACTION, "黑绿线：灰色不做动作", None),
 )
 BY_ID = {r.id: r for r in RULES}
 
