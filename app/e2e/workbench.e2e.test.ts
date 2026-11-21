@@ -702,6 +702,7 @@ describe("中栏：结论 → 看大局 → 找打法 → 做推演", () => {
     expect(f).toContain("触发500.45");
     expect(f).toContain("止损488.03-2.5%"); // 60 线组拐头（解读），风险按触发价算
     expect(f).toContain("目标524.61"); // 前高（解读），说明在悬停里
+    expect(await page.getAttribute(`${flat} [data-item=target]`, "data-tip")).toContain("中长线完好（现在是稳定上涨）就继续拿"); // P25：到目标是检查点
     expect(f).toContain("股数804/万元"); // 没填账户：每 1 万元风险对应的股数
     expect(await page.getAttribute(`${flat} [data-item=rr]`, "class")).toContain("bad");
     expect(await page.textContent(`${holding} [data-item=stop]`)).toContain("488.03"); // 持仓止损按进场原则，不按成本

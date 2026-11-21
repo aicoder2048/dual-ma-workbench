@@ -361,9 +361,9 @@ export function planBody(plans, p, close) {
  * 一个价位标签：是什么、价位、离现价多远。item 给测试和读屏定位（trigger / stop / target）。
  * note 换掉"离现价多远"那一格；compact 时不写价位的说明（悬停看），五样放得下一行。
  */
-function priceChip(key, lv, close, cls, { item = cls, note = pct((lv?.price / close - 1) * 100), compact = false } = {}) {
+function priceChip(key, lv, close, cls, { item = cls, note = pct((lv?.price / close - 1) * 100), compact = false, more = "" } = {}) {
   if (!lv) return "";
-  return `<span class="pchip ${cls}" data-item="${item}" ${tip(`${key}：${lv.label} ${f2(lv.price)}`)}><span class="ck">${key}</span>${compact ? "" : esc(lv.label)}
+  return `<span class="pchip ${cls}" data-item="${item}" ${tip(`${key}：${lv.label} ${f2(lv.price)}${more ? `。${more}` : ""}`)}><span class="ck">${key}</span>${compact ? "" : esc(lv.label)}
     <b class="num">${f2(lv.price)}</b>${note ? `<span class="num muted">${note}</span>` : ""}</span>`;
 }
 
@@ -388,10 +388,10 @@ function sizeChip(t) {
   return `<span class="pchip size" data-item="size" ${tip(z.basis)}><span class="ck">股数</span><b class="num">${z.shares}</b>${z.capped ? "（账户封顶）" : ""}</span>`;
 }
 
-/** 目标位标签：脚本给的目标 1、2（P25）；解读的在悬停里说。 */
+/** 目标位标签：脚本给的目标 1、2（P25）；解读的、到第一目标怎么办（at_target）在悬停里说。 */
 const targetChips = (t, close, compact) => t.targets.map((x, i) =>
   priceChip(`目标${t.targets.length > 1 ? i + 1 : ""}`, { label: x.source === "解读" ? `${x.kind}（解读）` : x.kind, price: x.price }, close, "target",
-    { compact, note: compact ? "" : undefined })).join("");
+    { compact, note: compact ? "" : undefined, more: i === 0 ? t.at_target ?? "" : "" })).join("");
 
 /** 一行结论。buys：这套打法空仓会不会买（交易计划有进场），不买时空仓的价位叫「先看」，不叫触发。 */
 function conclusionRow(name, plan, close, flat, buys, cost) {

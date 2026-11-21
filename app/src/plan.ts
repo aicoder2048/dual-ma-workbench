@@ -409,10 +409,11 @@ export function sizeText(t: TradePlan): string | null {
   return `${z.shares} 股：${z.basis}。`;
 }
 
-/** 空仓会买时，计划里多三条：目标、盈亏比、股数；持仓只多目标。 */
+/** 空仓会买时，计划里多四条：目标、到目标怎么办、盈亏比、股数；持仓只多前两条。 */
 function tradeItems(t: TradePlan, close: number, flat: boolean): PlanItem[] {
   const out: PlanItem[] = [];
   if (t.targets.length) out.push({ label: "目标", text: targetsText(t, close), rules: ["P25"] });
+  if (t.at_target) out.push({ label: "到目标", text: t.at_target, rules: ["P25"] });
   if (!flat) return out;
   const rr = rrText(t);
   if (rr) out.push({ label: "盈亏比", text: rr, rules: ["P24"] });
@@ -482,6 +483,7 @@ export function planFacts(tp: PlanSet, close: number): [string, string, string][
     out.push(
       ["计划.止损", "空仓进场后的止损（什么原则进就什么原则出，P23）", stopText(f.stop) ?? "没有止损价"],
       ["计划.目标", "空仓进场后的目标位（P25）", f.targets.length ? targetsText(f, close) : (f.notes.find((n) => n.includes("目标")) ?? "目标位算不出")],
+      ["计划.到目标", "空仓进场后到了第一目标怎么办（P25）", f.at_target ?? "没有目标位"],
       ["计划.盈亏比", "盈亏比：(第一目标 − 进场) ÷ (进场 − 止损)，不到 3:1 不做（P24）", rrText(f) ?? `算不了：${why}`],
       ["计划.股数", "建议股数：每笔可承受亏损 ÷ (进场 − 止损)，向下取整（A6）", sizeText(f) ?? `算不了：${why}`],
     );
@@ -489,6 +491,7 @@ export function planFacts(tp: PlanSet, close: number): [string, string, string][
   out.push(
     ["计划.持仓止损", "持仓的止损（按进场的原则，不按成本）", stopText(h.stop) ?? h.notes.join("；")],
     ["计划.持仓目标", "持仓的目标位（P25）", h.targets.length ? targetsText(h, close) : "上方没有目标位"],
+    ["计划.持仓到目标", "持仓到了第一目标怎么办（P25）", h.at_target ?? "上方没有目标位"],
   );
   return out;
 }

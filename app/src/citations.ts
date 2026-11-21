@@ -165,6 +165,8 @@ export interface TradePlan {
   rr_gap: { target_for_min: number; stop_for_min: number } | null;
   risk_pct: number | null;
   size: PlanSize | null;
+  /** 到第一目标怎么办（P25）：中长线完好就继续拿，不完好就在目标位走。没有目标时为 null。 */
+  at_target: string | null;
   notes: string[];
 }
 /** key：打法键，横盘里埋伏的底线已破时是"横盘破位"。 */
