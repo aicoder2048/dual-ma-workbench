@@ -200,6 +200,25 @@ export interface TradePlan {
 /** key：打法键，横盘里埋伏的底线已破时是"横盘破位"。 */
 export interface PlanSet { key: string; flat: TradePlan; holding: TradePlan }
 
+/**
+ * 黑绿线读数（skill 的 rules.bwl_json，rules.md P40–P45，docs/adr/0022.md）：只是读数，交易计划不用它。
+ * source 是 K 线颜色的来源（自带着色或本机的着色插件），只照着色插件的颜色判；applicable 是类型适不适用（只有稳定上涨、稳定下跌）。
+ * 判不了时 color、arrangement 为 null，text 是原因；判了 text 是一句怎么读。
+ */
+export interface BwlReading {
+  source: { key: "builtin" | "plugin"; name: string };
+  applicable: boolean;
+  color: "绿" | "黑" | "灰" | null;
+  arrangement: "多头" | "空头" | "不一致" | null;
+  text: string;
+}
+
+/** 结论卡片的黑绿线一行：配了着色插件、类型适用时才有。 */
+export function bwlCard(a: Pick<Analysis, "bwl">): { source: string; text: string } | null {
+  const b = a.bwl;
+  return b && b.source.key === "plugin" && b.applicable ? { source: b.source.name, text: b.text } : null;
+}
+
 /** dma_analyze.py --json 里 analysis 的形状（只列用到的字段）。 */
 export interface Analysis {
   label: string;
@@ -219,6 +238,8 @@ export interface Analysis {
   regime: Regime;
   play: Play;
   trade_plan: PlanSet;
+  /** 旧数据没有。 */
+  bwl?: BwlReading;
   rules: RuleResult[];
   steps: PairProgress[];
   thresholds: Record<string, { value: number; source: string }>;
@@ -324,6 +345,7 @@ export function buildFacts(a: Analysis): Facts {
   put("结论.空仓", "空仓的做法、触发价、进场后止损", planLine(plans.flat, a.close, true));
   put("结论.持仓", "持仓的做法、加减仓价位、止损", planLine(plans.holding, a.close, false));
   for (const [k, label, value] of planFacts(a.trade_plan, a.close)) put(k, label, value);
+  if (a.bwl) put("黑绿线", `黑绿线读数（P40–P45，颜色：${a.bwl.source.name}；只是读数，交易计划没用它）`, a.bwl.text);
   for (const [k, label, value] of profileFacts(a)) put(k, label, value);
   const fc = buildForecast(a, plans);
   put("推演.保持", `类型线 MA60、MA120 未来 ${fc.days} 天能保持多久、守在哪`, fc.hold);

@@ -12,7 +12,7 @@
  */
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { earningsSoon, type Analysis, type HurdlePath, type Lean, type PairProgress, type RuleResult, type Scenario, type Solve } from "./citations.ts";
+import { bwlCard, earningsSoon, type Analysis, type HurdlePath, type Lean, type PairProgress, type RuleResult, type Scenario, type Solve } from "./citations.ts";
 import { buildChecklist, buildForecast, buildPlans, playKey, type Check, type Forecast, type Plan, type Situation } from "./plan.ts";
 import { naiveCompare, RULE_EVIDENCE, recordNote, type NaiveCompare, type RecordNote } from "./record.ts";
 import { PROJECT_ROOT } from "./sources.ts";
@@ -76,6 +76,8 @@ export interface Report {
   naive: NaiveCompare;
   /** 结论卡片的财报提醒：下次财报在提醒窗口内才有（只是信息，不改打法）。 */
   earnings: { next: string; days: number } | null;
+  /** 结论卡片的黑绿线一行：配了着色插件、类型适用时才有（只是读数，交易计划没用它）。 */
+  bwl: { source: string; text: string } | null;
   steps: ReportStep[];
   visual: ReportVisual;
 }
@@ -229,6 +231,7 @@ export function buildReport(a: Analysis): Report {
     record,
     naive: naiveCompare(a.ma200),
     earnings: earningsSoon(a),
+    bwl: bwlCard(a),
     steps: [
       { key: "big_picture", title: "看大局", subtitle: "现在是什么趋势", items: big },
       { key: "play", title: "找打法", subtitle: "这种趋势用哪套打法、条件齐了没有", items: play },

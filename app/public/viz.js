@@ -433,6 +433,7 @@ export function conclusionCard(r, close, p) {
     <div class="holding-row">${holdingRow(r, close, p)}</div>
     <div class="pos-cost"><label for="pos-cost">持仓成本</label><input id="pos-cost" inputmode="decimal" placeholder="可不填" value="${esc(p.cost ?? "")}"><span class="pnl">${pnlText(p.cost, close)}</span></div>
     ${naiveLine(r.naive)}
+    ${bwlLine(r)}
     ${earningsLine(r, p)}
     <p class="record"><span class="pl">回测</span>${esc(r.record.text)}</p>`;
 }
@@ -449,6 +450,17 @@ export function earningsLine(r, p) {
   const risk = stop ? `跳空可能越过止损价 <b class="num">${f2(stop.price)}</b>` : "跳空可能一下走很远";
   return `<p class="earnings-warn" data-item="earnings" ${tip(`下次财报 ${e.next}。财报后常跳空开盘，止损单按开盘价成交，可能比止损价差很多。只是提醒，不改打法`)}>`
     + `<span class="pl">财报</span>${e.days} 天后财报（${esc(e.next)}）：${risk}</p>`;
+}
+
+/**
+ * 黑绿线一行：配了着色插件、类型适用时才有（report.bwl）。只是读数，交易计划没用它。
+ * 借对照那一行的单行样式（class naive），窄屏截掉的部分悬停看整句。
+ */
+export function bwlLine(r) {
+  const b = r.bwl;
+  if (!b) return "";
+  return `<p class="naive bwl-line" data-item="bwl" ${tip(`黑绿线（${b.source}）：${b.text}。只是读数，交易计划没用它（ADR 0022）`)}>`
+    + `<span class="pl">黑绿线</span>（${esc(b.source)}）：${esc(b.text)}</p>`;
 }
 
 /** 对照一行：MA200 朴素规则怎么说、双均线怎么说、一不一致，带评估的出处（悬停看整句）。 */
