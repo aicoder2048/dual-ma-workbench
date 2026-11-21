@@ -9,7 +9,7 @@ import { measure, measureLines } from "./measure.js";
 import { BAND_ALPHA, CANDLE_ALPHA, GROUPS, SPECS, alpha, bandPoints, lineStyle, nextFocus } from "./lines.js";
 import { gapBands, pickGaps, structureScene } from "./overlays.js";
 import { createProfileLayer, profileWidth } from "./profilelayer.js";
-import { ohlcRow, weekLabel } from "./readout.js";
+import { linesRow, ohlcRow, weekLabel } from "./readout.js";
 import { DEFAULT_SPEED, OFF, SPEEDS, appendDelta, earliestIndex, indexOnOrBefore, randomIndex, sliceAt, speedMs, step } from "./replay.js";
 import { toneInfo, toneTurns } from "./tones.js";
 import { visibleProfile } from "./volprofile.js";
@@ -122,7 +122,6 @@ export function createChart(box, legendEl) {
   readout.id = "chart-readout";
   readout.className = "chart-readout";
   box.before(readout);
-  const f2 = (x) => (x == null ? "—" : x.toFixed(2));
   const showReadout = (time) => {
     if (!view?.candles.length) { readout.textContent = ""; return; }
     const c = view.candles.find((x) => x.time === time) ?? view.candles.at(-1);
@@ -130,8 +129,8 @@ export function createChart(box, legendEl) {
     const at = (k) => (view.lines[k] || []).find((p) => p.time === c.time)?.value;
     // 照 TradingView：第一行日期 + 开高低收 + 比前一根涨跌 + 量和量比，第二行各条均线的值
     const label = frame === "week" ? weekLabel(showTime(c.time), view.partial && c === view.candles.at(-1)) : showTime(c.time);
-    const lines = SPECS.filter((sp) => series[sp.key].options().visible && (frame === "day" || !sp.off))
-      .map((sp) => `<span><i class="${sp.kind.toLowerCase()}" style="--c: var(${sp.token})"></i>${sp.key} ${f2(at(sp.key))}</span>`).join("");
+    const lines = linesRow(SPECS.filter((sp) => series[sp.key].options().visible && (frame === "day" || !sp.off))
+      .map((sp) => ({ ...sp, value: at(sp.key) })));
     const turn = turnsNow.find((t) => t.time === c.time)?.to ?? null;
     readout.innerHTML = `<div class="ro-ohlc">${ohlcRow(label, c, prev, view.volume.find((v) => v.time === c.time), turn)}</div><div class="ro-lines">${lines}</div>`;
     // 窄栏（默认视口）放不下时一步步收：先收涨跌额，还放不下（多了「转绿」「转黑」）再收量比后面的「均量」两个字

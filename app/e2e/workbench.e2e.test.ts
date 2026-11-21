@@ -662,7 +662,7 @@ describe("K 线图工具", () => {
     await page.close();
   });
 
-  test("读数条照 TradingView：开高低收、涨跌、量和量比一行，均线值一行，各占一行不挤；第一行不被截掉", async () => {
+  test("读数条照 TradingView：开高低收、涨跌、量和量比一行，均线值另起；第一行不被截掉，每条均线的值都完整看得见", async () => {
     const { page } = await open();
     await page.waitForSelector("#chart canvas");
     await page.locator("#chart-readout").scrollIntoViewIfNeeded();  // 图在结论卡片下面，用户往下滚就看到读数条
@@ -681,13 +681,24 @@ describe("K 线图工具", () => {
       const hit = document.elementFromPoint(r.x + 4, r.y + r.height / 2);
       return { lines: Math.round(r.height / lh), fits: el.scrollWidth <= el.clientWidth, visible: !!hit && el.contains(hit) };
     }));
-    expect((await rows()).map(({ fits, ...r }, i) => (i === 0 ? { ...r, fits } : r))).toEqual([{ lines: 1, fits: true, visible: true }, { lines: 1, visible: true }]);
+    expect((await rows())[0]).toEqual({ lines: 1, fits: true, visible: true });
+    // 第二行：6 条线的值一个不少、都完整看得见（窄栏折成两行也行，不能被省略号截掉、不能伸出栏外）
+    const lineCells = () => page.$$eval("#chart-readout .ro-line", (els) => els.map((el) => {
+      const r = el.getBoundingClientRect(), row = el.closest(".ro-lines")!.getBoundingClientRect();
+      const hit = document.elementFromPoint(r.right - 2, r.y + r.height / 2);
+      const inside = r.left >= row.left - 0.5 && r.right <= row.right + 0.5 && r.top >= row.top - 0.5 && r.bottom <= row.bottom + 0.5;
+      return { text: el.textContent, whole: inside && !!hit && el.contains(hit) };
+    }));
+    const wholeLines = (i: number) => ["MA20", "EMA20", "MA60", "EMA60", "MA120", "EMA120"]
+      .map((k) => ({ text: `${k} ${CHART.lines[k as keyof typeof CHART.lines][i].value.toFixed(2)}`, whole: true }));
+    expect(await lineCells()).toEqual(wholeLines(299));
     // 悬停到普通的一天：1.2× 均量，不标黄
     const box = (await page.locator("#chart").boundingBox())!;
     await page.mouse.move(box.x + box.width * 0.5, box.y + box.height * 0.4);
     await page.waitForFunction(() => document.querySelector("#chart-readout .ro-vol")?.textContent?.includes("1.2×"));
     expect(await page.getAttribute("#chart-readout .ro-ratio", "class")).not.toContain("spike");
-    expect((await rows()).map(({ fits, ...r }, i) => (i === 0 ? { ...r, fits } : r))).toEqual([{ lines: 1, fits: true, visible: true }, { lines: 1, visible: true }]);
+    expect((await rows())[0]).toEqual({ lines: 1, fits: true, visible: true });
+    expect((await lineCells()).every((c) => c.whole)).toBe(true);
     await page.close();
   }, 30_000);
 

@@ -562,8 +562,11 @@ body.offline .status-pill .dot { background: var(--bad); }
 .layers-menu .layer-item:disabled .li-label { color: var(--faint); }
 .layers-menu .layer-item:disabled .li-check { border-style: dashed; }
 .chart-readout { display: grid; gap: 2px; font: 12px var(--mono); color: var(--muted); min-height: 36px; margin-bottom: 4px; }
-/* 两行：开高低收 + 涨跌一行，均线值一行；放不下就横向省略，不折行把图往下挤 */
+/* 开高低收 + 涨跌一行，放不下就横向省略（窄栏先收涨跌额、再收「均量」，见 chart.js）；
+   均线值另起一行，一组（MA + EMA）是一块，窄栏（默认视口）放不下时整组折到下一行，每条线的值都看得见 */
 .chart-readout > div { display: flex; gap: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.chart-readout > .ro-lines { flex-wrap: wrap; row-gap: 0; }
+.chart-readout .ro-group { display: inline-flex; gap: 8px; }
 .chart-readout .up { color: var(--up); }
 .chart-readout .down { color: var(--down); }
 .chart-readout b { color: var(--fg); font-weight: 600; }
