@@ -29,8 +29,13 @@ export interface Level { label: string; price: number }
  * risk：从进场价（空仓：进场触发价；持仓：现价）到止损的距离，%；没有止损或止损不在下方时为 null。
  * trade：这个处境对应的脚本交易计划（空仓读 trade_plan.flat，持仓读 trade_plan.holding），目标、盈亏比、股数在里面。
  */
-export interface Plan { action: string; items: PlanItem[]; trigger: Level | null; stop: Level | null; risk: number | null; trade: TradePlan }
-type Draft = Omit<Plan, "risk" | "trade">;
+/**
+ * 找打法第一格的一个词（docs/adr/0029.md）。空仓：做（条件今天齐了）、等（这套打法会买，触发价还没到）、不做（不买，或盈亏比不到 3:1）；
+ * 持仓：拿着、减仓、离场。
+ */
+export type Verdict = "做" | "等" | "不做" | "拿着" | "减仓" | "离场";
+export interface Plan { action: string; verdict: Verdict; items: PlanItem[]; trigger: Level | null; stop: Level | null; risk: number | null; trade: TradePlan }
+type Draft = Omit<Plan, "risk" | "trade" | "verdict">;
 
 /** 找打法的清单：一条规则今天的状态；need 是没满足时还差什么（带价位就写价位）。 */
 /** yieldsTo：自己满足、但让位给这条规则（rules.md 的让位），这时不按它做。 */
@@ -117,13 +122,14 @@ function levels(a: Analysis) {
 }
 type L = ReturnType<typeof levels>;
 const lv = (label: string, price: number | null | undefined): Level | null => (price == null ? null : { label, price });
-/** 交易计划里进场依据的规则 → 价位标签。 */
-const ENTRY_LABEL: Record<string, string> = {
-  P2: "埋伏（现价）", P21: "突破买入（现价）", P11: "回撤到 60 线组", P12: "底部构造完成", P13: "只差小时线（现价）",
-  P14: "四条齐了（现价）", "P19、P20": "20 线组一起拐头", J19: "构造完成、20 线组拐头",
+/** 交易计划里进场依据的规则 → 价位标签；now：条件今天就齐了，空仓的结论是"做"（只差小时线的 P13 还要等）。 */
+const ENTRY: Record<string, { label: string; now: boolean }> = {
+  P2: { label: "埋伏（现价）", now: true }, P21: { label: "突破买入（现价）", now: true }, P11: { label: "回撤到 60 线组", now: false },
+  P12: { label: "底部构造完成", now: false }, P13: { label: "只差小时线（现价）", now: false }, P14: { label: "四条齐了（现价）", now: true },
+  "P19、P20": { label: "20 线组一起拐头", now: false }, J19: { label: "构造完成、20 线组拐头", now: false },
 };
 /** 脚本给的进场触发价；条件里没有日线价位时为 null。 */
-const entryLevel = (l: L) => (l.entry?.price == null ? null : lv(ENTRY_LABEL[l.entry.rule] ?? "进场", l.entry.price));
+const entryLevel = (l: L) => (l.entry?.price == null ? null : lv(ENTRY[l.entry.rule]?.label ?? "进场", l.entry.price));
 /** 30 天理顺向上要守在的价位。打架和过渡的空仓打法拿它当"先看"的价位，不是买点。 */
 const alignUp = (l: L) => lv("30 天内理顺向上要守在", l.solve30("理顺向上")?.level);
 
@@ -293,7 +299,7 @@ const PLAYS: Record<string, Record<Position, (l: L) => Draft>> = {
   空头结构反弹中: {
     flat: (l) => ({ action: "不买：中长期线压着的反弹，多半是假动作。", trigger: alignUp(l), stop: null, items: [
       { label: "等什么", text: `20 线组升到 60 线组上方（MA20 过 MA60 ${f2(l.ma60)}、EMA20 过 EMA60 ${f2(l.ema60)}），排列理顺再看。`, rules: ["P17", "J18"] },
-      { label: "推演", text: `${l.basis("J17")}。要很多天、价格得一直很强，就别等。`, rules: ["J17"], evidence: SOLVER_EVIDENCE },
+      { label: "等多久", text: `${l.basis("J17")}。要很多天、价格得一直很强，就别等。`, rules: ["J17"], evidence: SOLVER_EVIDENCE },
       ENTRY_STOP(l),
       { label: "失效", text: `${GOLD(l)}、60 线组拐头向上：不再受压，这次反弹是真的，按上涨的打法看。` },
     ] }),
@@ -451,6 +457,17 @@ function withTrade(items: PlanItem[], extra: PlanItem[]): PlanItem[] {
   return [...items.slice(0, k), ...extra, ...items.slice(k)];
 }
 
+/** 持仓的结论按打法定，和各打法持仓那句做法说同一件事。浮盈 / 浮亏不改。 */
+const HOLD_VERDICT: Record<string, Verdict> = {
+  横盘: "拿着", 横盘破位: "离场", 稳定上涨: "拿着", 加速上涨: "拿着", 多头结构回撤中: "拿着",
+  稳定下跌: "减仓", 加速下跌: "减仓", 过渡: "减仓", 空头结构反弹中: "减仓",
+};
+/** 空仓的结论：不买或盈亏比不到 3:1（触发价还远时不算）是不做；条件今天齐了是做；其余是等。 */
+function flatVerdict(t: TradePlan): Verdict {
+  if (t.entry === null || (t.rr_verdict === "不做" && !t.entry.far)) return "不做";
+  return ENTRY[t.entry.rule]?.now ? "做" : "等";
+}
+
 /** 盈亏比不到 3:1：空仓的做法改成不做（P24）。触发价离现价还远时不改：盈亏比到时重算。 */
 function flatAction(d: Draft, t: TradePlan): string {
   return t.rr_verdict === "不做" && !t.entry?.far ? `不做：盈亏比 ${ratio(t.rr!)}，不到 3:1。` : d.action;
@@ -477,7 +494,8 @@ export function buildPlans(a: Analysis): Record<Situation, Plan> {
   const drafts: Record<Situation, Draft> = { flat, holding, profit: withPnl("profit"), loss: withPnl("loss") };
   return Object.fromEntries(SITUATIONS.map((k) => {
     const trade = k === "flat" ? tp.flat : tp.holding;
-    return [k, { ...drafts[k], risk: trade.risk_pct, trade }];
+    const verdict = k === "flat" ? flatVerdict(trade) : HOLD_VERDICT[key];
+    return [k, { ...drafts[k], verdict, risk: trade.risk_pct, trade }];
   })) as Record<Situation, Plan>;
 }
 

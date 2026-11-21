@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { cardQuestions } from "../public/askmenu.js";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { conclusionCard, holdingRow, parseCost, pnlText, situationOf } from "../public/viz.js";
+import { conclusionCard, holdingRow, parseCost, planBody, pnlText, situationOf } from "../public/viz.js";
 import type { Analysis } from "../src/citations.ts";
 import { EVALUATION_NOTE } from "../src/record.ts";
 import { buildReport } from "../src/report.ts";
@@ -153,5 +153,112 @@ describe("结论卡片读起来（ADR 0028）", () => {
     }
     const page = readFileSync(resolve(import.meta.dir, "../public/index.html"), "utf8");
     expect(page.split(EVALUATION_NOTE).length - 1).toBe(1);
+  });
+});
+
+describe("找打法排成固定的格子，按做决定的顺序（ADR 0029）", () => {
+  const FLAT = ["能不能做", "等什么信号", "进场价", "止损", "目标和盈亏比", "仓位"];
+  const HOLD = ["拿着还是走", "盯什么信号", "止损 / 离场价", "目标", "浮盈 / 浮亏怎么办"];
+  const ENT: Record<string, string> = { "&amp;": "&", "&lt;": "<", "&gt;": ">", "&quot;": '"', "&#39;": "'" };
+  const text = (html: string) => html.replace(/<[^>]+>/g, "").replace(/&(amp|lt|gt|quot|#39);/g, (m) => ENT[m]).replace(/\s+/g, "");
+  /** 计划正文按格子切开：标题、正文、依据（折叠的那段）。 */
+  const cells = (html: string) => html.split('<li class="pcell"').slice(1).map((c) => {
+    const [main, basis = ""] = c.split('<div class="pc-main">')[1].split('<details class="basis"');
+    return { key: c.match(/data-cell="(\w+)"/)![1], title: c.match(/<b class="pc-title">([^<]+)<\/b>/)![1], main: text(main), basis: text(basis) };
+  });
+  const cell = (html: string, key: string) => cells(html).find((c) => c.key === key)!;
+  const nv = structuredClone(nvda) as Analysis;
+  const spyA = structuredClone(spyFixture) as Analysis;
+  const flat = { pos: "flat", cost: "" };
+  const hold = { pos: "holding", cost: "" };
+
+  /** 换成另一套打法（和 plan.test 的 setKey 同一个做法）：不买的打法空仓没有进场、止损、股数。 */
+  const BUYS = new Set(["横盘", "稳定上涨", "多头结构回撤中", "加速下跌"]);
+  const withKey = (key: string) => {
+    const a = structuredClone(nvda) as Analysis;
+    a.play = { ...a.play, key: key === "横盘破位" ? "横盘" : key }; // 横盘破位只是交易计划的键（脚本的 plan_key）
+    const neutral = { rr: null, rr_verdict: null, rr_gap: null };
+    const f = BUYS.has(key) ? { ...a.trade_plan.flat, ...neutral } : { ...a.trade_plan.flat, ...neutral, entry: null, stop: null, size: null, risk_pct: null, targets: [], at_target: null };
+    a.trade_plan = { ...a.trade_plan, key, flat: f };
+    return a;
+  };
+  const KEYS = ["横盘", "横盘破位", "稳定上涨", "加速上涨", "稳定下跌", "加速下跌", "过渡", "空头结构反弹中", "多头结构回撤中"];
+
+  test("空仓六格、持仓五格，顺序固定", () => {
+    for (const [a, r] of [[nv, buildReport(nv)], [spyA, buildReport(spyA)]] as const) {
+      expect(cells(planBody(r, flat, a.close)).map((c) => c.title)).toEqual(FLAT);
+      expect(cells(planBody(r, hold, a.close)).map((c) => c.title)).toEqual(HOLD);
+    }
+  });
+
+  test("每套打法、每种处境：格子一个不少，计划的每一条只出现在一格里", () => {
+    for (const key of KEYS) {
+      const a = withKey(key);
+      const r = buildReport(a);
+      for (const [k, p] of [["flat", flat], ["holding", hold], ["profit", { pos: "holding", cost: "1" }], ["loss", { pos: "holding", cost: "9999" }]] as const) {
+        const html = planBody(r, p, a.close);
+        const cs = cells(html);
+        expect({ key, k, titles: cs.map((c) => c.title) }).toEqual({ key, k, titles: k === "flat" ? FLAT : HOLD });
+        for (const c of cs) expect({ key, k, cell: c.key, filled: c.main.length > 0 }).toEqual({ key, k, cell: c.key, filled: true });
+        for (const i of r.plans[k].items) {
+          const body = text(i.text.replaceAll("{cost}", k === "profit" ? "1.00" : k === "loss" ? "9999.00" : "成本"));
+          const hits = cs.filter((c) => (c.main + c.basis).includes(body)).length;
+          expect({ key, k, label: i.label, hits }).toEqual({ key, k, label: i.label, hits: 1 });
+        }
+      }
+    }
+  });
+
+  test("空仓（SPY 稳定上涨·回撤中）：结论一个词在前；进场价、止损、目标和盈亏比、股数各在各的格子", () => {
+    const r = buildReport(spyA);
+    const html = planBody(r, flat, spyA.close);
+    const t = r.plans.flat.trade;
+    expect(cell(html, "go").main).toBe("不做盈亏比1.94:1，不到3:1。"); // 做法以"不做："开头，这个词不写两遍
+    expect(cell(html, "entry").main).toContain(t.entry!.price!.toFixed(2));
+    expect(cell(html, "stop").main).toContain(t.stop!.price!.toFixed(2));
+    expect(cell(html, "stop").main).toContain("60线组拐头向下");
+    expect(cell(html, "target").main).toContain(`目标1：${t.targets[0].kind}`);
+    expect(cell(html, "target").main).toContain("盈亏比");
+    expect(cell(html, "size").main).toContain(String(t.size!.per_10k));
+    expect(cell(html, "signal").main).toContain("吃回撤四个条件");
+  });
+
+  test("技术细节挂在它支撑的那一格下面当依据：条件清单在等什么信号，筹码山在目标，推演求解在进场价", () => {
+    const a = structuredClone(nvda) as Analysis;
+    a.trade_plan.flat = { ...a.trade_plan.flat, entry: { ...a.trade_plan.flat.entry!, far: { level: 190, day: 6, days: 30 } },
+      mountain: { foot: 240, top: 250, date: "2026-01-02~2026-06-30" } };
+    const r = buildReport(a);
+    const html = planBody(r, flat, a.close);
+    expect(cell(html, "signal").basis).toContain("J21");
+    expect(cell(html, "signal").main).not.toContain("形成中");
+    expect(cell(html, "target").basis).toContain("上方最近的筹码山");
+    expect(cell(html, "target").main).not.toContain("筹码山");
+    expect(cell(html, "entry").basis).toContain("辅助·触发价");
+    expect(cell(html, "entry").basis).toContain("（H4）");
+    expect(cell(html, "entry").main).not.toContain("按收盘持平推演");
+    expect(html).toContain('<button type="button" class="cite src rule-ref" data-kind="S" data-ref="rules#P38"');
+  });
+
+  test("空仓不买的打法（稳定下跌）：没有内容的格子写「—」和为什么，格子不消失", () => {
+    const a = withKey("稳定下跌");
+    const html = planBody(buildReport(a), flat, a.close);
+    expect(cell(html, "go").main).toContain("不做");
+    for (const k of ["target", "size"]) expect(cell(html, k).main).toMatch(/^—.*不进场/);
+    expect(cell(html, "entry").main).toContain("先看");
+  });
+
+  test("持仓（加速下跌）：结论是减仓；盯住减仓位；下跌趋势不找目标写为什么；浮盈时写浮盈怎么办，成本填进去", () => {
+    const a = structuredClone(nvda) as Analysis; // 像 QQQ 2026-11-20：持仓没有目标位，脚本写了为什么
+    a.trade_plan.holding = { ...a.trade_plan.holding, targets: [], at_target: null,
+      notes: ["下跌趋势还没拐头向上，持仓不找目标位：上方的缺口、均线密集是拐头向上以后才当目标的（P25）"] };
+    const r = buildReport(a);
+    const html = planBody(r, hold, nv.close);
+    expect(cell(html, "go").main).toContain("减仓");
+    expect(cell(html, "signal").main).toContain("减仓位");
+    expect(cell(html, "target").main).toContain("持仓不找目标位");
+    expect(cell(html, "pnl").main).toContain("没填成本");
+    const profit = planBody(r, { pos: "holding", cost: "133" }, nv.close);
+    expect(cell(profit, "pnl").main).toContain("还有浮盈：止损跟着趋势结构走，不按成本133.00定");
+    expect(profit).not.toContain("{cost}");
   });
 });
