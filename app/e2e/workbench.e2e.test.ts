@@ -2625,10 +2625,25 @@ describe("图层菜单", () => {
       s.scrollTop += document.querySelector(".chart-tools")!.getBoundingClientRect().bottom - s.getBoundingClientRect().bottom + 4;
       await new Promise((ok) => requestAnimationFrame(() => requestAnimationFrame(ok)));
     });
+    const scrolled = () => page.evaluate(() => document.getElementById("center-scroll")!.scrollTop);
+    const before = await scrolled();
     await page.click(".layers-toggle");
     expect(await notCovered(page, layerBtn("profile"))).toBe(true);
     await page.click(layerBtn("profile"));
     expect((await drawn(page)).profile).toBe(true);
+    // 为了露出菜单滚走的那一段：按 Esc、再点一次「图层」关上就滚回原处；点菜单外面关的不动（鼠标正按着别的东西，页面一动就点偏了）
+    const opened = await scrolled();
+    expect(opened).toBeGreaterThan(before);
+    await page.keyboard.press("Escape");
+    expect(await scrolled()).toBe(before);
+    await page.click(".layers-toggle");
+    expect(await scrolled()).toBe(opened);
+    await page.click(".layers-toggle");
+    expect(await scrolled()).toBe(before);
+    await page.click(".layers-toggle");
+    await page.mouse.click(80, 25); // 顶栏的标志：在菜单外面，点它不用滚动
+    expect(await page.isVisible(".layers-menu")).toBe(false);
+    expect(await scrolled()).toBe(opened);
     expect(errors).toEqual([]);
     await page.close();
   }, 30_000);

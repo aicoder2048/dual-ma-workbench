@@ -19,12 +19,30 @@ export function createLayerMenu(wrap, { onPreset, onToggle }) {
   const menu = wrap.querySelector(".layers-menu");
   const custom = wrap.querySelector(".layers-custom");
 
-  const setOpen = (open) => {
+  /** 菜单所在的那个能滚的栏（中栏）。 */
+  const scroller = () => {
+    for (let el = wrap.parentElement; el; el = el.parentElement) if (/auto|scroll/.test(getComputedStyle(el).overflowY)) return el;
+    return null;
+  };
+  let moved = null; // 打开时为了露出整个菜单把栏滚了多少：{ el, from, to }
+  /**
+   * back：关上时把打开时滚走的那一段滚回去（用户自己又滚过就不动）。Esc、再点一次「图层」关的滚回去，
+   * 图上面的东西（练习的按钮）不会留在视野外面；点菜单外面关的不滚，鼠标正按着别的东西，页面一动就点偏了。
+   */
+  const setOpen = (open, back = false) => {
     menu.hidden = !open;
     btn.setAttribute("aria-expanded", String(open));
-    if (open) menu.scrollIntoView({ block: "nearest" }); // 按钮贴着中栏底边时，菜单也整个露出来
+    if (open) {
+      const el = scroller();
+      const from = el?.scrollTop;
+      menu.scrollIntoView({ block: "nearest" }); // 按钮贴着中栏底边时，菜单也整个露出来
+      moved = el && el.scrollTop !== from ? { el, from, to: el.scrollTop } : null;
+    } else {
+      if (back && moved && moved.el.scrollTop === moved.to) moved.el.scrollTop = moved.from;
+      moved = null;
+    }
   };
-  btn.addEventListener("click", () => setOpen(menu.hidden));
+  btn.addEventListener("click", () => setOpen(menu.hidden, true));
   menu.addEventListener("click", (e) => {
     const preset = e.target.closest("[data-preset]");
     const layer = e.target.closest("[data-layer]");
@@ -36,7 +54,7 @@ export function createLayerMenu(wrap, { onPreset, onToggle }) {
     if (menu.hidden) return;
     if (e.key === "Escape") {
       e.stopPropagation();
-      setOpen(false);
+      setOpen(false, true);
       btn.focus();
     } else if ((e.key === "ArrowDown" || e.key === "ArrowUp") && wrap.contains(document.activeElement)) {
       e.preventDefault();
