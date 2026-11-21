@@ -16,6 +16,8 @@
 
 输出一行 JSON：{"chart": 到最后一天的图表数据（整段）, "analyses": [每一天的 analysis，按 --dates 的顺序]}。
 图表的均线、着色、放量都只看当天及以前，题库按题目那一根切开用，不会看到之后的 K 线。
+--chart-end 给一个更晚的交易日时，图表画到那一天（推演揭晓题交卷后放出题目那一根之后的真实走势用），
+analyses 不变。
 着色只用自带规则，不读本机的着色插件（见 tones.py）：题目在每台机器上一样。
 """
 from __future__ import annotations
@@ -54,6 +56,7 @@ def main() -> None:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--csv", required=True, help="含 Date, Open, High, Low, Close, Volume 的日线")
     p.add_argument("--dates", required=True, help="逗号分隔的交易日，如 2200-03-01,2200-03-02")
+    p.add_argument("--chart-end", help="图表画到哪一天（交易日，不早于 --dates 的最后一天）；不给就到最后一天")
     p.add_argument("--jobs", type=int, default=os.cpu_count() or 1, help="并行进程数")
     a = p.parse_args()
     df = pd.read_csv(a.csv, parse_dates=["Date"]).set_index("Date").sort_index().dropna(subset=["Close"])
@@ -65,7 +68,12 @@ def main() -> None:
             analyses = list(pool.map(partial(analyze_at, df, label=a.csv), days, chunksize=4))
     else:
         analyses = [analyze_at(df, d, a.csv) for d in days]
-    last = dma.windows(df, pd.Timestamp(max(days)))[0]
+    end = a.chart_end or max(days)
+    if end < max(days):
+        p.error(f"--chart-end {end} 早于 --dates 的最后一天 {max(days)}")
+    last = dma.windows(df, pd.Timestamp(end))[0]
+    if str(last.index[-1].date()) != end:
+        raise SystemExit(f"--chart-end {end} 不是交易日")
     chart = chart_data(add_indicators(last.copy()), analyses[days.index(max(days))], 100_000, builtin_only=True)
     print(json.dumps({"chart": chart, "analyses": analyses}, ensure_ascii=False, allow_nan=False))
 

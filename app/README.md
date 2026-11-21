@@ -48,10 +48,13 @@ uv run ../.agents/skills/dual-moving-averages/scripts/backtest.py   # 逐笔回�
 
 - **识别题**（`src/practice/drillkinds.ts`、`drills.ts`、`drillstats.ts`，页面 `public/drills.js`、`drillchart.js`）：
   - 题型：`drillkinds.ts` 的 `KINDS` 和 `GENERATORS` 表，一种题一个出题函数，输入题目那一根收盘时的分析（dma_analyze 的 `analysis`），输出 0 到几份草稿：题干、选项、答案位置、答案类别、依据、规则编号、图上画什么。答案直接取分析的字段：看图 `regime.name`；看信号 `steps[0].current` 里日期是这一根、最靠后的一步；看抵扣价 `drops[].direction` 和 MA20 门槛路径的 `max_price`；看构造 `structure.top/bottom` 的 `state`、`complete_at` 和 J26；看打法按回测打法的进场条件（`discipline.ts` 的 `entryStateOf`）定「等 / 埋伏 / 不做 / 回撤买」，止损取空仓计划的 `stop`。「反弹卖」是持仓的做法，空仓永远不对，只当干扰项。
-  - 出题（`DrillBank.fill`）：抽一只票、一天（`pool.ts`），往后连着 60 根都当候选；这段换算、平移（`blind.ts`），交给 skill 的 `scan.py`（一个进程逐根分析，每根都等于 `dma_analyze.py --csv --asof`，多进程，60 根约 3 秒）。草稿里的日期换成 T+n（题目那一根是 T0）。
+  - 推演揭晓（`project`，练推演，见 [ADR 0023](../docs/adr/0023.md)）：停在 T0 问 2–3 问。① 之后每天收平，第 n 天（5、10、15 天里挑；不问第 20 天，MA20 那天扣的是 T0 自己）MA20、MA60 各往哪走：取 `projection.hurdles` 第 n 天扣掉的收盘和 T0 收盘比（A1、A2）。② 20/60 两组现在同一边时，30 天内会不会双交叉、最早在哪段（10 天内 / 11–20 / 21–30 / 不会）：从 `projection.solves` 的「双双站上 / 跌破」10、20、30 天读收平时成不成立（J16）。③ 几天内要让 MA20 或 MA60 拐头，收盘持平在哪：`solves` 的临界价位，就是门槛路径前几天的最高 / 最低价，干扰项照 `priceChoices`。评分只按推演。草稿另带 `reveal`（每问交卷后对照什么），交卷后服务端才从这段行情多取的 30 根里切出 T0 之后的真实 K 线、均线、量，`reveal.ts` 的 `revealOf` 逐问写推演（评分用）和真实走势，对不上时写价格涨跌了多少；`crossMarks` 标出真实的 20/60 交叉。页面把之后的 K 线用强调色接上，画一条收平价位的虚线。
+  - 五步点图（`steps`，练认五个进度点）：一轮转折一道，取 `steps[]` 的 `completed` 或 `current`（20/60、60/120 都出），前 k 步都有日期、都在 80 根以内才出；图给 40–80 根（第一步之前多给 12 根）。题干写哪一对、哪个方向、点几下。用户在图上依次点 K 线（`drillchart.js` 自己听按下、抬起：图表库的单击回调会把半秒内的第二下当双击吞掉），可以撤销上一步，点满交卷，交的是点的 K 线的时间键。差 `STEP_TOLERANCE`（1 根，脚本自定）以内算对，每步都对才算这题对（`gradeClicks`）。交卷后图上标出答案那几根和点的那几根，逐步写对错和定义（`stepMeaning`，J15、J16、A1、A3）。类别是「哪一对·方向·几步」，配平时各档都出。
+  - 出题（`DrillBank.fill`）：抽一只票、一天（`pool.ts`），往后连着 60 根都当候选，再多取 30 根留给推演揭晓；这段换算、平移（`blind.ts`），交给 skill 的 `scan.py`（一个进程逐根分析，每根都等于 `dma_analyze.py --csv --asof`，多进程，60 根约 3 秒；`--chart-end` 把整段图表画到最后那根）。草稿里的日期换成 T+n（题目那一根是 T0）。
   - 配平：按「题型 + 答案类别」入库，每类最多 3 道，同一段行情每类 1 道（相邻几根的题几乎一样）；一种题型攒够 9 道就停，所以要凑出至少 3 个不同的答案。给题时先等概率挑类别再挑题。不指定题型时按每种最近 20 题的错误率（加一对一错的先验）加权挑。少于 4 道在后台补，一轮最多抽 8 段。
-  - 蒙眼和不偷看：页面只拿到题目那一根及以前的 K 线、均线、量、抵扣价位置，没有答案；交卷后才给答案、依据、规则编号。答过的题删掉，那段行情没题了文件也删掉。
-  - 接口：`GET /api/drills`（统计、每种题还有几道、是否在补），`GET /api/drills/next?kind=`（不给 kind 按弱项），`POST /api/drills/<编号>/answer`（`{ picks, ms }`；每问都对才算对；同一题交两次 409）。
+  - 蒙眼和不偷看：页面只拿到题目那一根及以前的 K 线、均线、量、抵扣价位置，没有答案；点图题只给要点的步骤名，不给位置。交卷后才给答案、依据、规则编号，推演揭晓题这时才给 T0 之后的走势。答过的题删掉，那段行情没题了文件也删掉。
+  - 题目的形状：`Drill` 按题型分三种，选择题（`parts`）、推演揭晓（`parts` + `reveal`）、五步点图（`click`），旧的题库文件照样读得了。
+  - 接口：`GET /api/drills`（统计、每种题还有几道、是否在补），`GET /api/drills/next?kind=`（不给 kind 按弱项），`POST /api/drills/<编号>/answer`（选择题 `{ picks, ms }`，点图题 `{ clicks, ms }`；全对才算对；同一题交两次 409）。
   - 存储：`data/practice/drills/bank.json`（题库）、`answers.json`（答题记录）、`windows/`（行情片段和整段图表）。读的时候用 typebox 校验，坏了报错不覆盖；写入先写临时文件再改名。
 
 - **综合题**（整笔盲测，`src/practice/`，页面 `public/practice.js`）：在练习页「综合题」出题、列表、统计；开始或接着做时关掉练习页，在中栏做。一题在工作台里就是一只虚拟股票「练习 #n」，`Analyzer` 遇到这种代码转给练习模块，所以中栏、长风的取数工具、鸿雁的页面数据、推荐问法拿到的都是蒙过眼的数据。

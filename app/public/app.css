@@ -845,7 +845,24 @@ footer .j-close { font-size: 13px; }
 .dr-choice.right { border-color: var(--up); color: var(--up); background: color-mix(in srgb, var(--up) 10%, var(--card)); opacity: 1; font-weight: 600; }
 .dr-choice.wrong { border-color: var(--down); color: var(--down); background: var(--bad-soft); opacity: 1; }
 .dr-keys { margin: 8px 0 0; font-size: 11.5px; color: var(--faint); }
-.answered .dr-part, .answered .dr-keys { display: none; }
+.answered .dr-part, .answered .dr-keys, .answered .dr-steps, .answered .dr-step-acts { display: none; }
+.dr-steps { margin: 0; padding-left: 20px; display: grid; gap: 3px; font-size: 13px; }
+.dr-steps li { display: flex; justify-content: space-between; gap: 8px; padding: 2px 6px; border-radius: 6px; }
+.dr-steps li[aria-current] { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.dr-steps b { font: 12px var(--mono); color: var(--muted); }
+.dr-step-acts { margin: 8px 0 0; display: flex; gap: 8px; }
+.dr-step-acts .dr-next { margin-left: 0; }
+.dr-step-acts button:disabled { opacity: .45; cursor: default; }
+.dr-undo { border: 1px solid var(--line); background: var(--panel); color: var(--fg); border-radius: 8px; padding: 3px 12px; font: 13px var(--sans); cursor: pointer; }
+.dr-stepres, .dr-reveal ol { margin: 0; padding-left: 20px; display: grid; gap: 5px; }
+.dr-stepres p, .dr-reveal p { margin: 0; }
+.dr-stepres .ok > p:first-child { color: var(--up); } .dr-stepres .no > p:first-child { color: var(--down); }
+.dr-def { font-size: 12px; color: var(--muted); }
+.dr-def .dr-rule { margin-right: 4px; }
+.dr-reveal { display: grid; gap: 5px; padding: 8px 10px; border-radius: 8px; background: var(--accent-soft); }
+.dr-reveal-note { font-size: 12.5px; color: var(--accent); }
+.dr-reveal .differ > p:nth-child(2) { color: var(--neutral); }
+.dr-why { font-size: 12px; color: var(--muted); }
 .dr-wait { margin: 0; font-size: 13px; color: var(--muted); }
 .dr-feedback { display: grid; gap: 6px; font-size: 13px; }
 .dr-verdict { margin: 0; display: flex; align-items: center; gap: 10px; font: 700 15px var(--heading); }
