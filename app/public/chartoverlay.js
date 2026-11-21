@@ -7,6 +7,9 @@ const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&
 /** 标记离 K 线最高（最低）价多远、叠放时每层多高（像素）。 */
 const MARK_GAP = 8;
 const MARK_STEP = 18;
+/** 波段连线：1px 的浅线、端点一个小点。它是背景里的参照，不能比均线和 K 线抢眼（ADR 0019）。 */
+const SWING_ALPHA = 0.6;
+const SWING_DOT = 1.5;
 /** 小字一行多高（含底色）。 */
 const LABEL_H = 13;
 /** 小字的先后：先放的占住原位，放不下的往上下挪或不写。目标位缺口最要紧，其次是"下一根怎样"。 */
@@ -33,11 +36,11 @@ export function createOverlay(chart, series, box) {
   const y = (price) => series.priceToCoordinate(price);
   const ok = (...vs) => vs.every((v) => v !== null && Number.isFinite(v));
 
-  function line(g, a, b, color, dash, width = 1) {
+  function line(g, a, b, color, dash) {
     const xa = x(a.i), xb = x(b.i), ya = y(a.price), yb = y(b.price);
     if (!ok(xa, xb, ya, yb)) return null;
     g.strokeStyle = color;
-    g.lineWidth = width;
+    g.lineWidth = 1;
     g.setLineDash(dash);
     g.beginPath();
     g.moveTo(xa, ya);
@@ -106,14 +109,16 @@ export function createOverlay(chart, series, box) {
     }
     for (const s of scene.segments) {
       const color = s.kind === "neck" ? colors.neck : colors.swing;
-      const at = line(g, s.a, s.b, color, s.kind === "swing" ? [] : [4, 3], s.kind === "swing" ? 1.5 : 1);
+      g.globalAlpha = s.kind === "neck" ? 1 : SWING_ALPHA;
+      const at = line(g, s.a, s.b, color, s.kind === "swing" ? [] : [4, 3]);
       if (at && s.label) labels.push(label(g, s.label, at.xa, at.ya, color, PRIORITY.neck));
       if (at && s.kind === "swing") for (const [px, py] of [[at.xa, at.ya], [at.xb, at.yb]]) {
         g.fillStyle = color;
         g.beginPath();
-        g.arc(px, py, 2.5, 0, Math.PI * 2);
+        g.arc(px, py, SWING_DOT, 0, Math.PI * 2);
         g.fill();
       }
+      g.globalAlpha = 1;
     }
     for (const lv of scene.levels) {
       const color = lv.side === "top" ? colors.down : colors.up;
