@@ -228,7 +228,8 @@ NEEDS_HOURLY = frozenset({"P12", "P13"})
 class Variant:
     name: str
     rr_filter: bool = True          # 盈亏比不到 3:1（或算不了）不做
-    targets: bool = True            # 第一目标离场
+    targets: bool = True            # 挂第一目标
+    hold_if_intact: bool = True     # 到第一目标时中长线完好就不走（P25）；False：到了就走（v2）
     equal_notional: bool = False    # 不按风险算股数：每笔同样金额
     skip_hourly: bool = False       # 还要看小时线的进场不做（小时线当不满足）
     waypoint: bool = False          # P11 的回撤价也当限价单买
@@ -237,8 +238,9 @@ class Variant:
 
 
 FULL = Variant("完整计划")
-ABLATIONS = (Variant("关盈亏比过滤", rr_filter=False), Variant("关目标（拿到止损或失效）", targets=False),
-             Variant("关仓位（每笔等金额）", equal_notional=True))
+V2 = Variant("到第一目标就走（v2 的 P25）", hold_if_intact=False)
+NO_TARGET = Variant("关目标（拿到止损或失效）", targets=False)
+ABLATIONS = (Variant("关盈亏比过滤", rr_filter=False), NO_TARGET, V2, Variant("关仓位（每笔等金额）", equal_notional=True))
 EXTRA = (Variant("要看小时线的不进", skip_hourly=True), Variant("回撤到 60 线组就买（P11）", waypoint=True),
          Variant("止损看盘中最低价", intraday_stop=True), Variant("不设单票仓位上限", position_cap=False),
          Variant("PR #42 口径（盘中止损、不设上限）", intraday_stop=True, position_cap=False))
@@ -262,6 +264,17 @@ def orders_for(recs: dict[str, list[dict]], pos: dict[str, int], bars: dict[str,
             target = r["t1"] if v.targets and r["t1"] is not None and r["t1"] > entry else None
             out[g].append(ps.Order(t, g, ps.entry_kind(entry, bars[t].c[g]), entry, stop, target, invalidation(r["key"]),
                                    key=r["key"], rule=r["rule"], rr=r["rr"], atr=None if atrs is None else float(atrs[t][g])))
+    return out
+
+
+def hold_for(recs: dict[str, list[dict]], pos: dict[str, int], n: int) -> dict[str, list[bool]]:
+    """每只票每天收盘中长线完不完好（P25，tradeplan.holds_past_target 读当天的打法键）。没有计划的日子算不完好。"""
+    out = {}
+    for t, rs in recs.items():
+        x = [False] * n
+        for r in rs:
+            x[pos[r["d"]]] = tp.holds_past_target(r["key"])
+        out[t] = x
     return out
 
 
@@ -395,17 +408,30 @@ def _random_summary(reps: list[dict]) -> dict:
             "mean_r_5": q("mean_r", 5), "mean_r_95": q("mean_r", 95), "mar_5": q("mar", 5), "mar_95": q("mar", 95)}
 
 
+SPLITS = (("2013–2019", lambda d: d <= HALF), ("2020–2026", lambda d: d > HALF))
+
+
+def half(trades: list[ps.Trade], keep, cal: list[str], bc: dict) -> dict:
+    """按进场日挑出一段的交易：笔数、平均 R 和 90% 区间。"""
+    part = [t for t in trades if keep(cal[t.entry_i])]
+    rs = np.array([t.r for t in part])
+    est = es.mean_est(rs, es.block_ids([cal[t.entry_i] for t in part], cal, bc["block_days"]), bc) if len(rs) else None
+    return {"trades": len(rs), "mean_r": est.point if est else None,
+            "ci": None if est is None or est.lo is None else [est.lo, est.hi]}
+
+
 def run_group(job: tuple) -> tuple[str, dict]:
     name, tickers, recs, cal, bars, sigs, bc, cost, max_position = job
     pos = {d: k for k, d in enumerate(cal)}
     inval = inval_for(recs, pos, len(cal))
+    hold = hold_for(recs, pos, len(cal))
     start = min(pos[rs[0]["d"]] for rs in recs.values())
     runs, trades = {}, {}
 
     def go(v: Variant, notional_pct: float | None = None) -> None:
         cfg = ps.Config(cost=cost, notional_pct=notional_pct, stop_on_close=not v.intraday_stop,
                         max_position=max_position if v.position_cap else None)
-        res = ps.simulate(len(cal), bars, orders_for(recs, pos, bars, v), inval, start, cfg)
+        res = ps.simulate(len(cal), bars, orders_for(recs, pos, bars, v), inval, start, cfg, hold if v.hold_if_intact else None)
         runs[v.name], trades[v.name] = summarize(res, cal, bc), res.trades
 
     for v in VARIANTS:
@@ -418,15 +444,10 @@ def run_group(job: tuple) -> tuple[str, dict]:
             go(v, notional)
     rng = np.random.default_rng(RANDOM_SEED)
     rand = [summarize(ps.simulate(len(cal), bars, random_orders(full, recs, pos, bars, rng), inval, start,
-                                  ps.Config(cost=cost, max_position=max_position)),
+                                  ps.Config(cost=cost, max_position=max_position), hold),
                       cal, bc) for _ in range(RANDOM_REPS)] if full else []
-    halves = {}
-    for label, keep in (("2013–2019", lambda d: d <= HALF), ("2020–2026", lambda d: d > HALF)):
-        part = [t for t in full if keep(cal[t.entry_i])]
-        rs = np.array([t.r for t in part])
-        est = es.mean_est(rs, es.block_ids([cal[t.entry_i] for t in part], cal, bc["block_days"]), bc) if len(rs) else None
-        halves[label] = {"trades": len(rs), "mean_r": est.point if est else None,
-                         "ci": None if est is None or est.lo is None else [est.lo, est.hi]}
+    halves = {v.name: {label: half(trades[v.name], keep, cal, bc) for label, keep in SPLITS}
+              for v in (FULL, V2, NO_TARGET)}
     firsts = {t: rs[0]["d"] for t, rs in recs.items()}
     atrs = {t: atr(sigs[t]) for t in recs}
     return name, {"tickers": sorted(recs), "start": cal[start], "end": cal[-1], "notional": notional, "runs": runs,
@@ -520,7 +541,6 @@ def trade_line(t: dict) -> str:
 
 STOP_BUCKETS = ((0, 0.005), (0.005, 0.01), (0.01, 0.02), (0.02, 0.05), (0.05, 1.0))
 ATR_BUCKETS = ((0, 0.25), (0.25, 0.5), (0.5, 1.0), (1.0, 2.0), (2.0, float("inf")))
-V1 = "PR #42 口径（盘中止损、不设上限）"
 
 
 def bucket_rows(ts: list[dict], dist: np.ndarray, buckets, label) -> list[str]:
@@ -544,7 +564,7 @@ BUCKET_HEAD = ("| 止损距离 | 笔数 | 平均 R | 中位 R | 每笔盈亏占�
 
 
 def before_after(groups: dict[str, dict], before: dict) -> list[str]:
-    """和上一版报告（PR #42）的完整计划逐组对照；再核一遍"PR #42 口径"这一行是不是逐项复现了上一版。"""
+    """和上一版报告（v2，到第一目标就走）的完整计划逐组对照；再核一遍"到第一目标就走"这一行是不是逐项复现了上一版。"""
     out = ["| 组 | 版本 | 笔数 | 平均 R（90% 区间） | 胜率 | 年化 | 最大回撤 | MAR | MA200 的 MAR |", "|---|---|---:|---:|---:|---:|---:|---:|---:|"]
     same = []
     for gname, g in groups.items():
@@ -552,15 +572,47 @@ def before_after(groups: dict[str, dict], before: dict) -> list[str]:
         if old is None:
             continue
         ma = f2(g["baselines"]["MA200 朴素规则"]["mar"])
-        for label, s in (("PR #42", old["runs"][FULL.name]), ("这一版", g["runs"][FULL.name])):
+        for label, s in (("v2", old["runs"][FULL.name]), ("这一版", g["runs"][FULL.name])):
             out.append(f"| {gname} | {label} | {s['trades']} | {rr_cell(s)} | {p0(s['win'])} | {pc(s['cagr'])} | {pc(s['mdd'])} | "
                        f"{f2(s['mar'])} | {ma} |")
-        rep, o = g["runs"][V1], old["runs"][FULL.name]
+        rep, o = g["runs"][V2.name], old["runs"][FULL.name]
         same.append(all(rep[k] == o[k] for k in ("trades", "mean_r", "cagr", "mdd")))
-    check = ("每组的\"PR #42 口径\"一行（同一份每天的计划，止损看盘中最低价、不设单票上限）和上一版报告的完整计划逐项一致"
-             "（笔数、平均 R、年化、最大回撤），前后的差只来自这两处改动。" if all(same) else
-             "**注意**：\"PR #42 口径\"一行和上一版报告的完整计划对不上，前后的差不全是这两处改动。")
+    check = (f"每组的\"{V2.name}\"一行（同一份每天的计划，只是到第一目标就走）和上一版报告的完整计划逐项一致"
+             "（笔数、平均 R、年化、最大回撤），前后的差只来自 P25 这一处改动。" if all(same) else
+             f"**注意**：\"{V2.name}\"一行和上一版报告的完整计划对不上，前后的差不全是 P25 这一处改动。")
     return out + ["", check]
+
+
+P25_ROWS = ((V2.name, "v2：到第一目标就走"), (NO_TARGET.name, "关目标：拿到止损或失效"), (FULL.name, "新 P25：中长线完好就继续拿"))
+
+
+def p25_table(groups: dict[str, dict]) -> list[str]:
+    out = ["| 组 | 做法 | 笔数 | 平均 R（90% 区间） | 胜率 | 年化 | 最大回撤 | MAR | MA200 的 MAR |", "|---|---|---:|---:|---:|---:|---:|---:|---:|"]
+    for gname, g in groups.items():
+        ma = f2(g["baselines"]["MA200 朴素规则"]["mar"])
+        for name, label in P25_ROWS:
+            s = g["runs"][name]
+            out.append(f"| {gname} | {label} | {s['trades']} | {rr_cell(s)} | {p0(s['win'])} | {pc(s['cagr'])} | {pc(s['mdd'])} | "
+                       f"{f2(s['mar'])} | {ma} |")
+        r = g["random"]
+        if r:
+            rr = "—" if r["mean_r"] is None else f"{r['mean_r']:+.2f}（{r['mean_r_5']:+.2f} ~ {r['mean_r_95']:+.2f}）"
+            out.append(f"| {gname} | 随机进场 · 新 P25（{r['reps']} 次中位数，5% ~ 95%） | {r['trades']:.0f} | {rr} | {p0(r['win'])} | "
+                       f"{pc(r['cagr'])} | {pc(r['mdd'])} | {f2(r['mar'])}（{f2(r['mar_5'])} ~ {f2(r['mar_95'])}） | {ma} |")
+    return out
+
+
+def p25_halves(groups: dict[str, dict]) -> list[str]:
+    out = ["前后两段（按进场日）：", "", "| 组 | 做法 | 2013–2019 | 2020–2026 |", "|---|---|---:|---:|"]
+    for gname, g in groups.items():
+        for name, label in P25_ROWS:
+            cells = []
+            for h, _ in SPLITS:
+                x = g["halves"][name][h]
+                ci = "区间 —" if x["ci"] is None else f"{x['ci'][0]:+.2f} ~ {x['ci'][1]:+.2f}"
+                cells.append("—" if x["mean_r"] is None else f"{x['mean_r']:+.2f}R（{ci}，{x['trades']} 笔）")
+            out.append(f"| {gname} | {label} | {cells[0]} | {cells[1]} |")
+    return out
 
 
 def equity_pnl(t: dict) -> float:
@@ -584,9 +636,13 @@ LIMITS = [
     "**止损按收盘、第二天开盘走**：照计划原文。真实下单时有人会在收盘前几分钟看到要跌破就走，比这里早一点、亏得少一点；"
     "跳空低开的亏损全部算进去。P22（突破买入的起涨 K 线最低价）原文没写收盘，按\"收盘跌破小平台就是破线\"同样用收盘。",
     "**进场那一根不算目标**：保守，低估一部分赢的交易。",
+    "**P25 是看了这批票的结果之后改的**：v2 报告里\"关目标\"远好于\"到第一目标就走\"，之后才回去核视频原话、改 P25。"
+    "规则文字照视频 G 42:14，没调任何数，但改不改这个决定本身是在同一批票、同一段时间上看过结果才做的（分叉路径），"
+    "这里的提升会偏乐观。干净的检验是第 4 步的新验证集。",
     "**小时线**：回放没有小时线（Polygon 只回到 2021 年底），吃回撤的计划常写\"只差小时线多头排列（看小时图）\"。"
     "完整计划当作满足，\"要看小时线的不进\"当作不满足；真实使用时用户会看小时图，结果在两行之间。",
-    "**目标只用第一个**：tradeplan 给了第二目标（20/60/120 全部汇聚处），但没说分几批走；这里到第一目标全部离场，不另造分批规则。",
+    "**目标只用第一个，不分批**：到第一目标看前一天收盘的打法键（P25）：稳定上涨、加速上涨就不走、目标作废，之后只按止损和失效离场；"
+    "其余全部在目标位走。第二目标（20/60/120 全部汇聚处）不用。视频 I 14:30 说到目标位兑现一部分，没说多少，不另造分批规则。",
     "**单子只在信号次日有效**：每天按当天的新计划重下；没有挂单多日的情形。",
     "**成本**：每边 0.05%，没算税、融资、做空；只做多。分红算进收益（含分红复权因子）。",
     "**复权价**：yfinance 复权价会被之后的分红、拆股回溯调整，对价位和均线方向的影响可以忽略。",
@@ -619,17 +675,20 @@ def render(groups: dict[str, dict], meta: dict, checks: list[dict]) -> str:
             f"单票持仓金额不超过净值的 {cfg_pos * 100:.0f}%（视频没有这一条，回测自定，见 evaluation.toml；\"不设单票仓位上限\"一行去掉它）。"
             "所有持仓的初始风险加起来不超过净值的 6%（超了这笔不做）；现金不够就按现金能买的股数，不加杠杆。同一天几笔按票代码排序。",
             "- **离场**（先到先走）：止损按收盘，收盘低于止损价就第二天开盘走（计划写的都是\"收盘跌回 / 收盘低于 / 收盘跌破\"，P23 什么原则进就什么原则出）；"
-            "目标（第一目标）是挂着的卖单，看盘中最高价，开盘已经越过就按开盘价；进场那一根不算目标。"
+            "第一目标是检查点（P25）：前一天收盘中长线完好（打法键是稳定上涨或加速上涨）就不挂目标单，碰到了不走、目标作废，之后只按止损和失效离场；"
+            "不完好就挂着卖单，看盘中最高价，开盘已经越过就按开盘价；进场那一根不算目标。\"到第一目标就走\"一行是 v2 的口径。"
             "打法的失效条件收盘成立，第二天开盘走（横盘：P3、P5；稳定上涨：60 线组拐头向下；多头结构回撤中：EMA20 止损、J16 双死叉；加速下跌：EMA20 止损）。"
             "\"止损看盘中最低价\"一行是 PR #42 的口径：盘中碰到止损价就按止损价走，开盘已经跌穿按开盘价，同一根里止损和目标都碰到算先止损。",
             "- **R 倍数** = 这笔盈亏 ÷ 初始风险（股数 × (成交价 − 止损)），扣两边 0.05% 成本、含分红。收盘跌破之后第二天开盘才走，亏损常超过 1R，照实记，不截断。",
             "- **账户**：每组品种一个账户，起始 100 万，空仓的钱收益算 0。年化、回撤、MAR 都是这个账户的净值曲线。",
             "- **对照**：买入持有、MA200、MA60 朴素规则（每只票分一样多的钱，在场就满仓，不按仓位）；随机进场（同样的仓位规则、同样的止损和目标距离，"
             f"最多拿真实那笔的根数，{RANDOM_REPS} 次取中位数，括号里是 5% ~ 95%），它和完整计划的差就是\"进场选择值多少\"。", ""]
+    out += ["## P25 三种做法", "",
+            "同一份每天的计划、同样的进场和仓位，只换到第一目标之后怎么走。随机进场按这一版的 P25 离场。", "",
+            *p25_table(groups), "", *p25_halves(groups), ""]
     if meta.get("before"):
-        out += ["## 和上一版（PR #42）对照", "",
-                "这一版只改了两处：止损按收盘判断、第二天开盘走（上一版看盘中最低价）；单票持仓金额不超过净值的 "
-                f"{cfg_pos * 100:.0f}%（上一版不限）。每天的计划、进场规则、止损价位、目标、盈亏比过滤都没动。", "",
+        out += ["## 和上一版（v2）对照", "",
+                "这一版只改了 P25：到第一目标中长线完好就继续拿（上一版到了就走）。每天的计划、进场、止损、仓位、盈亏比过滤都没动。", "",
                 *before_after(groups, meta["before"]), ""]
     out += ["## 结论", "", f"### {POOLED}（{len(pool['tickers'])} 只，{pool['start']} ~ {pool['end']}）", "", *group_table(pool), ""]
     rnd = pool["random"]
@@ -671,7 +730,7 @@ def render(groups: dict[str, dict], meta: dict, checks: list[dict]) -> str:
     for gname, g in groups.items():
         cells = []
         for h in ("2013–2019", "2020–2026"):
-            x = g["halves"][h]
+            x = g["halves"][FULL.name][h]
             if x["mean_r"] is None:
                 cells.append("—")
                 continue
@@ -704,6 +763,7 @@ def render(groups: dict[str, dict], meta: dict, checks: list[dict]) -> str:
     kinds = Counter(t["kind"] for t in ts)
     out += ["", "单子类型：" + "，".join(f"{k} {v} 笔" for k, v in kinds.most_common()) + "。",
             "离场原因：" + "，".join(f"{k} {v} 笔" for k, v in Counter(t["reason"] for t in ts).most_common()) + "。",
+            f"到了第一目标、中长线完好没走（P25）：{sum(t['past_target'] for t in ts)} 笔。",
             "没成交的单：" + ("，".join(f"{k} {v} 张" for k, v in sorted(full["skipped"].items(), key=lambda x: -x[1])) or "无") + "。", ""]
     top = sorted(ts, key=lambda t: -t["r"])[:10]
     bottom = sorted(ts, key=lambda t: t["r"])[:10]

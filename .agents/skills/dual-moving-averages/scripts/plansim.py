@@ -7,6 +7,8 @@
 - 成交价不在止损上方（开盘就跌穿止损）：不进。
 - 止损按收盘（计划写的是"收盘跌回 / 收盘低于 / 收盘跌破"，P23）：收盘低于止损价，次日开盘离场，跳空的亏损照算，R 可以小于 −1。
   目标是挂着的卖单，看最高价：开盘已经越过按开盘成交，否则按目标价成交。进场那一根不算目标（盘中成交之后先碰哪个不知道）。
+- 到第一目标是检查点（P25）：给了 hold，前一天收盘中长线完好（hold[票][i]，由 tradeplan.holds_past_target 定）
+  就不挂目标单，碰到目标不走、目标作废，之后只按止损和失效离场；不完好照常在目标位走。不给 hold 等于从不完好。
 - stop_on_close=False 是盘中口径（对照用）：止损看最低价，开盘已经越过按开盘成交；同一根里止损和目标都碰到算先止损，
   进场那一根只看止损。
 - 失效条件（打法的离场条件，收盘判断）成立：次日开盘离场。同一根收盘止损和失效都成立，记作止损。
@@ -116,6 +118,8 @@ class _Pos:
     risk0: float
     k: float                          # 1 / 进场日复权因子
     pending: str | None = None        # 收盘时成立的离场原因（止损、失效）：次日开盘走
+    target: float | None = None       # 还挂着的目标单；中长线完好时碰到就作废
+    hold: bool = False                # 前一天收盘中长线完好（P25）
 
 
 @dataclass(frozen=True)
@@ -138,6 +142,7 @@ class Trade:
     pnl: float
     r: float                          # 盈亏 ÷ 初始风险（股数 × (成交价 − 止损)）
     notional: float                   # 进场金额 ÷ 前一天净值
+    past_target: bool = False         # 碰到过第一目标、中长线完好没走（P25）
 
 
 @dataclass
@@ -171,8 +176,9 @@ def _shares(o: Order, eq: float, open_risk: float, cash: float, cfg: Config) -> 
 
 
 def simulate(cal_len: int, bars: dict[str, Bars], orders: dict[int, list[Order]], inval: dict[str, list[frozenset[str]]],
-             start: int, cfg: Config = Config()) -> Result:
-    """全局日历第 start 根收盘开始，到最后一根。orders[i]：第 i 根收盘后下的单；inval[票][i]：第 i 根收盘成立的失效条件。"""
+             start: int, cfg: Config = Config(), hold: dict[str, list[bool]] | None = None) -> Result:
+    """全局日历第 start 根收盘开始，到最后一根。orders[i]：第 i 根收盘后下的单；inval[票][i]：第 i 根收盘成立的失效条件；
+    hold[票][i]：第 i 根收盘中长线完好，第二天碰到目标不走（P25）。"""
     cash, eq_prev = cfg.equity0, cfg.equity0
     held: dict[str, _Pos] = {}
     trades: list[Trade] = []
@@ -192,7 +198,7 @@ def simulate(cal_len: int, bars: dict[str, Bars], orders: dict[int, list[Order]]
         o = p.order
         trades.append(Trade(t, o.key, o.rule, o.kind.value, o.signal, p.e, j, o.entry, o.stop, o.target, o.rr, p.fill,
                             float(px), p.shares, reason, float(pnl), float(pnl / p.risk0),
-                            p.shares * p.fill / equity[p.e - start - 1]))
+                            p.shares * p.fill / equity[p.e - start - 1], o.target is not None and p.target is None))
         del held[t]
 
     for j in range(start + 1, cal_len):
@@ -207,7 +213,9 @@ def simulate(cal_len: int, bars: dict[str, Bars], orders: dict[int, list[Order]]
             if p.order.max_bars is not None and j - p.e >= p.order.max_bars:
                 close(t, p, j, b.o[j], "到期")
                 continue
-            hit = bar_exit(intraday(p.order), p.order.target, b.o[j], b.h[j], b.lo[j], False)
+            if p.target is not None and p.hold and b.h[j] >= p.target:
+                p.target = None
+            hit = bar_exit(intraday(p.order), p.target, b.o[j], b.h[j], b.lo[j], False)
             if hit:
                 close(t, p, j, *hit)
         open_risk = sum(p.shares * (p.order.entry - p.order.stop) for p in held.values())
@@ -234,7 +242,7 @@ def simulate(cal_len: int, bars: dict[str, Bars], orders: dict[int, list[Order]]
                 continue
             cash -= n * fill * (1 + cfg.cost)
             budget -= n * o.entry * (1 + cfg.cost)
-            p = _Pos(o, j, float(fill), n, n * (fill - o.stop), 1 / b.f[j])
+            p = _Pos(o, j, float(fill), n, n * (fill - o.stop), 1 / b.f[j], target=o.target)
             held[o.ticker] = p
             open_risk += n * (o.entry - o.stop)
             hit = bar_exit(intraday(o), o.target, b.o[j], b.h[j], b.lo[j], True)
@@ -252,6 +260,7 @@ def simulate(cal_len: int, bars: dict[str, Bars], orders: dict[int, list[Order]]
             if cfg.stop_on_close and bars[t].c[j] < p.order.stop:
                 now.insert(0, "止损")
             p.pending = now[0] if now else None
+            p.hold = hold is not None and hold[t][j]
         eq_prev = cash + value
         equity.append(eq_prev)
         invested.append(value / eq_prev if eq_prev > 0 else 0.0)

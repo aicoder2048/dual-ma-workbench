@@ -73,7 +73,7 @@ class Execution:
     account: float
     max_position: float | None      # 单票持仓金额上限占净值的比例，None 不限
     rr_filter: bool                 # 盈亏比不到 3:1 的不做
-    targets: bool                   # 到第一目标离场；False 拿到止损或失效
+    targets: bool                   # 挂第一目标（P25：到了中长线完好就继续拿，不完好就走）；False 拿到止损或失效
     stop_floor_atr: float           # 止损下限，几个 ATR(14)；0 不用
     cost: float                     # 每边手续费比例
 
@@ -123,7 +123,7 @@ risk_amount = 10000.0      # risk = "amount" 时用
 account = 1000000.0        # 起始资金
 max_position = {cfg['fullplan']['max_position']}       # 单票持仓金额上限，占净值的比例；0 = 不限（脚本自定）
 rr_filter = true           # 盈亏比不到 3:1 的不做
-targets = true             # 到第一目标离场；false = 拿到止损或失效
+targets = true             # 第一目标是检查点（P25）：到了中长线完好就继续拿，不完好就走；false = 不看目标，拿到止损或失效
 stop_floor_atr = 0.0       # 止损离进场不到 k 个 ATR(14) 就放宽到 k 个 ATR；0 / 0.5 / 1（脚本自定，0 = 不用）
 cost = {cfg['sample']['cost']}              # 每边手续费比例
 '''
@@ -233,7 +233,7 @@ def nondefault(plan: Plan, cfg: dict) -> list[dict]:
             ("stop_floor_atr", "止损下限（ATR）", x.stop_floor_atr, 0.0, "脚本自定"),
             ("cost", "手续费", x.cost, cfg["sample"]["cost"], "脚本自定"),
             ("rr_filter", "盈亏比过滤", x.rr_filter, True, "完整计划"),
-            ("targets", "第一目标离场", x.targets, True, "完整计划"))
+            ("targets", "第一目标（P25 检查点）", x.targets, True, "完整计划"))
     return [{"key": k, "label": label, "value": v, "default": d, "origin": o} for k, label, v, d, o in rows if v != d]
 
 
@@ -291,7 +291,7 @@ def simulate_plan(plan: Plan, recs: dict[str, list[dict]], cal: list[str], bars:
         idx = pd.DatetimeIndex(pd.to_datetime(cal))
         atrs = {t: fp.atr(sigs[t]).reindex(idx).to_numpy(dtype=float) for t in recs}
     res = ps.simulate(len(cal), bars, fp.orders_for(recs, pos, bars, plan.variant(), atrs), fp.inval_for(recs, pos, len(cal)),
-                      start, plan.sim_config())
+                      start, plan.sim_config(), fp.hold_for(recs, pos, len(cal)))
     s = fp.summarize(res, cal, cfg["bootstrap"])
     trades = [{**asdict(t), "signal_date": cal[t.signal], "entry_date": cal[t.entry_i], "exit_date": cal[t.exit_i]} for t in res.trades]
     for t in trades:
