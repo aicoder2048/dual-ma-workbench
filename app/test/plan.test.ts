@@ -715,3 +715,33 @@ describe("触发价离现价还远（ADR 0026）：盈亏比到时重算，不�
     expect(buildPlans(bear).flat.items.some((i) => i.label === "触发价")).toBe(false);
   });
 });
+
+describe("找打法的第一格：一个词的结论（ADR 0029）", () => {
+  const far = () => {
+    const a = structuredClone(bear);
+    a.trade_plan.flat = { ...a.trade_plan.flat, entry: { ...a.trade_plan.flat.entry!, far: { level: 190, day: 6, days: 30 } } };
+    return a;
+  };
+  test("空仓：盈亏比不到 3:1 是不做；触发价离现价还远时是等（盈亏比到时重算）", () => {
+    expect(buildPlans(bear).flat.verdict).toBe("不做");
+    expect(buildPlans(far()).flat.verdict).toBe("等");
+  });
+  test("空仓：条件还差（构造没完成）、盈亏比够是等；这套打法空仓不买是不做", () => {
+    const a = structuredClone(spy);
+    a.trade_plan.flat = { ...a.trade_plan.flat, rr: 3.5, rr_verdict: "可做", rr_gap: null };
+    expect(buildPlans(spy).flat.verdict).toBe("不做"); // 原样盈亏比 1.94:1
+    expect(buildPlans(a).flat.verdict).toBe("等");
+    expect(buildPlans(shaped("稳定下跌", -0.8, { r2060: -1, ema20Dir: -1 })).flat.verdict).toBe("不做");
+  });
+  test("空仓：吃回撤四个条件齐了（P14）是做", () => {
+    const a = structuredClone(spy);
+    a.trade_plan.flat = { ...a.trade_plan.flat, entry: { ...a.trade_plan.flat.entry!, rule: "P14" }, rr: 4, rr_verdict: "可做", rr_gap: null };
+    expect(buildPlans(a).flat.verdict).toBe("做");
+  });
+  test("持仓：加速下跌是减仓，横盘破位是离场，稳定上涨是拿着；浮盈浮亏不改", () => {
+    const p = buildPlans(bear);
+    expect([p.holding.verdict, p.profit.verdict, p.loss.verdict]).toEqual(["减仓", "减仓", "减仓"]);
+    expect(buildPlans(shaped("横盘", 0, { r2060: -1, ema20Dir: -1 })).holding.verdict).toBe("离场");
+    expect(buildPlans(spy).holding.verdict).toBe("拿着");
+  });
+});

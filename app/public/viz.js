@@ -345,16 +345,6 @@ export function situationOf(p, close) {
 }
 const SITUATION_LABEL = { flat: "空仓", holding: "持仓", profit: "持仓 · 浮盈", loss: "持仓 · 浮亏" };
 
-/** 计划正文（做法 + 条件）；成本占位 {cost} 填上用户输入的成本。输入成本时只重画这一块。 */
-export function planBody(plans, p, close) {
-  const k = situationOf(p, close);
-  const fill = (t) => esc(t).replaceAll("{cost}", k === "profit" || k === "loss" ? f2(parseCost(p.cost)) : "成本");
-  const plan = plans[k];
-  return `<b class="big">${fill(plan.action)}</b>
-      <ul class="plan-items">${plan.items.map((i) => `<li${i.evidence ? ` class="aux"` : ""}><span class="pl">${i.evidence ? "辅助 · " : ""}${esc(i.label)}</span>${fill(i.text)}${
-        i.rules?.length ? `<span class="plan-rules">${i.rules.map(ruleBtn).join("")}</span>` : ""}${i.evidence ? evidenceNote(i.evidence) : ""}</li>`).join("")}</ul>`;
-}
-
 // ---------- 结论：空仓、持仓各一行，带触发价、止损、目标、盈亏比、股数；回测记录 ----------
 
 /**
@@ -527,26 +517,107 @@ export function checklist(checks) {
   }).join("")}</ul>`;
 }
 
-/** 还差什么（一句）：会买的打法列没满足的条件；不买的打法照实说，给先看的价位。 */
-function missing(r, close) {
-  const t = r.plans.flat.trigger;
-  if (r.plans.flat.trade.entry === null) return `这套打法空仓不买。${t ? `先看：${esc(t.label)} ${f2(t.price)}（${pct((t.price / close - 1) * 100)}）。` : ""}`;
-  const left = r.checklist.filter((c) => c.status !== "满足" && c.need && c.id !== "P14");
-  if (!left.length) return "条件都齐了。";
-  return left.map((c) => `${ruleBtn(c.id)} ${esc(c.need)}`).join("；") + "。";
+// ---------- 找打法：计划排成固定的格子（docs/adr/0029.md） ----------
+
+/** 一个价位一句：叫什么、是什么、价位、离现价多远。 */
+const priceLine = (key, lv, close, more = "") => (lv
+  ? `<p class="pc-price"><span class="ck">${key}</span>${esc(lv.label)} <b class="num">${f2(lv.price)}</b> <span class="num muted">${pct((lv.price / close - 1) * 100)}</span>${more}</p>` : "");
+
+/** 第一格的一个词配颜色：能做、拿着偏多；等、减仓居中；不做、离场偏空。 */
+const VERDICT_CLS = { 做: "bullish", 拿着: "bullish", 等: "neutral", 减仓: "neutral", 不做: "bearish", 离场: "bearish" };
+/** 做法本来就以这个词开头（"不做：盈亏比……"）时不再写一遍。 */
+const verdictLine = (c) => {
+  const { verdict: v, action } = c.plan;
+  const rest = action.startsWith(`${v}：`) ? action.slice(v.length + 1) : action;
+  return `<p class="pc-verdict"><b class="verdict-word ${VERDICT_CLS[v]}">${esc(v)}</b><b>${c.fill(rest)}</b></p>`;
+};
+
+/** 还差什么：会买的打法列没满足的条件（P14 是"上面几条都满足"，不列）。 */
+function missingLine(c) {
+  const left = c.r.checklist.filter((x) => x.status !== "满足" && x.need && x.id !== "P14");
+  const body = left.length ? left.map((x) => `${ruleBtn(x.id)} ${esc(x.need)}`).join("；") + "。" : "条件都齐了。";
+  return `<p class="missing"><span class="pl">还差</span>${body}</p>`;
 }
 
-/** 第 2 步：打法 + 还差什么 + 条件清单；下面是按处境的具体做法（空仓 / 持仓切换）。 */
+/** 财报提醒（report.earnings）：止损那一格的依据。只是信息，不改打法。 */
+const earningsNote = (c) => {
+  const e = c.r.earnings;
+  return e ? `<p class="pc-note" data-item="earnings">财报：${e.days} 天后（${esc(e.next)}）。财报后常跳空开盘，止损单按开盘价成交，可能比止损价差很多。只是提醒，不改打法。</p>` : "";
+};
+const checklistNote = (c) => checklist(c.r.checklist);
+const riskNote = (c) => (c.plan.risk === null ? "" : `<span class="num muted">（${c.flat ? "风险" : "距止损"} ${c.plan.risk.toFixed(1)}%）</span>`);
+
+/**
+ * 找打法的格子，按交易者做决定的顺序（docs/adr/0029.md）。每格收计划里哪几条（plan.ts 条目的 label）：
+ * main 是正文，basis 是依据，折叠在格子下面，规则编号跟着条目走。每条只进一格，表里没有的 label 直接报错（单元测试把每套打法都过一遍）。
+ * lead：条目之前写的（结论、价位）；notes：依据里另加的（条件清单、财报）；empty：一条正文都没有时为什么没有，格子不消失。
+ */
+const CELLS = {
+  flat: [
+    { key: "go", title: "能不能做", main: ["进场门槛", "为什么", "小心"], lead: verdictLine },
+    { key: "signal", title: "等什么信号", main: ["等什么", "再等", "位置", "失效"], basis: ["方向", "等多久"], notes: ["条件清单", checklistNote],
+      lead: (c) => (c.buys ? missingLine(c) : "") },
+    { key: "entry", title: "进场价", main: ["怎么进"], basis: ["触发价"],
+      lead: (c) => priceLine(c.buys ? "触发价" : "先看", c.plan.trigger, c.close, c.buys ? "" : "（不是买点）"), empty: () => "这套打法空仓不买，没有进场价。" },
+    { key: "stop", title: "止损", main: ["进场后止损"], basis: ["推演"], notes: ["财报", earningsNote],
+      lead: (c) => priceLine("止损价", c.plan.stop, c.close, riskNote(c)), empty: () => "不进场，没有止损。" },
+    { key: "target", title: "目标和盈亏比", main: ["目标", "到目标", "盈亏比"], basis: ["参考"],
+      empty: (c) => (c.buys ? `算不了：${c.plan.trade.notes.join("；") || "目标位算不出"}。` : "不进场，不算目标和盈亏比。") },
+    { key: "size", title: "仓位", main: ["股数"],
+      empty: (c) => (c.buys ? `算不了：${c.plan.trade.notes.join("；") || "没有止损价"}。` : "不进场，不算股数。") },
+  ],
+  holding: [
+    { key: "go", title: "拿着还是走", main: ["为什么", "别指望"], lead: verdictLine },
+    { key: "signal", title: "盯什么信号", main: ["加仓", "减仓位", "软规则", "构造", "失效"], notes: ["条件清单", checklistNote],
+      lead: (c) => priceLine("盯住", c.plan.trigger, c.close) },
+    { key: "stop", title: "止损 / 离场价", main: ["止损"], basis: ["推演"], notes: ["财报", earningsNote],
+      lead: (c) => priceLine("止损价", c.plan.stop, c.close, riskNote(c)), empty: () => "没有止损价。" },
+    { key: "target", title: "目标", main: ["目标", "到目标"], basis: ["参考"],
+      empty: (c) => `${c.plan.trade.notes.find((n) => n.includes("目标")) ?? "上方没有目标位"}。` },
+    { key: "pnl", title: "浮盈 / 浮亏怎么办", main: ["盈亏", "仓位"],
+      lead: (c) => (c.k === "holding" ? `<p class="pc-note">没填成本：在结论卡片的「持仓成本」填上，就按浮盈 / 浮亏给建议。</p>` : "") },
+  ],
+};
+const NUMS = "①②③④⑤⑥";
+
+/** 计划的一条：标签、正文、规则编号；推演求解给的标「辅助」，附评估结论。 */
+const itemLi = (i, fill) => `<li${i.evidence ? ` class="aux"` : ""}><span class="pl">${i.evidence ? "辅助 · " : ""}${esc(i.label)}</span>${fill(i.text)}${
+  i.rules?.length ? `<span class="plan-rules">${i.rules.map(ruleBtn).join("")}</span>` : ""}${i.evidence ? evidenceNote(i.evidence) : ""}</li>`;
+
+/** 计划正文：按处境排成固定的格子；成本占位 {cost} 填上用户输入的成本。输入成本时只重画这一块。 */
+export function planBody(r, p, close) {
+  const k = situationOf(p, close);
+  const flat = k === "flat";
+  const plan = r.plans[k];
+  const fill = (t) => esc(t).replaceAll("{cost}", k === "profit" || k === "loss" ? f2(parseCost(p.cost)) : "成本");
+  const c = { r, k, flat, plan, close, fill, buys: r.plans.flat.trade.entry !== null };
+  const cells = CELLS[flat ? "flat" : "holding"];
+  const known = new Set(cells.flatMap((x) => [...x.main, ...(x.basis ?? [])]));
+  const stray = plan.items.find((i) => !known.has(i.label));
+  if (stray) throw new Error(`找打法的格子表里没有「${stray.label}」这一条（viz.js CELLS）`);
+  const of = (labels = []) => plan.items.filter((i) => labels.includes(i.label));
+  return `<ol class="plan-cells" data-plan="${flat ? "flat" : "holding"}">${cells.map((x, n) => {
+    const main = of(x.main), basis = of(x.basis);
+    const lead = x.lead?.(c) ?? "";
+    const note = x.notes ? x.notes[1](c) : "";
+    const names = [...basis.map((i) => i.label), ...(note ? [x.notes[0]] : [])];
+    const body = lead || main.length ? lead + (main.length ? `<ul class="plan-items">${main.map((i) => itemLi(i, fill)).join("")}</ul>` : "")
+      : `<p class="pc-empty">— ${esc(x.empty(c))}</p>`;
+    const more = names.length ? `<details class="basis"><summary>依据 · ${esc(names.join("、"))}</summary>${
+      basis.length ? `<ul class="plan-items">${basis.map((i) => itemLi(i, fill)).join("")}</ul>` : ""}${note}</details>` : "";
+    return `<li class="pcell" data-cell="${x.key}"><div class="pc-head"><span class="pc-n">${NUMS[n]}</span><b class="pc-title">${x.title}</b></div><div class="pc-main">${body}</div>${more}</li>`;
+  }).join("")}</ol>`;
+}
+
+/** 第 2 步：哪套打法（脚本原话折叠）；下面是按处境排好的格子（空仓 / 持仓切换）。 */
 export function playAnswer(r, p, close) {
   const seg = Object.entries(POS).map(([k, label]) =>
     `<button type="button" data-pos="${k}" aria-pressed="${k === p.pos}">${label}</button>`).join("");
   return `<div class="answer play">
       <span class="ak">打法</span><b class="big">${esc(r.visual.trend)}：按「${esc(r.playKey)}」的打法</b>
-      <p class="play-text"></p>
-      <p class="missing"><span class="pl">还差什么</span>${missing(r, close)}</p>
-      ${checklist(r.checklist)}
+      <details class="basis play-why"><summary>这套打法怎么说（脚本原话，带出处）</summary><p class="play-text"></p></details>
       <div class="pos-row"><span class="ak">具体做法</span><div class="pos-seg" role="group" aria-label="有没有仓位">${seg}</div></div>
-      <div class="plan-body">${planBody(r.plans, p, close)}</div>
+      <div class="plan-body">${planBody(r, p, close)}</div>
     </div>`;
 }
 

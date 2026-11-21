@@ -1231,11 +1231,14 @@ describe("筹码分布", () => {
     for (const sel of [".layers-toggle", ".chart-help-toggle", ".measure-toggle", "#chart-readout"]) {
       expect({ sel, ok: await notCovered(page, sel) }).toEqual({ sel, ok: true });
     }
-    // 找打法的计划里单列一行「参考」，滚到时看得见、没被挡；「目标」一行还是原来的缺口，图上的目标线也没挪到山脚
-    const planRows = '[data-step="play"] .plan-items li';
+    // 找打法里筹码山是「目标和盈亏比」那一格的依据（ADR 0029）：点开依据，滚到时看得见、没被挡；「目标」一行还是原来的缺口，图上的目标线也没挪到山脚
+    const targetCell = '[data-step="play"] .pcell[data-cell="target"]';
+    const planRows = `${targetCell} .plan-items li`;
     const refRow = page.locator(planRows, { hasText: "上方最近的筹码山" });
     expect(await refRow.count()).toBe(1);
-    await scrollIntoCenter(page, '[data-step="play"] .plan-items');
+    await scrollIntoCenter(page, `${targetCell} details.basis > summary`);
+    await page.click(`${targetCell} details.basis > summary`);
+    await scrollIntoCenter(page, `${targetCell} details.basis .plan-items`);
     expect(await refRow.evaluate((el) => {
       const r = el.getBoundingClientRect();
       return r.height > 0 && el.contains(document.elementFromPoint(r.x + 20, r.y + r.height / 2));
@@ -1713,10 +1716,38 @@ describe("中栏：结论 → 看大局 → 找打法 → 做推演", () => {
     await page.close();
   }, 30_000);
 
-  test("找打法：条件清单逐条 ✓ / ✗ / 需看图，没满足的写还差什么；滚到它时看得见、没被挡", async () => {
+  test("找打法（ADR 0029）：空仓六格、持仓五格，按做决定的顺序；滚到时每格标题看得见、没被挡；依据默认折叠", async () => {
     const { page, errors } = await open();
     const card = '[data-step="play"]';
-    await scrollIntoCenter(page, card);
+    const shown = async (titles: string[]) => {
+      expect(await page.locator(`${card} .pc-title`).allTextContents()).toEqual(titles);
+      for (let n = 1; n <= titles.length; n++) {
+        const sel = `${card} .pcell:nth-child(${n}) .pc-title`;
+        await scrollIntoCenter(page, sel);
+        expect({ n, ok: await notCovered(page, sel) }).toEqual({ n, ok: true });
+      }
+      const open = await page.locator(`${card} .plan-cells details.basis`).evaluateAll((els) => els.filter((e) => (e as HTMLDetailsElement).open).length);
+      expect(open).toBe(0);
+    };
+    await shown(["能不能做", "等什么信号", "进场价", "止损", "目标和盈亏比", "仓位"]);
+    expect((await page.textContent(`${card} .pcell[data-cell="go"] .pc-main`))!.replace(/\s+/g, "")).toContain("不做盈亏比0.57:1，不到3:1");
+    expect(await page.textContent(`${card} .pcell[data-cell="entry"] .pc-main`)).toContain("212.21");
+    expect(await page.textContent(`${card} .pcell[data-cell="stop"] .pc-main`)).toContain("183.08");
+    await scrollIntoCenter(page, `${card} .pos-row`);
+    await page.click(`${card} [data-pos="holding"]`);
+    await shown(["拿着还是走", "盯什么信号", "止损 / 离场价", "目标", "浮盈 / 浮亏怎么办"]);
+    expect(await page.textContent(`${card} .pcell[data-cell="go"] .pc-main`)).toContain("减仓");
+    expect(errors).toEqual([]);
+    await page.close();
+  }, 30_000);
+
+  test("找打法：条件清单逐条 ✓ / ✗ / 需看图，没满足的写还差什么；点开「等什么信号」的依据，看得见、没被挡", async () => {
+    const { page, errors } = await open();
+    const card = '[data-step="play"]';
+    const basis = `${card} .pcell[data-cell="signal"] details.basis`;
+    await scrollIntoCenter(page, `${basis} > summary`);
+    await page.click(`${basis} > summary`);
+    await scrollIntoCenter(page, `${card} .checklist`);
     expect(await notCovered(page, `${card} .checklist li`)).toBe(true);
     const rows = await page.locator(`${card} .checklist li`).evaluateAll((els) =>
       els.map((e) => [(e as HTMLElement).dataset.rule, e.querySelector(".mark")!.textContent]));
@@ -1733,7 +1764,7 @@ describe("中栏：结论 → 看大局 → 找打法 → 做推演", () => {
     await page.waitForSelector("#chart canvas");
     const plan = page.locator('[data-step="play"] .plan-body');
     const titles = () => page.evaluate(async () => (await import("/app.js")).getChart().levels().map((l: { title: string }) => l.title));
-    expect(await plan.textContent()).toContain("不做：盈亏比 0.57:1");
+    expect(await plan.textContent()).toContain("不做盈亏比 0.57:1");
     expect(await titles()).toEqual(["触发", "进场后止损", "目标", "判断失效"]);
     await page.click('[data-pos="holding"]');
     expect(await plan.textContent()).toContain("反弹再减仓");
@@ -1777,14 +1808,17 @@ describe("中栏：结论 → 看大局 → 找打法 → 做推演", () => {
   test("找打法：「就别等」那条推演标辅助、附评估结论；回测不支持的规则带小标签；滚到时看得见、没被挡", async () => {
     const { page, errors } = await open(undefined, "BOUNCE");
     const card = '[data-step="play"]';
+    const basis = `${card} .pcell[data-cell="signal"] details.basis`;
+    await scrollIntoCenter(page, `${basis} > summary`);
+    await page.click(`${basis} > summary`);
     await scrollIntoCenter(page, `${card} .checklist`);
     const tag = `${card} .checklist li[data-rule="J18"] .ev-tag`;
     expect(await notCovered(page, tag)).toBe(true);
     expect(await page.textContent(tag)).toContain("回测不支持");
-    await scrollIntoCenter(page, `${card} .plan-items li.aux`);
-    expect(await notCovered(page, `${card} .plan-items li.aux`)).toBe(true);
-    const aux = (await page.textContent(`${card} .plan-items li.aux`))!;
-    expect(aux).toContain("辅助 · 推演");
+    await scrollIntoCenter(page, `${basis} .plan-items li.aux`);
+    expect(await notCovered(page, `${basis} .plan-items li.aux`)).toBe(true);
+    const aux = (await page.textContent(`${basis} .plan-items li.aux`))!;
+    expect(aux).toContain("辅助 · 等多久");
     expect(aux).toContain("就别等");
     expect(aux).toContain("（H4）");
     expect(errors).toEqual([]);
@@ -2351,7 +2385,9 @@ describe("K 线回放", () => {
 describe("规则编号都能点到 rules.md", () => {
   test("找打法清单里点规则编号：弹出 rules.md 那一条的 IF / THEN 和出处；改名后的类型在页面上", async () => {
     const { page, errors } = await open();
-    await scrollIntoCenter(page, '[data-step="play"]');
+    const basis = '[data-step="play"] .pcell[data-cell="signal"] details.basis';
+    await scrollIntoCenter(page, `${basis} > summary`);
+    await page.click(`${basis} > summary`);
     await page.click('[data-step="play"] .checklist li[data-rule="P7"] .rule-ref');
     await page.waitForSelector("#popover .pop-body");
     expect(await page.textContent("#popover .pop-head")).toContain("P7（动作）");

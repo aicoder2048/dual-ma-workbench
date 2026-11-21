@@ -294,7 +294,7 @@ function paintAnswers(r, a, p, facts) {
     // 只重画持仓那一行、盈亏和找打法的计划正文，输入框不动（边打字边更新，不丢焦点）
     v.querySelector(".pnl").innerHTML = pnlText(next.cost, a.close);
     v.querySelector(".holding-row").innerHTML = holdingRow(r, a.close, next);
-    box("play").querySelector(".plan-body").innerHTML = planBody(r.plans, next, a.close);
+    box("play").querySelector(".plan-body").innerHTML = planBody(r, next, a.close);
     paintLevels(r, a, next);
   });
 }
