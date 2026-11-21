@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { Analysis } from "../src/citations.ts";
-import { buildChecklist, buildForecast, buildPlans, ma20Claim, playKey, SOLVER_EVIDENCE } from "../src/plan.ts";
+import { buildChecklist, buildForecast, buildPlans, ma20Claim, planFacts, playKey, SOLVER_EVIDENCE } from "../src/plan.ts";
 import nvda from "./fixtures/nvda-analysis.json";
 import spyJson from "./fixtures/spy-2024-04-19-analysis.json";
 
@@ -612,6 +612,23 @@ describe("交易计划的盈亏比档位和股数照脚本说（P24、A6）", ()
     const p = withRr(5.2, "理想", 80);
     expect(p.flat.items.find((i) => i.label === "盈亏比")!.text).toContain("理想");
     expect(p.flat.items.find((i) => i.label === "股数")!.text).toBe("80 股：1000 ÷ 单位亏损 12.43 = 80 股。");
+  });
+});
+
+describe("下跌趋势的持仓没有目标位：数据字段照脚本的说明写（P25）", () => {
+  const why = "下跌趋势还没拐头向上，持仓不找目标位：上方的缺口、均线密集是拐头向上以后才当目标的（P25）";
+  const a = structuredClone(bear);
+  a.trade_plan = { ...a.trade_plan, holding: { ...a.trade_plan.holding, targets: [], at_target: null,
+    notes: ["下跌趋势里下方没有均线托底，止损不靠均线：反弹到 EMA20 一带就是离场点", why, "止损按进场的原则给，成本价只用来算仓位"] } };
+  const facts = Object.fromEntries(planFacts(a.trade_plan, a.close).map(([k, , v]) => [k, v]));
+  test("持仓目标、持仓到目标写为什么没有，不写「上方没有目标位」", () => {
+    expect(facts["计划.持仓目标"]).toBe(why);
+    expect(facts["计划.持仓到目标"]).toBe(why);
+  });
+  test("持仓那份计划不列「目标」「到目标」两行", () => {
+    const labels = buildPlans(a).holding.items.map((i) => i.label);
+    expect(labels).not.toContain("目标");
+    expect(labels).not.toContain("到目标");
   });
 });
 

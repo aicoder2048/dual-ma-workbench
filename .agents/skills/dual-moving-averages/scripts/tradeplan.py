@@ -7,7 +7,8 @@
 - 止损：什么原则进就什么原则出（P23）。突破买入在起涨 K 线最低价（P22）；20 线组拐头进场的，
   拐头失败就止损，价位用 EMA20 和抵扣价算；吃回撤是 60 线组拐头（视频没给价位，标"解读"）。
 - 目标位（P25）：上方最近的缺口或均线密集（20、60 汇在一起也算），下一个是 20/60/120 全部汇聚处。
-  上方都没有时用最近的波峰（前高，解读）。
+  上方都没有时用最近的波峰（前高，解读）。下跌趋势（稳定下跌、加速下跌）的持仓不找目标：P25 是拐头向上以后的事，
+  这时持仓按反弹减仓、离场。
 - 筹码山（P38）：上方最近的整座筹码山记在计划的 mountain 上，只作参考价位，不排进目标、不算盈亏比
   （docs/adr/0018.md）。
 - 到第一目标是检查点（P25）：中长线（60/120）完好就继续拿，按止损和失效离场；不完好就在目标位走。
@@ -380,7 +381,9 @@ def _hold_double_death(c: rl.Ctx) -> Stop:
                 "J16", "视频")
 
 
+DOWN_KEYS = ("稳定下跌", "加速下跌")
 DOWN_NO_STOP = "下跌趋势里下方没有均线托底，止损不靠均线：反弹到 EMA20 一带就是离场点"
+DOWN_NO_TARGET = "下跌趋势还没拐头向上，持仓不找目标位：上方的缺口、均线密集是拐头向上以后才当目标的（P25）"
 
 
 def plan_key(c: rl.Ctx) -> str:
@@ -417,14 +420,15 @@ def _legs(c: rl.Ctx, key: str) -> tuple[Entry | None, Stop | None, Stop | None, 
 
 
 def _plan(c: rl.Ctx, key: str, entry: Entry | None, stop: Stop | None, ref: float | None, sizing: Sizing | None,
-          notes: list[str]) -> TradePlan:
-    """ref：算目标和距离的价位（空仓是进场价，持仓是现价）。sizing 为 None（持仓）不算股数、不算盈亏比。"""
+          notes: list[str], aim: bool = True) -> TradePlan:
+    """ref：算目标和距离的价位（空仓是进场价，持仓是现价）。sizing 为 None（持仓）不算股数、不算盈亏比。
+    aim 为 False 时不找目标位（下跌趋势的持仓，说明在 notes 里）。"""
     notes = list(notes)
-    targets = find_targets(c.df, c.structure, ref) if ref is not None else []
+    targets = find_targets(c.df, c.structure, ref) if ref is not None and aim else []
     mountain = mountain_above(c.profile, ref) if ref is not None else None
     if ref is not None and targets and targets[0].kind == "前高":
         notes.append("上方没有缺口和下跌途中形成的均线密集区，目标用最近的波峰（前高），是解读")
-    elif ref is not None and not targets:
+    elif ref is not None and aim and not targets:
         notes.append("上方没有缺口、均线密集区，也没有更高的波峰：目标位算不出")
     s = stop.price if stop else None
     risk_pct = None if ref is None or s is None or s >= ref else (ref - s) / ref * 100
@@ -450,8 +454,9 @@ def build(c: rl.Ctx, sizing: Sizing | None = None) -> PlanSet:
     entry, flat_stop, hold_stop, notes = _legs(c, key)
     ref = entry.price if entry else None
     flat = _plan(c, key, entry, flat_stop if entry else None, ref, sizing or Sizing(), notes)
-    hold_notes = ([DOWN_NO_STOP] if key in ("稳定下跌", "加速下跌") else []) + ["止损按进场的原则给，成本价只用来算仓位"]
-    holding = _plan(c, key, None, hold_stop, c.close, None, hold_notes)
+    down = key in DOWN_KEYS
+    hold_notes = ([DOWN_NO_STOP, DOWN_NO_TARGET] if down else []) + ["止损按进场的原则给，成本价只用来算仓位"]
+    holding = _plan(c, key, None, hold_stop, c.close, None, hold_notes, aim=not down)
     return PlanSet(key, flat, holding)
 
 

@@ -231,11 +231,11 @@ def band(m: dict) -> tuple[float, float, str]:
 
 
 def test_p38_spy_crash_bottom_mountain_above_is_a_reference_and_targets_stay_as_without_it():
-    """筹码山 318.94 比前高 313.10 远、278.67 比缺口 288.52 近：都不进 targets，盈亏比照前高算。"""
+    """筹码山 318.94 比前高 313.10 远：不进 targets，盈亏比照前高算。持仓是加速下跌，不找目标，山照样记着作参考。"""
     a = dma.analyze(load_fixture("SPY", "2020-03-23"), "SPY", "fixture")
     f, h = a["trade_plan"]["flat"], a["trade_plan"]["holding"]
     assert [(t["kind"], round(t["price"], 2)) for t in f["targets"]] == [("前高", 313.1)]
-    assert [(t["kind"], round(t["price"], 2)) for t in h["targets"]] == [("缺口", 288.52), ("20、60、120 全部汇聚", 293.88)]
+    assert a["trade_plan"]["key"] == "加速下跌" and h["targets"] == []
     assert f["rr"] == pytest.approx(0.0105, abs=0.0001)
     assert band(f["mountain"]) == (318.94, 323.98, "2019-03-25~2020-03-23")   # 从进场价 312.65 往上找
     assert band(h["mountain"]) == (278.67, 313.91, "2019-03-25~2020-03-23")   # 从现价 222.95 往上找
@@ -318,6 +318,31 @@ def test_steady_uptrend_plan_keeps_holding_past_the_first_target(plans):
 def test_bottom_turn_plan_leaves_at_the_first_target(plans):
     f = plans["GOOGL"]["trade_plan"]["flat"]
     assert "178.74" in f["at_target"] and "到了就在目标位走" in f["at_target"]
+
+
+@pytest.fixture(scope="module")
+def qqq_crash() -> dict:
+    """QQQ 2026-11-20（收 608.45）：加速下跌，现价上方 0.02% 就是 3 月那轮下跌留下的 20/60/120 汇聚（608.58）。"""
+    return dma.analyze(load_fixture("QQQ", "2026-11-20"), "QQQ", "fixture")
+
+
+def test_holding_in_a_downtrend_finds_no_target_before_the_20_line_turns_up(qqq_crash):
+    """P25 是下降趋势拐头向上才找上方的均线密集；没拐头时持仓按反弹到 EMA20 减仓，不给目标。"""
+    h = qqq_crash["trade_plan"]["holding"]
+    assert qqq_crash["trade_plan"]["key"] == "加速下跌"
+    assert h["targets"] == [] and h["at_target"] is None
+    assert any("目标" in n and "P25" in n for n in h["notes"])
+    assert not any("算不出" in n for n in h["notes"])
+
+
+def test_holding_target_change_leaves_the_flat_plan_alone(qqq_crash):
+    f = qqq_crash["trade_plan"]["flat"]
+    assert f["entry"]["price"] == pytest.approx(712.20, abs=0.01)
+    assert f["stop"]["price"] == pytest.approx(674.24, abs=0.01)
+    assert [(t["kind"], round(t["price"], 2), t["date"]) for t in f["targets"]] == [("20、60 均线密集", 713.52, "2026-09-25")]
+    assert f["rr"] == pytest.approx(0.0349, abs=0.0001) and f["rr_verdict"] == "不做"
+    assert "713.52" in f["at_target"]
+
 
 
 def test_plan_without_targets_has_no_at_target_line(plans):
