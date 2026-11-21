@@ -151,13 +151,15 @@ def cut_at(px: pd.DataFrame, i: int) -> pd.DataFrame:
     return cut
 
 
-def analyze_on(px: pd.DataFrame, i: int, label: str, hourly: dict | None = None) -> dict:
-    """第 i 根收盘后的完整分析，等于 dma_analyze.py --csv <history_at 那段> --asof <那天> 的 analysis。
+def analyze_on(px: pd.DataFrame, i: int, label: str, hourly: dict | None = None, tone_plugin: bool = False) -> dict:
+    """第 i 根收盘后的完整分析，等于 dma_analyze.py --csv <history_at 那段> --asof <那天> --builtin-tones 的 analysis。
 
     hourly 给了就代替 CSV 模式的"不取小时线"（hourly_at 的结果），只影响 P13 和用到它的 P14、打法文字。
+    tone_plugin：照本机着色插件的颜色判黑绿线（P40–P45），等于不带 --builtin-tones。
     """
     cut = cut_at(px, i)
-    a = dma.analyze(add_indicators(cut.copy()), label, f"CSV {label}", history_at(px, i), hourly or CSV_HOURLY)
+    a = dma.analyze(add_indicators(cut.copy()), label, f"CSV {label}", history_at(px, i), hourly or CSV_HOURLY,
+                    tone_plugin=tone_plugin)
     if a["date"] != str(px.index[i].date()):
         raise AssertionError(f"{label}：分析日期 {a['date']} 不是决定日 {px.index[i].date()}")
     return a

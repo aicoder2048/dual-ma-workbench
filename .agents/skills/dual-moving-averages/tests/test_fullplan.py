@@ -382,9 +382,9 @@ def test_trade_pnl_as_a_share_of_equity_ignores_the_stop_distance():
 # ---------- 计划 → 单：消融开关 ----------
 
 def rec(d: str, verdict: str | None, rule: str = "P19、P20", entry=10.0, stop=9.0, t1: float | None = 13.0,
-        key: str = "多头结构回撤中") -> dict:
+        key: str = "多头结构回撤中", bwl: list[str] | None = None) -> dict:
     return {"i": 0, "d": d, "key": key, "entry": entry, "rule": rule, "stop": stop, "t1": t1, "t2": None, "rr": 3.0,
-            "verdict": verdict, "x": []}
+            "verdict": verdict, "x": [], "bwl": bwl or []}
 
 
 DAYS = ["2024-01-02", "2024-01-03", "2024-01-04", "2024-01-05"]
@@ -441,6 +441,90 @@ def test_random_entry_keeps_count_distances_and_holding_cap():
     assert o.stop / o.entry == pytest.approx(0.9) and o.target / o.entry == pytest.approx(1.3)
 
 
+# ---------- 黑绿线开关（默认关） ----------
+
+def bwl_run(recs: dict[str, list[dict]], rows, v: fp.Variant) -> ps.Result:
+    days = [f"2024-01-0{k + 2}" for k in range(len(rows))]
+    pos = {d: k for k, d in enumerate(days)}
+    b = {"AAA": bars(rows)}
+    return ps.simulate(len(rows), b, fp.orders_for(recs, pos, b, v), fp.inval_for(recs, pos, len(rows)), 0, NO_COST)
+
+
+BWL_ROWS = [WIN[0], WIN[1], (10.2, 10.4, 10.0, 10.1), (10.3, 10.6, 10.2, 10.5)]
+
+
+def bwl_recs(marks: list[list[str]]) -> dict[str, list[dict]]:
+    days = [f"2024-01-0{k + 2}" for k in range(len(marks))]
+    return {"AAA": [rec(d, "可做", t1=None, bwl=m) for d, m in zip(days, marks)]}
+
+
+@pytest.mark.parametrize("v", [fp.FULL, *fp.ABLATIONS, *fp.EXTRA])
+def test_switches_off_the_bwl_marks_change_nothing(v):
+    """开关关着：每天记的黑绿线是什么都一样，单和成交逐笔相同。"""
+    quiet = bwl_recs([[], [], [], []])
+    loud = bwl_recs([["P40"], ["P41"], ["P42", "P45"], ["P41"]])
+    assert fp.orders_for(quiet, POS, B, v) == fp.orders_for(loud, POS, B, v)
+    assert bwl_run(quiet, BWL_ROWS, v).trades == bwl_run(loud, BWL_ROWS, v).trades
+
+
+def test_bwl_exit_leaves_next_open_after_p41_or_p42_closes():
+    v = fp.Variant("x", bwl_exit=True)
+    for mark in ("P41", "P42"):
+        (t,) = bwl_run(bwl_recs([[], [], [mark], []]), BWL_ROWS, v).trades
+        assert (t.exit_i, t.exit_px, t.reason) == (3, 10.3, "失效：黑绿线")
+    (t,) = bwl_run(bwl_recs([[], [], ["P44", "P45"], []]), BWL_ROWS, v).trades
+    assert t.reason == "未平仓"
+
+
+def test_bwl_entry_orders_only_on_days_p40_holds():
+    recs = bwl_recs([["P40", "P45"], [], ["P41"], ["P40"]])
+    assert [o.signal for o in flat(fp.orders_for(recs, POS, B, fp.Variant("x", bwl_entry=True)))] == [0, 3]
+    assert [o.signal for o in flat(fp.orders_for(recs, POS, B, fp.FULL))] == [0, 1, 2, 3]
+
+
+def test_bwl_switches_reach_every_variant():
+    vs = fp.bwl_variants(True, False)
+    assert [v.name for v in vs] == [v.name for v in fp.VARIANTS] and all(v.bwl_exit and not v.bwl_entry for v in vs)
+    assert fp.bwl_variants(False, False) == fp.VARIANTS
+
+
+def test_cache_fingerprint_follows_the_tone_plugin(tmp_path, monkeypatch):
+    csv, cfg = FIXTURES / "SPY.csv", {"sample": {"first_decision": "2013-01-02"}}
+    none = fp.fingerprint(csv, cfg)
+    plugin = tmp_path / "fake_tones.py"
+    plugin.write_text("# 假插件 1\n", encoding="utf-8")
+    monkeypatch.setenv("DMA_TONE_PLUGIN", str(plugin))
+    one = fp.fingerprint(csv, cfg)
+    plugin.write_text("# 假插件 2\n", encoding="utf-8")
+    two = fp.fingerprint(csv, cfg)
+    assert len({none, one, two}) == 3
+    monkeypatch.setenv("DMA_TONE_PLUGIN", "")
+    assert fp.fingerprint(csv, cfg) == none
+
+
+FAKE_PLUGIN = '''
+import pandas as pd
+
+NAME = "假规则：按日期单双"
+LEGEND = ["绿：日期是双数", "黑：日期是单数"]
+
+
+def tones(df):
+    return pd.Series(df.index.day, index=df.index).map(lambda d: "bull" if d % 2 == 0 else "bear")
+'''
+
+
+def test_daily_record_keeps_the_bwl_rules_and_matches_the_full_analysis(tmp_path, monkeypatch):
+    px = bt.load(FIXTURES / "SPY.csv")
+    i = px.index.get_loc(pd.Timestamp("2024-04-19"))   # 稳定上涨、多头排列；假插件：19 号单数是黑
+    assert fp.plan_day(px, i, "SPY", check=True)["bwl"] == []
+    plugin = tmp_path / "fake_tones.py"
+    plugin.write_text(FAKE_PLUGIN, encoding="utf-8")
+    monkeypatch.setenv("DMA_TONE_PLUGIN", str(plugin))
+    r = fp.plan_day(px, i, "SPY", check=True)           # 和完整分析（tone_plugin=True）对过黑绿线
+    assert r["bwl"] == ["P41"]
+
+
 # ---------- 每天的计划：等于 CLI、不偷看未来 ----------
 
 def plain(x):
@@ -457,7 +541,7 @@ def test_daily_plan_equals_cli_trade_plan(tmp_path, ticker, date):
     proc = subprocess.run([sys.executable, str(SCRIPTS / "dma_analyze.py"), "--csv", str(csv), "--asof", date, "--json"],
                           capture_output=True, text=True, check=True)
     cli = json.loads(proc.stdout)["analysis"]["trade_plan"]
-    plan, _ = fp.light_plan(bt.cut_at(px, i), bt.history_at(px, i))
+    plan, _, _ = fp.light_plan(bt.cut_at(px, i), bt.history_at(px, i))
     assert plan == plain(cli)
     r = fp.plan_day(px, i, ticker, check=True)        # 和完整分析对过（计划和失效条件）
     f = cli["flat"]

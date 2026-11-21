@@ -17,7 +17,10 @@
 - 每天收盘后的交易计划走轻量路径（只算计划要的：类型、结构、周线、tradeplan.build、失效条件），
   每 CHECK_EVERY 天和完整分析（backtest.analyze_on，等于 dma_analyze.py --csv --asof）对一次，不一样就停。
 - 成交、仓位、指标的规则在 plansim.py。
-- 每只票每天的计划缓存在 <out>/fullplan/daily/<票>.jsonl，规则代码或行情变了自动重算。
+- 每只票每天的计划缓存在 <out>/fullplan/daily/<票>.jsonl，规则代码、行情或着色插件变了自动重算。
+- 黑绿线（rules.md P40–P45）照本机着色插件的颜色判（DMA_TONE_PLUGIN，见 tones.py），每天记下哪几条成立。
+  两个开关默认关，关着时结果和不看黑绿线逐笔相同：
+  --bwl-exit：持仓时 P41 或 P42 收盘成立，按失效条件次日开盘离场；--bwl-entry：只在 P40 成立那天的计划才下单。
 - 报告：<out>/<snapshot 次日>-fullplan-dev.md 和 .json。
 """
 from __future__ import annotations
@@ -31,7 +34,7 @@ import tempfile
 import time
 from collections import Counter, defaultdict
 from concurrent.futures import ProcessPoolExecutor, as_completed
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from datetime import datetime
 from pathlib import Path
 from typing import Callable
@@ -50,17 +53,20 @@ import plansim as ps  # noqa: E402
 import regime as rg  # noqa: E402
 import rules as rl  # noqa: E402
 import tradeplan as tp  # noqa: E402
+import tones  # noqa: E402
 import trades as tr  # noqa: E402
 from indicators import PERIODS, add_indicators  # noqa: E402
 from structure import find_structure  # noqa: E402
 from weekly import weekly_json  # noqa: E402
 
 PROJECT = SCRIPTS.parents[3]
-VERSION = "1"            # 指纹不含本文件：改了 light_plan 或 _record 要加一，缓存才会重算
+VERSION = "2"            # 指纹不含本文件：改了 light_plan 或 _record 要加一，缓存才会重算
 CHUNK = 250
 CHECK_EVERY = 20         # 每 20 个决定点和完整分析对一次
 # 计划里能用到的失效条件（trades.DERIVED 和 P3、P5），每天记下哪几条成立
 EXIT_NAMES = ("P3", "P5", *tr.DERIVED)
+BWL = "黑绿线"                      # --bwl-exit 加进每套打法的失效条件：P41 或 P42 收盘成立
+BWL_EXITS = frozenset({"P41", "P42"})
 
 
 # ---------- 每天的计划 ----------
@@ -69,21 +75,22 @@ def _exits(day: tr.Day) -> list[str]:
     return [x for x in EXIT_NAMES if tr.check(day, x, tr.Chart.UNMET)[0]]
 
 
-def _record(i: int, d: str, plan: dict, exits: list[str]) -> dict:
-    """计划 JSON 里回测要用的部分：空仓的进场、止损、目标、盈亏比，和当天成立的失效条件。"""
+def _record(i: int, d: str, plan: dict, exits: list[str], bwl: list[str]) -> dict:
+    """计划 JSON 里回测要用的部分：空仓的进场、止损、目标、盈亏比，当天成立的失效条件和黑绿线规则。"""
     f = plan["flat"]
     targets = [t["price"] for t in f["targets"]]
     return {"i": i, "d": d, "key": plan["key"],
             "entry": f["entry"]["price"] if f["entry"] else None, "rule": f["entry"]["rule"] if f["entry"] else None,
             "stop": f["stop"]["price"] if f["stop"] else None,
             "t1": targets[0] if targets else None, "t2": targets[1] if len(targets) > 1 else None,
-            "rr": f["rr"], "verdict": f["rr_verdict"], "x": exits}
+            "rr": f["rr"], "verdict": f["rr_verdict"], "x": exits, "bwl": bwl}
 
 
-def light_plan(cut: pd.DataFrame, history: pd.DataFrame) -> tuple[dict, list[str]]:
-    """轻量路径：dma_analyze.analyze 里交易计划用到的那几步（同样的顺序、同样的输入），加上失效条件。
+def light_plan(cut: pd.DataFrame, history: pd.DataFrame) -> tuple[dict, list[str], list[str]]:
+    """轻量路径：dma_analyze.analyze 里交易计划用到的那几步（同样的顺序、同样的输入），加上失效条件和黑绿线。
 
-    返回 (trade_plan JSON, 当天成立的失效条件)。不跑推演表、模糊判断、规则清单。
+    返回 (trade_plan JSON, 当天成立的失效条件, 当天满足的黑绿线规则编号)。不跑推演表、模糊判断、其余规则。
+    黑绿线照本机的着色插件判（等于 dma_analyze.analyze(tone_plugin=True)），没配插件时一条也不满足。
     """
     df = add_indicators(cut.copy())
     row = df.iloc[-1]
@@ -91,8 +98,9 @@ def light_plan(cut: pd.DataFrame, history: pd.DataFrame) -> tuple[dict, list[str
     bias = df["BIAS20"].dropna()
     structure = find_structure(df)
     regime, p20 = rg.classify(df, structure, float((bias <= row["BIAS20"]).mean()))
+    colors, source = tones.bar_tones(df)
     ctx = rl.Ctx(df=df, regime=regime, p20=p20, p60=rg.pair_progress(df, 60, 120), structure=structure,
-                 weekly=weekly_json(history), hourly=bt.CSV_HOURLY)
+                 weekly=weekly_json(history), hourly=bt.CSV_HOURLY, tones=colors, tone_source=source)
     plan = json.loads(json.dumps(tp.plan_json(tp.build(ctx)), ensure_ascii=False))
     values = {f"{k}{n}": float(row[f"{k}{n}"]) for n in PERIODS for k in ("MA", "EMA")}
     slopes = {f"{k}{n}": dma.slope_pct(df[f"{k}{n}"]) for n in PERIODS for k in ("MA", "EMA")}
@@ -100,22 +108,25 @@ def light_plan(cut: pd.DataFrame, history: pd.DataFrame) -> tuple[dict, list[str
     day = tr.Day(date=str(df.index[-1].date()), key=plan["key"], type=None, stage=None, status=status,
                  yielded=frozenset(), close=c, ema20=float(row["EMA20"]), dirs=dma.line_votes(values, slopes, c)["dirs"],
                  side20=p20.side)
-    return plan, _exits(day)
+    bwl = [rid for rid in rl.BWL_IDS if rl.BY_ID[rid].evaluate(ctx).status == rl.Status.MET]
+    return plan, _exits(day), bwl
 
 
 def plan_day(px: pd.DataFrame, i: int, ticker: str, check: bool) -> dict:
     cut = bt.cut_at(px, i)
     if cut.index[-1] != px.index[i] or len(cut) > i + 1:
         raise AssertionError(f"{ticker} {px.index[i].date()}：计划用到了之后的行情")
-    plan, exits = light_plan(cut, bt.history_at(px, i))
+    plan, exits, bwl = light_plan(cut, bt.history_at(px, i))
     if check:
-        a = bt.analyze_on(px, i, ticker)
+        a = bt.analyze_on(px, i, ticker, tone_plugin=True)
         full = json.loads(json.dumps(a["trade_plan"], ensure_ascii=False))
         if full != plan:
             raise AssertionError(f"{ticker} {px.index[i].date()}：轻量路径的交易计划和完整分析不一致")
         if _exits(bt.day_of(a)) != exits:
             raise AssertionError(f"{ticker} {px.index[i].date()}：轻量路径的失效条件和完整分析不一致")
-    return _record(i, str(px.index[i].date()), plan, exits)
+        if [r["id"] for r in a["rules"] if r["id"] in rl.BWL_IDS and r["status"] == rl.Status.MET.value] != bwl:
+            raise AssertionError(f"{ticker} {px.index[i].date()}：轻量路径的黑绿线和完整分析不一致")
+    return _record(i, str(px.index[i].date()), plan, exits, bwl)
 
 
 def run_chunk(job: tuple[str, str, int, int, int]) -> tuple[str, int, list[dict]]:
@@ -126,11 +137,12 @@ def run_chunk(job: tuple[str, str, int, int, int]) -> tuple[str, int, list[dict]
 
 # 不影响每天计划的脚本：改了它们缓存照用
 NOT_RULES = ("fullplan.py", "plansim.py", "planrun.py", "evaluate.py", "evalstats.py", "backtest.py", "html_report.py",
-             "holdout.py", "tones.py")
+             "holdout.py")
 
 
 def fingerprint(csv: Path, cfg: dict) -> str:
-    h = hashlib.sha256(f"{VERSION},{cfg['sample']['first_decision']}".encode())
+    """规则代码、行情和着色来源（没插件，或插件文件内容的哈希）都对得上，缓存才照用。"""
+    h = hashlib.sha256(f"{VERSION},{cfg['sample']['first_decision']},{tones.plugin_fingerprint()}".encode())
     for p in sorted(SCRIPTS.glob("*.py")):
         if p.name not in NOT_RULES:
             h.update(p.read_bytes())
@@ -236,6 +248,8 @@ class Variant:
     waypoint: bool = False          # P11 的回撤价也当限价单买
     intraday_stop: bool = False     # 止损看盘中最低价（PR #42 的口径），不按收盘
     position_cap: bool = True       # 单票持仓金额上限（evaluation.toml 的 fullplan.max_position）
+    bwl_exit: bool = False          # 黑绿线 P41 或 P42 收盘成立也是失效条件（--bwl-exit）
+    bwl_entry: bool = False         # 只在黑绿线 P40 成立那天的计划才下单（--bwl-entry）
 
 
 FULL = Variant("完整计划")
@@ -261,9 +275,12 @@ def orders_for(recs: dict[str, list[dict]], pos: dict[str, int], bars: dict[str,
                 continue
             if (r["rule"] in WAYPOINT and not v.waypoint) or (v.skip_hourly and r["rule"] in NEEDS_HOURLY):
                 continue
+            if v.bwl_entry and "P40" not in r["bwl"]:
+                continue
             g = pos[r["d"]]
             target = r["t1"] if v.targets and r["t1"] is not None and r["t1"] > entry else None
-            out[g].append(ps.Order(t, g, ps.entry_kind(entry, bars[t].c[g]), entry, stop, target, invalidation(r["key"]),
+            exits = invalidation(r["key"]) + ((BWL,) if v.bwl_exit else ())
+            out[g].append(ps.Order(t, g, ps.entry_kind(entry, bars[t].c[g]), entry, stop, target, exits,
                                    key=r["key"], rule=r["rule"], rr=r["rr"], atr=None if atrs is None else float(atrs[t][g])))
     return out
 
@@ -284,7 +301,7 @@ def inval_for(recs: dict[str, list[dict]], pos: dict[str, int], n: int) -> dict[
     for t, rs in recs.items():
         x = [frozenset()] * n
         for r in rs:
-            x[pos[r["d"]]] = frozenset(r["x"])
+            x[pos[r["d"]]] = frozenset(r["x"]) | ({BWL} if BWL_EXITS & set(r["bwl"]) else set())
         out[t] = x
     return out
 
@@ -421,8 +438,15 @@ def half(trades: list[ps.Trade], keep, cal: list[str], bc: dict) -> dict:
             "ci": None if est is None or est.lo is None else [est.lo, est.hi]}
 
 
+def bwl_variants(exit_: bool, entry: bool) -> tuple[Variant, ...]:
+    """每种做法都加上黑绿线开关；两个都关就是原样。"""
+    return tuple(replace(v, bwl_exit=exit_, bwl_entry=entry) for v in VARIANTS)
+
+
 def run_group(job: tuple) -> tuple[str, dict]:
-    name, tickers, recs, cal, bars, sigs, bc, cost, max_position = job
+    name, tickers, recs, cal, bars, sigs, bc, cost, max_position, (bwl_exit, bwl_entry) = job
+    variants = bwl_variants(bwl_exit, bwl_entry)
+    full_v = variants[0]
     pos = {d: k for k, d in enumerate(cal)}
     inval = inval_for(recs, pos, len(cal))
     hold = hold_for(recs, pos, len(cal))
@@ -435,14 +459,18 @@ def run_group(job: tuple) -> tuple[str, dict]:
         res = ps.simulate(len(cal), bars, orders_for(recs, pos, bars, v), inval, start, cfg, hold if v.hold_if_intact else None)
         runs[v.name], trades[v.name] = summarize(res, cal, bc), res.trades
 
-    for v in VARIANTS:
+    for v in variants:
         if not v.equal_notional:
             go(v)
     full = trades[FULL.name]
     notional = float(np.mean([t.notional for t in full])) if full else 0.1
-    for v in VARIANTS:
+    for v in variants:
         if v.equal_notional:
             go(v, notional)
+    n_orders = lambda v: sum(map(len, orders_for(recs, pos, bars, v).values()))  # noqa: E731
+    bwl = {"exit": bwl_exit, "entry": bwl_entry,
+           "filtered_orders": n_orders(replace(full_v, bwl_entry=False)) - n_orders(full_v),
+           "early_exits": sum(t.reason == f"失效：{BWL}" for t in full)}
     rng = np.random.default_rng(RANDOM_SEED)
     rand = [summarize(ps.simulate(len(cal), bars, random_orders(full, recs, pos, bars, rng), inval, start,
                                   ps.Config(cost=cost, max_position=max_position), hold),
@@ -451,7 +479,7 @@ def run_group(job: tuple) -> tuple[str, dict]:
               for v in (FULL, V2, NO_TARGET)}
     firsts = {t: rs[0]["d"] for t, rs in recs.items()}
     atrs = {t: atr(sigs[t]) for t in recs}
-    return name, {"tickers": sorted(recs), "start": cal[start], "end": cal[-1], "notional": notional, "runs": runs,
+    return name, {"tickers": sorted(recs), "start": cal[start], "end": cal[-1], "notional": notional, "runs": runs, "bwl": bwl,
                   "random": _random_summary(rand) if rand else None, "halves": halves,
                   "baselines": baselines(sorted(recs), sigs, bars, firsts, cal, start, cost),
                   "trades": [{**asdict(t), "signal_date": cal[t.signal], "entry_date": cal[t.entry_i],
@@ -650,6 +678,19 @@ LIMITS = [
 ]
 
 
+def bwl_lines(groups: dict[str, dict], meta: dict) -> list[str]:
+    """开了黑绿线开关时一节：开了哪个、每组过滤掉多少张单、多少笔被黑绿线提前离场（完整计划）。"""
+    on = [x for x, k in (("加离场（P41 或 P42 收盘成立，次日开盘走）", "bwl_exit"), ("加进场过滤（只下 P40 成立那天的单）", "bwl_entry"))
+          if meta[k]]
+    if not on:
+        return []
+    out = ["## 黑绿线开关", "", f"开了：{'；'.join(on)}。颜色来源：{meta['tone_source']}。表里每种做法都加了这些开关。", "",
+           "| 组 | 过滤掉的单（完整计划） | 黑绿线提前离场的笔数（完整计划） |", "|---|---:|---:|"]
+    for gname, g in groups.items():
+        out.append(f"| {gname} | {g['bwl']['filtered_orders']} | {g['bwl']['early_exits']} |")
+    return out + [""]
+
+
 def render(groups: dict[str, dict], meta: dict, checks: list[dict]) -> str:
     pool = groups[POOLED]
     full = pool["runs"][FULL.name]
@@ -684,6 +725,7 @@ def render(groups: dict[str, dict], meta: dict, checks: list[dict]) -> str:
             "- **账户**：每组品种一个账户，起始 100 万，空仓的钱收益算 0。年化、回撤、MAR 都是这个账户的净值曲线。",
             "- **对照**：买入持有、MA200、MA60 朴素规则（每只票分一样多的钱，在场就满仓，不按仓位）；随机进场（同样的仓位规则、同样的止损和目标距离，"
             f"最多拿真实那笔的根数，{RANDOM_REPS} 次取中位数，括号里是 5% ~ 95%），它和完整计划的差就是\"进场选择值多少\"。", ""]
+    out += bwl_lines(groups, meta)
     out += ["## P25 三种做法", "",
             "同一份每天的计划、同样的进场和仓位，只换到第一目标之后怎么走。随机进场按这一版的 P25 离场。", "",
             *p25_table(groups), "", *p25_halves(groups), ""]
@@ -782,6 +824,11 @@ def render(groups: dict[str, dict], meta: dict, checks: list[dict]) -> str:
     return "\n".join(out)
 
 
+def tone_source_name(csv: Path) -> str:
+    """报告里写颜色来源：着色插件的名字，或自带着色（插件出错时也是自带着色）。"""
+    return tones.bar_tones(add_indicators(ev.load_prices(csv)[0].copy()))[1].name
+
+
 def main() -> None:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--tickers", help="只跑这些（逗号分隔），默认评估的全部品种")
@@ -792,6 +839,8 @@ def main() -> None:
     p.add_argument("--jobs", type=int, default=14)
     p.add_argument("--stem", default="2026-11-21-fullplan-dev")
     p.add_argument("--before", type=Path, help="上一版报告的 JSON，报告里加一节前后对照")
+    p.add_argument("--bwl-exit", action="store_true", help="持仓时黑绿线 P41 或 P42 收盘成立，按失效条件次日开盘离场")
+    p.add_argument("--bwl-entry", action="store_true", help="只在黑绿线 P40 成立那天的计划才下单")
     a = p.parse_args()
     cfg = es.load_config(a.config)
     data = a.data or a.out / "data" / "eval"
@@ -808,7 +857,7 @@ def main() -> None:
         ts = [t for t in tickers if gof.get(t) in gs]
         if ts:
             jobs.append((name, ts, {t: recs[t] for t in ts}, cal, {t: bars[t] for t in ts}, {t: sigs[t] for t in ts},
-                         cfg["bootstrap"], cost, cfg["fullplan"]["max_position"]))
+                         cfg["bootstrap"], cost, cfg["fullplan"]["max_position"], (a.bwl_exit, a.bwl_entry)))
     with ProcessPoolExecutor(max_workers=min(a.jobs, len(jobs))) as ex:
         groups = dict(ex.map(run_group, jobs))
     groups = {name: groups[name] for name, _ in GROUPS if name in groups}
@@ -822,7 +871,8 @@ def main() -> None:
             "seconds": {"plans": round(t_plans, 1), "sim": round(time.time() - t0 - t_plans, 1)},
             "config": asdict(ps.Config(cost=cost, max_position=cfg["fullplan"]["max_position"])), "random_reps": RANDOM_REPS,
             "day_range": day_range({t: bars[t] for t in lead["tickers"]}, cal.index(lead["start"])),
-            "remaining": sorted(set(gof) - set(tickers)) if a.core else []}
+            "remaining": sorted(set(gof) - set(tickers)) if a.core else [],
+            "bwl_exit": a.bwl_exit, "bwl_entry": a.bwl_entry, "tone_source": tone_source_name(data / f"{tickers[0]}.csv")}
     before = json.loads(a.before.read_text()) if a.before else None
     md = render(groups, {**meta, "before": before}, checks)
     a.out.mkdir(parents=True, exist_ok=True)
