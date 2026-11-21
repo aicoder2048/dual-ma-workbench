@@ -2619,6 +2619,16 @@ describe("图层菜单", () => {
     });
     expect(row.spread).toBeLessThan(8);
     expect(row.overflow).toBe(0);
+    // 「图层」在最右，紧挨「?」左边：两个按钮之间没有别的控件，「?」贴着工具栏右边
+    const ends = await page.evaluate(() => {
+      const r = (sel: string) => document.querySelector(sel)!.getBoundingClientRect();
+      return { tools: r(".chart-tools").right, help: r(".chart-help-toggle"), layers: r(".layers-toggle"),
+        rest: Math.max(...[...document.querySelectorAll(".chart-tools button:not(.layers-toggle):not(.chart-help-toggle):not(.layers-menu button)")].map((b) => b.getBoundingClientRect().right)) };
+    });
+    expect(ends.tools - ends.help.right).toBeLessThan(2);
+    expect(ends.help.left - ends.layers.right).toBeGreaterThanOrEqual(0);
+    expect(ends.help.left - ends.layers.right).toBeLessThan(8);
+    expect(ends.rest).toBeLessThan(ends.layers.left);
     const kept = [".layers-toggle", '[data-frame="day"]', '[data-frame="week"]', ...["1w", "1m", "6m", "1y", "all", "reset"].map((k) => `.range-btn[data-range="${k}"]`),
       ".replay-toggle", ".measure-toggle", ".draw-toggle", ".draw-clear", ".chart-help-toggle"];
     for (const sel of kept) expect({ sel, ok: await notCovered(page, sel) }).toEqual({ sel, ok: true });
@@ -2639,6 +2649,10 @@ describe("图层菜单", () => {
     const box = (await page.locator(".layers-menu").boundingBox())!;
     const vp = page.viewportSize()!;
     expect(box.x >= 0 && box.y >= 0 && box.x + box.width <= vp.width && box.y + box.height <= vp.height).toBe(true);
+    // 从右边往下展开：菜单右边缘和「图层」按钮的右边缘对齐
+    const btn = (await page.locator(".layers-toggle").boundingBox())!;
+    expect(Math.abs(box.x + box.width - (btn.x + btn.width))).toBeLessThan(1);
+    expect(box.y).toBeGreaterThan(btn.y + btn.height - 1);
     const keys = ["ma", "levels", "drops", "tone", "toneTurns", "constructs", "patterns", "swings", "gaps", "gapsAll", "profile"];
     for (const sel of [...["simple", "structure", "all"].map((k) => `.layers-menu [data-preset="${k}"]`), ...keys.map(layerBtn)]) {
       expect({ sel, ok: await notCovered(page, sel) }).toEqual({ sel, ok: true });

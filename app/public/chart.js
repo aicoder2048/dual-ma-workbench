@@ -150,9 +150,8 @@ export function createChart(box, legendEl) {
   const tools = document.createElement("div");
   tools.className = "chart-tools";
   // 一行放得下（默认视口）：互斥的选项连成一段；图上画什么都收在「图层 ▾」里
-  // 「图层」排最左：菜单往下、往右展开，盖住的是旧 K 线，开关一项时右边最新的那段看得见
-  tools.innerHTML = `<span class="layers-wrap"></span>`
-    + `<span class="seg frame-toggle" role="group" aria-label="日线 / 周线">`
+  // 「图层」排最右、挨着「?」（ADR 0019）：菜单从右边缘往下展开
+  tools.innerHTML = `<span class="seg frame-toggle" role="group" aria-label="日线 / 周线">`
     + `<button type="button" data-frame="day" aria-pressed="true" title="日 K 线（分析用的就是日线）">日</button>`
     + `<button type="button" data-frame="week" aria-pressed="false">周</button></span>`
     + `<span class="seg" role="group" aria-label="看多长一段">`
@@ -163,6 +162,7 @@ export function createChart(box, legendEl) {
     + `<button type="button" class="measure-toggle" aria-pressed="false" title="点这里，再在图上按住从一点拖到另一点：量涨跌多少、隔几根 K 线、几个 ATR（看止损离得远不远）。Esc 清掉">测量</button>`
     + `<button type="button" class="draw-toggle" aria-pressed="false" title="点这里，再点图上任意一处，就在那个价位画一条横线">画线</button>`
     + `<button type="button" class="draw-clear" title="删掉这只股票上自己画的线">清除</button></span>`
+    + `<span class="layers-wrap"></span>`
     + `<button type="button" class="chart-help-toggle" aria-expanded="false" aria-label="怎么用" title="怎么用：每个工具、每个图层在这套方法里看什么">?</button>`;
   legendEl.after(tools);
 
