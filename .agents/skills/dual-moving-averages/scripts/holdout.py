@@ -51,8 +51,8 @@ CAP_LO, CAP_HI = 8.0e10, 2.0e11
 N_STOCKS = 30
 # 之前用过的品种：2026-11-20 评估的 95 只（含历史不足被排除的）另从 universe JSON 读；PR #20 逐笔回测的 14 只；核心名单 38 只
 PR20 = ("NVDA TSLA AAPL GOOG META MSFT AMZN SPY QQQ INTC PYPL NKE BA DIS").split()
-# 不进冻结哈希的脚本：工作台适配（planrun）、HTML 报告、本文件
-NOT_FROZEN = ("planrun.py", "html_report.py", "holdout.py")
+# 不进冻结哈希的脚本：工作台适配（planrun）、HTML 报告、K 线着色、本文件
+NOT_FROZEN = ("planrun.py", "html_report.py", "tones.py", "holdout.py")
 
 RULE = [
     f"ETF：计划里写死的 {len(ETFS)} 只（{' '.join(ETFS)}）。",
