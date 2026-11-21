@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { Analysis } from "../src/citations.ts";
-import { buildChecklist, buildForecast, buildPlans, ma20Claim, planFacts, planLine, playKey, rrText, sizeText, SOLVER_EVIDENCE } from "../src/plan.ts";
+import { buildChecklist, buildForecast, buildPlans, LEAN_CALL, LEAN_EVIDENCE, ma20Claim, planFacts, planLine, playKey, rrText, sizeText, SOLVER_EVIDENCE } from "../src/plan.ts";
 import nvda from "./fixtures/nvda-analysis.json";
 import spyJson from "./fixtures/spy-2024-04-19-analysis.json";
 
@@ -150,6 +150,50 @@ describe("做推演：三问，跨度 30 天", () => {
   });
   test("不买的打法照实说（NVDA 加速下跌）", () => {
     expect(buildForecast(bear).earliest).toContain("空仓不买");
+  });
+});
+
+describe("做推演先给结论：模糊判断翻成动作，再说关键变化（ADR 0030）", () => {
+  test("明显偏空（NVDA）：反弹是减仓机会，不是抄底机会", () => {
+    expect(buildForecast(bear).headline).toBe("接下来几周均线向下：反弹是减仓机会，不是抄底机会");
+  });
+  test("明显偏多（SPY 2024-04-19）：回撤是加仓机会", () => {
+    expect(buildForecast(spy).headline).toBe("接下来几周均线向上：回撤是加仓机会，不是离场信号");
+  });
+  test("五档各一句；不明时说不明、按打法的价位做", () => {
+    expect(new Set(Object.values(LEAN_CALL)).size).toBe(5);
+    const a = structuredClone(bear);
+    a.lean = { ...a.lean, label: "不明", score: 0 };
+    expect(buildForecast(a).headline).toContain("均线方向不明");
+    expect(buildForecast(a).headline).toContain("按打法的价位做");
+  });
+  test("20、60 线组：现在朝哪走，收盘不变拐不拐头，明天站上哪个价位就拐头", () => {
+    const [g20, g60] = buildForecast(bear).groups;
+    expect(g20.group).toBe(20);
+    expect(g20.now).toBe("向下");
+    expect(g20.text).toBe("收盘不变，30 天内都不拐头；明天收盘站上 EMA20 183.08（+21.3%），EMA20 就拐头向上；明天收盘站上 MA20 抵扣价 212.21（+40.6%），MA20 就拐头向上。");
+    expect(g20.aux).toBeNull();
+    expect(g60.group).toBe(60);
+    expect(g60.text).toContain("MA60 抵扣价 209.66（+38.9%）");
+    expect(g60.aux).toBeNull();
+  });
+  test("线组里 MA、EMA 方向不一样时分开说；收盘不变会拐头时写哪一天", () => {
+    const a = structuredClone(bear);
+    a.lean = { ...a.lean, dirs: { ...a.lean.dirs, EMA20: 1 }, flips: a.lean.flips.map((f) => (f.line === "EMA20" ? { ...f, price: 140, toward: "空" as const } : f)) };
+    a.projection.scenarios[0].turns = a.projection.scenarios[0].turns.map((t) => (t.line === "MA20" ? { ...t, turn_day: 4 } : t));
+    const g20 = buildForecast(a).groups[0];
+    expect(g20.now).toBe("EMA20 向上、MA20 向下");
+    expect(g20.text).toContain("EMA20 30 天内不拐头，MA20 " + a.projection.dates[3] + "（第 4 个交易日）拐头");
+    expect(g20.text).toContain("明天收盘跌破 EMA20 140.00");
+  });
+  test("触发价离现价还远（entry.far）：20 线组加一句推演求解的最早哪天", () => {
+    const a = structuredClone(bear);
+    a.trade_plan.flat = { ...a.trade_plan.flat, entry: { ...a.trade_plan.flat.entry!, far: { level: 190, day: 6, days: 30 } } };
+    expect(buildForecast(a).groups[0].aux).toBe("按收盘持平推演，最早 2026-11-26（第 6 个交易日）一起拐头向上：收盘站上 190.00（+25.9%）。");
+  });
+  test("模糊判断的历史评估（H1）照实写：日期、样本、方向和主张相反、出处", () => {
+    expect(LEAN_EVIDENCE.tag).toBe("历史评估：没验证出效果");
+    for (const s of ["2026-11-20", "H1", "86 只", "2013–2026", "验证集", "偏多之后反而略跑输偏空", "方向和主张相反", "SKILL.md"]) expect(LEAN_EVIDENCE.tip).toContain(s);
   });
 });
 

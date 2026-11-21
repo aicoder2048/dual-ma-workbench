@@ -100,4 +100,10 @@ describe("模糊判断字段", () => {
     expect(facts["模糊判断.10天后"].value).toStartWith("明显偏空");
     expect(facts["改变判断.EMA20"].value).toContain("183.08");
   });
+  test("做推演的结论句和 20、60 线组的关键变化：和页面同一句；原来的三问字段还在", () => {
+    expect(facts["推演.结论"].value).toBe("接下来几周均线向下：反弹是减仓机会，不是抄底机会");
+    expect(facts["推演.20线组"].value).toContain("MA20 抵扣价 212.21");
+    expect(facts["推演.60线组"].value).toStartWith("向下：");
+    for (const k of ["推演.保持", "推演.最早", "推演.失效"]) expect(facts[k]).toBeDefined();
+  });
 });

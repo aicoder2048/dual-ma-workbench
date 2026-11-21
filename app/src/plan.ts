@@ -8,9 +8,11 @@
  *   用哪几条规则取自 skill 的 references/playbooks.md；规则满不满足、阈值、构造下一步价位、30 天求解都读脚本结果，这里不重算。
  *   处境分四种：空仓、持仓（没填成本）、持仓浮盈、持仓浮亏。成本只在浏览器里，文字里写 {cost}，由页面填上。
  * - buildChecklist：打法用到的每条规则今天的状态，没满足的写还差什么（价位读规则的 levels）。
- * - buildForecast：做推演只答三问，跨度都是 30 天：类型线还能保持多久、容忍到哪；打法的条件最早哪天能齐；什么价位推翻这个判断。
+ * - buildForecast：做推演先给模糊判断翻成的一句话（headline），再答三问，跨度都是 30 天：类型线还能保持多久、容忍到哪；
+ *   打法的条件最早哪天能齐；什么价位推翻这个判断。groups 是 20、60 线组最近的关键变化（docs/adr/0030.md）。
  */
-import type { Analysis, PlanFar, PlanMountain, PlanSet, RuleResult, Solve, TradePlan } from "./citations.ts";
+import type { Analysis, LeanLabel, PlanFar, PlanMountain, PlanSet, RuleResult, Solve, TradePlan } from "./citations.ts";
+import { EVALUATION_DATE } from "./record.ts";
 
 export type Position = "flat" | "holding";
 /** 你的处境：空仓；持仓但没填成本；持仓浮盈；持仓浮亏。页面按"空仓/持仓"和成本价选一个。 */
@@ -46,6 +48,12 @@ export interface Check { id: string; name: string; status: RuleResult["status"];
  */
 export interface Forecast {
   days: number;
+  /** 模糊判断翻成动作的一句话，例如"接下来几周均线向下：反弹是减仓机会，不是抄底机会"（LEAN_CALL）。 */
+  headline: string;
+  /** 20、60 线组最近的关键变化；aux 是推演求解给的那句（辅助），没有就是 null。 */
+  groups: GroupChange[];
+  /** 模糊判断的历史评估（H1）：标签和悬停的整句。 */
+  leanEvidence: { tag: string; tip: string };
   hold: string;
   earliest: string;
   invalid: { text: string; level: Level | null };
@@ -53,6 +61,27 @@ export interface Forecast {
   solves: Solve[];
   evidence: string;
 }
+
+/** 一个线组：现在朝哪走（now），收盘不变哪天拐头、明天站上 / 跌破哪个价位就拐头（text），推演求解的最早哪天（aux）。 */
+export interface GroupChange { group: 20 | 60; now: string; text: string; aux: string | null }
+
+/** 模糊判断五档各翻成一句动作：均线往哪走，所以回撤 / 反弹该怎么看。不预测明天涨跌。 */
+export const LEAN_CALL: Record<LeanLabel, string> = {
+  明显偏多: "均线向上：回撤是加仓机会，不是离场信号",
+  偏多: "均线偏向上：回撤多半是加仓机会，先别急着走",
+  不明: "均线方向不明：不押方向，按打法的价位做，等 MA60、MA120 走出方向",
+  偏空: "均线偏向下：反弹多半是减仓机会，先别急着抄底",
+  明显偏空: "均线向下：反弹是减仓机会，不是抄底机会",
+};
+
+/** 模糊判断的历史评估（evaluation.toml 的 H1）：页面上挨着那句话放一个小标签，悬停看结论和出处。 */
+export const LEAN_EVIDENCE = {
+  tag: "历史评估：没验证出效果",
+  tip: `历史评估（${EVALUATION_DATE}，H1）：86 只美股和 ETF，2013–2026 年日线，每 5 个交易日记一次模糊判断，看之后 20 个交易日的超额收益，`
+    + "另留一半品种做验证集。主张是偏多之后跑赢、偏空之后跑输；结果偏多之后反而略跑输偏空，明显偏空之后 20 日超额反而最高："
+    + "方向和主张相反，或者没用。这句话说的是均线接下来往哪走，不是涨跌预测，下单前当作风险提示。"
+    + "出处：skill 的 SKILL.md「评估结论」、references/evaluation.toml [H1]。",
+} as const;
 
 /** 推演求解（"要涨 / 跌多少才能避免"）的评估结论，凡是显示求解结论的地方都附上（evaluation.toml 的 H4）。 */
 export const SOLVER_EVIDENCE = "评估：说“要涨（跌）10% 以上才能避免”的事，97% 真的发生了，但未达到事先定的有用标准（H4）";
@@ -581,6 +610,39 @@ function holdText(a: Analysis): string {
   }).join("。") + "。";
 }
 
+const DIR = { 1: "向上", 0: "走平", [-1]: "向下" } as const;
+/** 明天收盘在门槛哪一边决定这条线明天往哪走：键是"现在的方向 + 门槛转向哪边"（Flip.toward）。w 是门槛叫什么，p 是价位。 */
+const GATE: Record<string, (k: string, w: string, p: string) => string> = {
+  "-1多": (k, w, p) => `明天收盘站上 ${w} ${p}，${k} 就拐头向上`,
+  "-1空": (k, w, p) => `收盘不变，${k} 明天就拐头向上；跌破 ${w} ${p} 才继续向下`,
+  "1空": (k, w, p) => `明天收盘跌破 ${w} ${p}，${k} 就拐头向下`,
+  "1多": (k, w, p) => `收盘不变，${k} 明天就拐头向下；站上 ${w} ${p} 才继续向上`,
+  "0多": (k, w, p) => `明天收盘站上 ${w} ${p}，${k} 向上`,
+  "0空": (k, w, p) => `明天收盘跌破 ${w} ${p}，${k} 向下`,
+};
+
+/**
+ * 一个线组最近的关键变化：方向读 lean.dirs，收盘不变哪天拐头读持平情景，明天的门槛读 lean.flips（EMA 是线本身，MA 是抵扣价）。
+ * 20 线组触发价离现价还远时（entry.far，#68）加一句推演求解的最早哪天，标辅助。
+ */
+function groupChange(a: Analysis, g: 20 | 60): GroupChange {
+  const keys = [`EMA${g}`, `MA${g}`];
+  const dir = (k: string) => a.lean.dirs[k] ?? 0;
+  const [de, dm] = keys.map(dir);
+  const now = de === dm ? DIR[de] : keys.map((k) => `${k} ${DIR[dir(k)]}`).join("、");
+  const sc = a.projection.scenarios[0];
+  const day = (k: string) => sc.turns.find((t) => t.line === k)?.turn_day ?? null;
+  const still = keys.every((k) => day(k) === null) ? `收盘不变，${sc.days} 天内都不拐头`
+    : `收盘不变：${keys.map((k) => (day(k) === null ? `${k} ${sc.days} 天内不拐头` : `${k} ${dayN(a, day(k)!)}拐头`)).join("，")}`;
+  const gates = keys.flatMap((k) => {
+    const f = a.lean.flips.find((x) => x.line === k);
+    return f ? [GATE[`${dir(k)}${f.toward}`](k, k.startsWith("EMA") ? k : `${k} 抵扣价`, at(f.price, a.close))] : [];
+  });
+  const far = g === 20 ? a.trade_plan.flat.entry?.far : null;
+  const aux = far ? `按收盘持平推演，最早 ${dayN(a, far.day)}一起拐头向上：收盘站上 ${at(far.level, a.close)}。` : null;
+  return { group: g, now, text: `${[still, ...gates].join("；")}。`, aux };
+}
+
 /** 推演第 n 个交易日的日期（脚本给的工作日，不扣节假日）。 */
 const dayN = (a: Analysis, n: number) => `${a.projection.dates[n - 1]}（第 ${n} 个交易日）`;
 /** 触发价离现价还远时，20 线组最早哪天一起拐头（按收盘持平推演）。 */
@@ -675,7 +737,10 @@ export function buildForecast(a: Analysis, plans = buildPlans(a)): Forecast {
   const { solved, ...invalid } = invalidOf(a, l, key, plans);
   const earliest = earliestOf(a, l, key, plans);
   const aux = [...(earliest.solved ? ["earliest" as const] : []), ...(solved ? ["invalid" as const] : [])];
-  return { days: FORECAST_DAYS, hold: holdText(a), earliest: earliest.text, invalid, aux, solves: solves.slice(0, 3), evidence: SOLVER_EVIDENCE };
+  return {
+    days: FORECAST_DAYS, headline: `接下来几周${LEAN_CALL[a.lean.label]}`, groups: [groupChange(a, 20), groupChange(a, 60)], leanEvidence: LEAN_EVIDENCE,
+    hold: holdText(a), earliest: earliest.text, invalid, aux, solves: solves.slice(0, 3), evidence: SOLVER_EVIDENCE,
+  };
 }
 
 // ---------- 回放验证用 ----------

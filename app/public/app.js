@@ -264,7 +264,7 @@ function paintLevels(r, a, p) {
   chartApi?.setLevels(practice.levelsFor(a.label) ?? chartLevels(r, p, a.close));
 }
 
-// ---------- 结论和三步的回答：结论（空仓、持仓两行）、看大局（类型）、找打法（清单 + 按处境的做法）、做推演（三问） ----------
+// ---------- 结论和三步的回答：结论（空仓、持仓两行）、看大局（类型）、找打法（清单 + 按处境的做法）、做推演（结论句、推翻条件、关键变化） ----------
 const POS_KEY = (t) => `dma-pos:${t}`;
 function loadPosition(ticker) {
   try { return { pos: "flat", cost: "", ...JSON.parse(localStorage.getItem(POS_KEY(ticker)) ?? "{}") }; } catch { return { pos: "flat", cost: "" }; }
@@ -280,7 +280,7 @@ function paintAnswers(r, a, p, facts) {
   box("big_picture").innerHTML = trendAnswer(r.trend);
   box("play").innerHTML = playAnswer(r, p, a.close);
   renderInline(box("play").querySelector(".play-text"), `${a.play.text} [[D:打法]] [[S:skill#第2步]]`, facts);
-  box("forecast").innerHTML = forecastAnswer(r.forecast);
+  box("forecast").innerHTML = forecastAnswer(r);
   paintLevels(r, a, p);
   box("play").querySelectorAll("[data-pos]").forEach((b) => b.addEventListener("click", () => {
     const next = { ...p, pos: b.dataset.pos };
