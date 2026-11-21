@@ -374,6 +374,10 @@ const RR_CLASS = { 不做: "bad", 可做: "ok", 理想: "good" };
 /** 盈亏比标签：几比几、哪一档（不到 3:1 不做，5:1 以上理想，P24）。悬停看差多少。 */
 function rrChip(t) {
   if (t.rr === null) return "";
+  if (t.entry?.far) { // 触发价离现价还远（docs/adr/0026.md）：按明天算的数只放悬停里
+    return `<span class="pchip rr far" data-item="rr" ${tip(`触发价离现价还远，到时重算：按明天的触发价 ${f2(t.entry.price)} 算是 ${t.rr.toFixed(2)}:1（P24）`)}>
+    <span class="ck">盈亏比</span>到时重算</span>`;
+  }
   const gap = t.rr_gap ? `：要 3:1，目标得到 ${f2(t.rr_gap.target_for_min)}，或止损收紧到 ${f2(t.rr_gap.stop_for_min)}` : "";
   return `<span class="pchip rr ${RR_CLASS[t.rr_verdict]}" data-item="rr" ${tip(`盈亏比 ${t.rr.toFixed(2)}:1，${t.rr_verdict}（P24）${gap}`)}>
     <span class="ck">盈亏比</span><b class="num">${t.rr.toFixed(2)}:1</b>${esc(t.rr_verdict)}</span>`;

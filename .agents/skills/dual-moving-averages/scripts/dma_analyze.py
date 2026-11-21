@@ -493,7 +493,8 @@ def plan_lines(tpj: dict) -> list[str]:
             m = p["mountain"]
             items.append(f"参考：上方最近的筹码山 {m['foot']:.2f}–{m['top']:.2f}，只作参考，不算盈亏比（P38）")
         if name == "空仓" and p["entry"]:
-            items.append(f"盈亏比：{p['rr']:.2f}:1，{p['rr_verdict']}" if p["rr"] is not None else "盈亏比：算不了")
+            items.append(f"盈亏比：{tp.RR_FAR}" if p["entry"]["far"] else
+                         f"盈亏比：{p['rr']:.2f}:1，{p['rr_verdict']}" if p["rr"] is not None else "盈亏比：算不了")
             z = p["size"]
             if z:
                 items.append(f"股数：{z['shares']} 股（{z['basis']}）" if z["shares"] is not None else f"股数：{z['basis']}")

@@ -4,13 +4,13 @@
  * - buildPlans：按"脚本的打法键（analysis.trade_plan.key）× 你的处境"给一句做法、两三条带价位的条件，和两个价位：
  *   trigger（空仓：进场触发；不买的打法是"先看"的价位；持仓：加仓或减仓的价位）、stop（空仓：进场后止损；持仓：止损）。
  *   进场、止损、目标位、盈亏比、股数读脚本的交易计划（trade_plan，skill 的 tradeplan.py），这里只配措辞，不重算。
- *   盈亏比不到 3:1 时空仓的做法改成"不做"，写出差多少。
+ *   盈亏比不到 3:1 时空仓的做法改成"不做"，写出差多少；触发价离现价还远（entry.far）时不改，盈亏比写到时重算。
  *   用哪几条规则取自 skill 的 references/playbooks.md；规则满不满足、阈值、构造下一步价位、30 天求解都读脚本结果，这里不重算。
  *   处境分四种：空仓、持仓（没填成本）、持仓浮盈、持仓浮亏。成本只在浏览器里，文字里写 {cost}，由页面填上。
  * - buildChecklist：打法用到的每条规则今天的状态，没满足的写还差什么（价位读规则的 levels）。
  * - buildForecast：做推演只答三问，跨度都是 30 天：类型线还能保持多久、容忍到哪；打法的条件最早哪天能齐；什么价位推翻这个判断。
  */
-import type { Analysis, PlanMountain, PlanSet, RuleResult, Solve, TradePlan } from "./citations.ts";
+import type { Analysis, PlanFar, PlanMountain, PlanSet, RuleResult, Solve, TradePlan } from "./citations.ts";
 
 export type Position = "flat" | "holding";
 /** 你的处境：空仓；持仓但没填成本；持仓浮盈；持仓浮亏。页面按"空仓/持仓"和成本价选一个。 */
@@ -397,9 +397,13 @@ function mountainText(m: PlanMountain, close: number): string {
   return `上方最近的筹码山：山脚 ${at(m.foot, close)}到山顶 ${f2(m.top)} 这条带。只作参考，不排进第一目标，不算进盈亏比。`;
 }
 
-/** 盈亏比一句：几比几、哪一档；不做时写差多少。 */
+/** 触发价离现价还远（docs/adr/0026.md）：明天的触发价只是按明天就拐头算的，盈亏比到价格走近时再算。 */
+const RR_FAR = "触发价离现价还远，到时重算";
+
+/** 盈亏比一句：几比几、哪一档；不做时写差多少；触发价离现价还远时只说到时重算。 */
 export function rrText(t: TradePlan): string | null {
   if (t.rr === null || t.rr_verdict === null) return null;
+  if (t.entry?.far) return `${RR_FAR}。`;
   if (t.rr_verdict === "不做") {
     const g = t.rr_gap!;
     return `${ratio(t.rr)}，不到 3:1，不做：目标得到 ${f2(g.target_for_min)}，或止损收紧到 ${f2(g.stop_for_min)}，才够 3:1。`;
@@ -415,9 +419,20 @@ export function sizeText(t: TradePlan): string | null {
   return `${z.shares} 股：${z.basis}。`;
 }
 
-/** 空仓会买时，计划里多四条：目标、到目标怎么办、盈亏比、股数；持仓只多前两条。上方有筹码山时两边都再加一条「参考」。 */
-function tradeItems(t: TradePlan, close: number, flat: boolean): PlanItem[] {
+/** 触发价离现价还远：按收盘持平推演，最早哪天、站上哪个价位 20 线组一起拐头，和明天要站上的触发价。 */
+function farText(far: PlanFar, tomorrow: number, close: number, dates: string[]): string {
+  return `按收盘持平推演，20 线组最早约 ${far.day} 个交易日后（${dates[far.day - 1]}）、收盘站上 ${at(far.level, close)}才会一起拐头；` +
+    `明天要拐头得站上 ${at(tomorrow, close)}。`;
+}
+
+/**
+ * 空仓会买时，计划里多四条：目标、到目标怎么办、盈亏比、股数；持仓只多前两条。上方有筹码山时两边都再加一条「参考」。
+ * 空仓的触发价离现价还远时，最前面再加一条「触发价」（推演求解，辅助）。
+ */
+function tradeItems(t: TradePlan, close: number, flat: boolean, dates: string[]): PlanItem[] {
   const out: PlanItem[] = [];
+  const e = t.entry;
+  if (flat && e?.far) out.push({ label: "触发价", text: farText(e.far, e.price!, close, dates), rules: e.rule.split("、"), evidence: SOLVER_EVIDENCE });
   if (t.targets.length) out.push({ label: "目标", text: targetsText(t, close), rules: ["P25"] });
   if (t.at_target) out.push({ label: "到目标", text: t.at_target, rules: ["P25"] });
   const rr = flat ? rrText(t) : null;
@@ -435,9 +450,9 @@ function withTrade(items: PlanItem[], extra: PlanItem[]): PlanItem[] {
   return [...items.slice(0, k), ...extra, ...items.slice(k)];
 }
 
-/** 盈亏比不到 3:1：空仓的做法改成不做（P24）。 */
+/** 盈亏比不到 3:1：空仓的做法改成不做（P24）。触发价离现价还远时不改：盈亏比到时重算。 */
 function flatAction(d: Draft, t: TradePlan): string {
-  return t.rr_verdict === "不做" ? `不做：盈亏比 ${ratio(t.rr!)}，不到 3:1。` : d.action;
+  return t.rr_verdict === "不做" && !t.entry?.far ? `不做：盈亏比 ${ratio(t.rr!)}，不到 3:1。` : d.action;
 }
 
 /** 按趋势类型和阶段定的打法。浮盈 / 浮亏在持仓打法的做法之后加一行「盈亏」，价位和持仓一样。 */
@@ -447,7 +462,7 @@ export function buildPlans(a: Analysis): Record<Situation, Plan> {
   const l = levels(a);
   const tp = a.trade_plan;
   const hold = play.holding(l);
-  const holding: Draft = { ...hold, items: withTrade(hold.items, tradeItems(tp.holding, a.close, false)) };
+  const holding: Draft = { ...hold, items: withTrade(hold.items, tradeItems(tp.holding, a.close, false, a.projection.dates)) };
   const withPnl = (k: "profit" | "loss"): Draft => {
     const t = PNL[key][k];
     return {
@@ -457,7 +472,7 @@ export function buildPlans(a: Analysis): Record<Situation, Plan> {
     };
   };
   const f = play.flat(l);
-  const flat: Draft = { ...f, action: flatAction(f, tp.flat), items: withTrade(f.items, tradeItems(tp.flat, a.close, true)) };
+  const flat: Draft = { ...f, action: flatAction(f, tp.flat), items: withTrade(f.items, tradeItems(tp.flat, a.close, true, a.projection.dates)) };
   const drafts: Record<Situation, Draft> = { flat, holding, profit: withPnl("profit"), loss: withPnl("loss") };
   return Object.fromEntries(SITUATIONS.map((k) => {
     const trade = k === "flat" ? tp.flat : tp.holding;
@@ -472,7 +487,7 @@ export function planLine(p: Plan, close: number, flat: boolean): string {
   if (p.stop) parts.push(`${flat ? "进场后止损" : "止损"}：${p.stop.label} ${at(p.stop.price, close)}`);
   if (p.risk !== null) parts.push(`到止损 ${p.risk.toFixed(1)}%`);
   if (p.trade.targets.length) parts.push(targetsText(p.trade, close));
-  if (flat && p.trade.rr !== null) parts.push(`盈亏比 ${ratio(p.trade.rr)}（${p.trade.rr_verdict}）`);
+  if (flat && p.trade.rr !== null) parts.push(p.trade.entry?.far ? "盈亏比到时重算（触发价离现价还远）" : `盈亏比 ${ratio(p.trade.rr)}（${p.trade.rr_verdict}）`);
   return parts.join("；");
 }
 
@@ -491,7 +506,7 @@ export function planFacts(tp: PlanSet, close: number): [string, string, string][
       ["计划.止损", "空仓进场后的止损（什么原则进就什么原则出，P23）", stopText(f.stop) ?? "没有止损价"],
       ["计划.目标", "空仓进场后的目标位（P25）", f.targets.length ? targetsText(f, close) : (f.notes.find((n) => n.includes("目标")) ?? "目标位算不出")],
       ["计划.到目标", "空仓进场后到了第一目标怎么办（P25）", f.at_target ?? "没有目标位"],
-      ["计划.盈亏比", "盈亏比：(第一目标 − 进场) ÷ (进场 − 止损)，不到 3:1 不做（P24）", rrText(f) ?? `算不了：${why}`],
+      ["计划.盈亏比", "盈亏比：(第一目标 − 进场) ÷ (进场 − 止损)，不到 3:1 不做（P24）；触发价离现价还远时到时重算", rrText(f) ?? `算不了：${why}`],
       ["计划.股数", "建议股数：每笔可承受亏损 ÷ (进场 − 止损)，向下取整（A6）", sizeText(f) ?? `算不了：${why}`],
     );
   }
@@ -549,6 +564,9 @@ function holdText(a: Analysis): string {
 
 /** 推演第 n 个交易日的日期（脚本给的工作日，不扣节假日）。 */
 const dayN = (a: Analysis, n: number) => `${a.projection.dates[n - 1]}（第 ${n} 个交易日）`;
+/** 触发价离现价还远时，20 线组最早哪天一起拐头（按收盘持平推演）。 */
+const farEarliest = (a: Analysis, far: PlanFar, tomorrow: number) =>
+  `按收盘持平推演，20 线组最早 ${dayN(a, far.day)}一起拐头：收盘站上 ${at(far.level, a.close)}；明天要拐头得站上 ${at(tomorrow, a.close)}。`;
 
 /** 问二：打法的条件最早哪天能齐。构造按最少还差几根，价位条件最早明天；小时线、横满几个月这种照实说。 */
 function earliestOf(a: Analysis, l: L, key: string, plans: Record<Situation, Plan>): { text: string; solved?: boolean } {
@@ -575,12 +593,14 @@ function earliestText(a: Analysis, l: L, key: string, plans: Record<Situation, P
     }
     case "多头结构回撤中": {
       const t = plans.flat.trigger;
+      if (l.entry?.far) return farEarliest(a, l.entry.far, l.entry.price!);
       return t ? `最早明天 ${dayN(a, 1)}：收盘${t.label} ${at(t.price, a.close)}。`
         : "已经在 EMA20 和 MA20 抵扣价上方：守住几天、MA20 拐头向上，回调就结束了。";
     }
     case "加速下跌": {
       const n = l.met("J21") ? null : bars("J21");
-      return `这套打法空仓不买。${n ? `底部构造最早 ${dayN(a, n)}完成，` : ""}之后还要 20 线组拐头向上（关键性波动）。`;
+      return `这套打法空仓不买。${n ? `底部构造最早 ${dayN(a, n)}完成，` : ""}之后还要 20 线组拐头向上（关键性波动）。` +
+        (l.entry?.far ? farEarliest(a, l.entry.far, l.entry.price!) : "");
     }
     case "横盘": {
       const r = a.regime.range;

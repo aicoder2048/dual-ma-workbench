@@ -56,3 +56,23 @@ describe("盈亏比两位小数：结论卡的小标签和问鸿雁的问题", (
     expect(cardQuestions("verdict", a, r).map((q) => q.text).join("\n")).toContain("盈亏比 3.00:1 是怎么算的");
   });
 });
+
+describe("触发价离现价还远（ADR 0026）：结论卡的盈亏比标签写到时重算", () => {
+  const a = structuredClone(nvda) as Analysis;
+  a.trade_plan.flat = { ...a.trade_plan.flat, entry: { ...a.trade_plan.flat.entry!, far: { level: 190, day: 6, days: 10 } } };
+  const r = buildReport(a);
+  const card = conclusionCard(r, a.close, { pos: "flat", cost: "" });
+  const chip = card.match(/<span class="pchip rr[^>]*>\s*<span class="ck">盈亏比<\/span>[\s\S]*?<\/span>/)![0];
+  test("标签不写几比几、不写不做，标灰；悬停里有按明天算的数", () => {
+    expect(chip).toContain("pchip rr far");
+    expect(chip).toContain("到时重算");
+    expect(chip).not.toContain("不做");
+    expect(chip).toContain("按明天的触发价 212.21 算是 0.57:1");
+    expect(card).not.toContain("不做：盈亏比");
+  });
+  test("问鸿雁问的是什么时候拐头，不问盈亏比怎么算", () => {
+    const qs = cardQuestions("verdict", a, r).map((q) => q.text).join("\n");
+    expect(qs).toContain("触发价为什么离现价还远，20 线组最早什么时候拐头？");
+    expect(qs).not.toContain("盈亏比 0.57:1 是怎么算的");
+  });
+});

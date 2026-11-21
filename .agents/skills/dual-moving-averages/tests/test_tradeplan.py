@@ -13,6 +13,8 @@ from conftest import load_fixture
 import dma_analyze as dma
 import rules
 import tradeplan as tp
+from indicators import add_indicators
+from projection import extend
 from structure import Pivot
 from volprofile import Mountain, Profile
 
@@ -197,6 +199,63 @@ def test_20_line_turn_already_above_both_enters_at_the_close():
     assert entry.price == 110.0 and stop.price == 99.0
 
 
+# 触发价离现价还远（docs/adr/0026.md）：明天的抵扣价很高、几天后回落，明天的触发价不代表 20 线组什么时候真会拐头
+
+def turn_ctx(last20: list[float]) -> SimpleNamespace:
+    """前 200 根收在 100，最后 20 根照给的：明天扣 last20[0]，第 k 天扣 last20[k-1]。指标照脚本算。"""
+    closes = [100.0] * 200 + last20
+    df = add_indicators(pd.DataFrame({"Close": closes}, index=pd.bdate_range("2024-01-01", periods=len(closes))))
+    return SimpleNamespace(df=df, row=df.iloc[-1], close=closes[-1])
+
+
+QQQ_LIKE = [120, 121, 119, 118, 115, 100, 85, 84, 83, 82] + [80.0] * 10   # 明天扣 120，第 7 天起扣到 85 以下
+
+
+def test_far_trigger_gives_the_projected_level_and_earliest_day():
+    c = turn_ctx(QQQ_LIKE)
+    ema20 = float(c.row["EMA20"])
+    entry, stop = tp._turn20(c, "J19")
+    assert entry.price == 120.0 and stop.price == ema20   # 进场、止损照旧（明天扣 120，后天扣 121）：回测读这两个
+    far = entry.far
+    assert far.days == tp.TURN_DAYS
+    assert far.level == pytest.approx(ema20, rel=1e-6)   # 持平在 EMA20 上方 EMA20 天天向上；MA20 第 7 天扣 85 才向上
+    assert far.day == 7
+
+
+def test_far_trigger_level_is_where_both_lines_first_turn_up_together():
+    c = turn_ctx(QQQ_LIKE)
+    far = tp._turn20(c, "J19")[0].far
+    ext = extend(c.df, [far.level] * far.days)
+    both = ((ext["MA20"].diff() > 0) & (ext["EMA20"].diff() > 0)).iloc[-far.days:].tolist()
+    assert both.index(True) + 1 == far.day
+    lower = extend(c.df, [far.level * (1 - 1e-4)] * far.days)
+    assert not ((lower["MA20"].diff() > 0) & (lower["EMA20"].diff() > 0)).iloc[-far.days:].any()
+
+
+def test_far_trigger_condition_says_when_and_where_and_still_names_tomorrow():
+    c = turn_ctx(QQQ_LIKE)
+    entry = tp._turn20(c, "J19")[0]
+    level = f"{entry.far.level:.2f}"
+    assert entry.condition.startswith(f"按收盘持平推演，20 线组最早约 7 个交易日后、收盘站上 {level} 才会一起拐头；明天要拐头得站上 120.00")
+
+
+def test_trigger_not_far_when_the_high_drop_lasts_the_whole_window():
+    """10 天里天天扣 120：推演门槛也是 120，明天的触发价就是实际要过的价位。"""
+    entry = tp._turn20(turn_ctx([120.0] * 10 + [80.0] * 10), "P19、P20")[0]
+    assert entry.price == 120.0 and entry.far is None
+    assert entry.condition.startswith("收盘站上 EMA20")
+
+
+def test_trigger_not_far_when_tomorrow_is_within_the_threshold_of_ema20():
+    entry = tp._turn20(turn_ctx([101.0] + [100.0] * 18 + [99.0]), "P19、P20")[0]
+    assert entry.price == 101.0 and entry.far is None
+
+
+def test_no_far_trigger_once_the_close_is_already_above_both():
+    entry = tp._turn20(turn_ctx([90.0] * 19 + [130.0]), "P20")[0]
+    assert entry.price == 130.0 and entry.far is None
+
+
 def test_breakout_bar_is_the_first_close_above_the_box_in_the_last_run():
     closes = [99.0] * 5 + [98, 99, 97, 101, 103, 99, 104, 105, 106, 107]
     lows = [c - 2 for c in closes]
@@ -356,9 +415,41 @@ def test_flat_plan_skips_the_zone_the_rally_to_the_october_high_went_through(qqq
     assert "718.07" in f["at_target"]
 
 
-def test_reward_risk_in_the_play_text_has_two_decimals(qqq_crash):
+def test_reward_risk_in_the_play_text_has_two_decimals():
     """0.155 写成 0.2:1 会丢精度。"""
-    assert "盈亏比 0.15:1，不到 3:1，不做（P24）" in qqq_crash["play"]["text"]
+    f = tp.TradePlan(tp.Entry(10.0, "按收盘进", "P12"), tp.Stop(9.0, "止损", "P23", "视频"),
+                     [tp.Target(10.155, "缺口", "P25", "视频", "2024-01-02")], 0.155, "不做",
+                     {"target_for_min": 13.0, "stop_for_min": 9.95}, 10.0, None)
+    holding = tp.TradePlan(None, None, [], None, None, None, None, None)
+    assert "盈亏比 0.16:1" not in tp.verdict_line(tp.PlanSet("稳定上涨", f, holding))
+    assert "盈亏比 0.15:1，不到 3:1，不做（P24）" in tp.verdict_line(tp.PlanSet("稳定上涨", f, holding))
+
+
+def test_qqq_far_trigger_keeps_the_backtest_fields_and_adds_the_projection(qqq_crash):
+    """QQQ 2026-11-20：明天扣 10-26 的 712.20，按收盘持平推演最早第 9 个交易日、站上 EMA20 674.24 才一起拐头。
+    进场、止损、盈亏比、不做照旧留在 JSON 里（回测读这几个），显示改读 far。"""
+    f = qqq_crash["trade_plan"]["flat"]
+    assert f["entry"]["price"] == pytest.approx(712.20, abs=0.01)
+    assert f["rr"] == pytest.approx(0.155, abs=0.001) and f["rr_verdict"] == "不做"
+    far = f["entry"]["far"]
+    assert far["level"] == pytest.approx(674.24, abs=0.01) and far["day"] == 9 and far["days"] == 10
+    assert "最早约 9 个交易日后、收盘站上 674.24 才会一起拐头；明天要拐头得站上 712.20" in f["entry"]["condition"]
+
+
+def test_qqq_far_trigger_text_says_recompute_instead_of_no_trade(qqq_crash):
+    text = qqq_crash["play"]["text"]
+    assert "不做（P24）" not in text and "触发价离现价还远，盈亏比到时重算（P24）" in text
+    lines = [x for x in dma.plan_lines(qqq_crash["trade_plan"]) if x.startswith("- 空仓")]
+    assert "盈亏比：触发价离现价还远，到时重算" in lines[0] and "不做" not in lines[0]
+    p24 = next(r for r in qqq_crash["rules"] if r["id"] == "P24")
+    assert p24["status"] == "满足"   # 状态照旧：P19、P20 让位给它，老回测（backtest.py）读这个
+    assert p24["basis"].startswith("触发价离现价还远，到时重算") and "0.15:1" in p24["basis"]
+
+
+def test_trigger_not_far_keeps_the_no_trade_text(plans):
+    f = plans["SPY"]["trade_plan"]["flat"]
+    assert f["entry"]["far"] is None
+    assert "不做（P24）" in plans["SPY"]["play"]["text"]
 
 
 def test_plan_without_targets_has_no_at_target_line(plans):

@@ -165,6 +165,11 @@ beforeAll(async () => {
         const flat = { ...n.trade_plan.flat, targets: [{ price: GAPS[1].bottom, kind: "缺口", rule: "P25", source: "视频" as const, date: GAPS[1].date }] };
         return JSON.stringify({ analysis: { ...n, label: "STRUCT", structure: STRUCTURE, gaps: GAPS, trade_plan: { ...n.trade_plan, flat } }, chart: CHART });
       }
+      if (args[0] === "FAR") { // 触发价离现价还远（ADR 0026）：明天要站上 212.21，按收盘持平推演第 6 个交易日站上 190.00 就一起拐头
+        const n = nvda as Analysis;
+        const entry = { ...n.trade_plan.flat.entry!, far: { level: 190, day: 6, days: 10 } };
+        return JSON.stringify({ analysis: { ...n, label: "FAR", trade_plan: { ...n.trade_plan, flat: { ...n.trade_plan.flat, entry } } }, chart: CHART });
+      }
       if (args[0] === "PROFILE") { // 交易计划记下了上方的筹码山（P38）：图上画参考带，目标照旧
         const n = nvda as Analysis;
         const flat = { ...n.trade_plan.flat, mountain: PROFILE_REF };
@@ -1589,6 +1594,25 @@ describe("中栏：结论 → 看大局 → 找打法 → 做推演", () => {
     expect(holding).toContain("反弹再减仓");
     expect(holding).toContain("183.08");
     expect(await page.textContent("#verdict .record")).toContain("空仓不买，回测没有进场");
+    expect(errors).toEqual([]);
+    await page.close();
+  }, 30_000);
+
+  test("结论：触发价离现价还远时盈亏比写到时重算、不写不做，默认视图看得见；找打法里写推演最早哪天站上哪个价位", async () => {
+    const { page, errors } = await open(undefined, "FAR");
+    const flat = '#verdict .concl-row[data-situation="flat"]';
+    expect(await notCovered(page, `${flat} [data-item=rr]`)).toBe(true);
+    const row = (await page.textContent(flat))!.replace(/\s+/g, "");
+    expect(row).toContain("不抢反弹，等底部构造和均线拐头");
+    expect(row).toContain("盈亏比到时重算");
+    expect(row).not.toContain("不做");
+    expect(await page.getAttribute(`${flat} [data-item=rr]`, "data-tip")).toContain("按明天的触发价 212.21 算是 0.57:1");
+    const plan = page.locator('[data-step="play"] .plan-body');
+    await scrollIntoCenter(page, '[data-step="play"]');
+    const text = (await plan.textContent())!;
+    expect(text).toContain("最早约 6 个交易日后（2026-11-26）、收盘站上 190.00");
+    expect(text).toContain("明天要拐头得站上 212.21");
+    expect(text).toContain("触发价离现价还远，到时重算。");
     expect(errors).toEqual([]);
     await page.close();
   }, 30_000);

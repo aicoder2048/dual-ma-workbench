@@ -669,3 +669,43 @@ describe("上方的筹码山只作参考（P38，ADR 0018）：不进目标、�
     expect(row(plain.holding, "参考")).toBeUndefined();
   });
 });
+
+describe("触发价离现价还远（ADR 0026）：盈亏比到时重算，不写不做", () => {
+  /** NVDA 加速下跌：明天要站上 212.21 才拐头；假设按收盘持平推演，第 6 个交易日站上 190.00 就一起拐头。 */
+  function farNvda(): Analysis {
+    const a = structuredClone(bear);
+    const e = a.trade_plan.flat.entry!;
+    a.trade_plan.flat = { ...a.trade_plan.flat, entry: { ...e, far: { level: 190, day: 6, days: 10 },
+      condition: "按收盘持平推演，20 线组最早约 6 个交易日后、收盘站上 190.00 才会一起拐头；明天要拐头得站上 212.21（推演求解，辅助，评估 H4）" } };
+    return a;
+  }
+  const a = farNvda();
+  const p = buildPlans(a);
+  test("空仓做法照打法写，不改成不做", () => {
+    expect(p.flat.action).toBe("不抢反弹，等底部构造和均线拐头。");
+  });
+  test("盈亏比一条写到时重算，不写几比几", () => {
+    expect(p.flat.items.find((i) => i.label === "盈亏比")!.text).toBe("触发价离现价还远，到时重算。");
+    expect(rrText(a.trade_plan.flat)).not.toContain("0.57");
+  });
+  test("计划里写推演：最早哪天、站上哪个价位一起拐头，明天的触发价；标辅助", () => {
+    const t = p.flat.items.find((i) => i.label === "触发价")!;
+    expect(t.text).toBe("按收盘持平推演，20 线组最早约 6 个交易日后（2026-11-26）、收盘站上 190.00（+25.9%）才会一起拐头；明天要拐头得站上 212.21（+40.6%）。");
+    expect(t.evidence).toBe(SOLVER_EVIDENCE);
+  });
+  test("结论那一行和数据字段：盈亏比到时重算", () => {
+    const line = planLine(p.flat, a.close, true);
+    expect(line).toContain("盈亏比到时重算（触发价离现价还远）");
+    expect(line).not.toContain("不做");
+    const facts = Object.fromEntries(planFacts(a.trade_plan, a.close).map(([k, , v]) => [k, v]));
+    expect(facts["计划.盈亏比"]).toBe("触发价离现价还远，到时重算。");
+    expect(facts["计划.进场"]).toContain("最早约 6 个交易日后、收盘站上 190.00 才会一起拐头");
+  });
+  test("做推演的最早哪天：按推演的那一天说", () => {
+    expect(buildForecast(a).earliest).toContain("20 线组最早 2026-11-26（第 6 个交易日）一起拐头：收盘站上 190.00（+25.9%）");
+  });
+  test("不远时照旧：NVDA 原样还是不做", () => {
+    expect(buildPlans(bear).flat.action).toBe("不做：盈亏比 0.57:1，不到 3:1。");
+    expect(buildPlans(bear).flat.items.some((i) => i.label === "触发价")).toBe(false);
+  });
+});

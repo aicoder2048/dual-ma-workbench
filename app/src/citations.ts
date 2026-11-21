@@ -173,7 +173,13 @@ export interface Play { key: string; text: string; rules: string[] }
  * source：视频给了定价位的办法写"视频"，视频没给价位、脚本按原则放的写"解读"。
  */
 export type PlanSource = "视频" | "解读";
-export interface PlanEntry { price: number | null; condition: string; rule: string }
+/**
+ * 触发价离现价还远时的推演（docs/adr/0026.md）：按收盘持平，days 天内 MA20、EMA20 同一天都向上的最低价位 level，
+ * 持平在那里最早第 day 个交易日一起向上。只给显示用：进场价、盈亏比照旧按明天算，回测读那几个。
+ */
+export interface PlanFar { level: number; day: number; days: number }
+/** far：触发价离现价还远时才有；旧数据没有。 */
+export interface PlanEntry { price: number | null; condition: string; rule: string; far?: PlanFar | null }
 export interface PlanStop { price: number | null; reason: string; rule: string; source: PlanSource }
 export interface PlanTarget { price: number; kind: string; rule: string; source: PlanSource; date: string | null }
 /** 上方最近的整座筹码山（P38）：只作参考价位，不是目标（docs/adr/0018.md）。foot 山脚、top 山顶，date 是统计区间"开始~结束"。 */
