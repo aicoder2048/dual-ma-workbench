@@ -141,7 +141,7 @@ export async function loadAnalysis(ticker, asof) {
 
 /** 中栏两种状态：有分析结果（结论、K 线图、三步），或这只票取数失败（只有错误卡片）。 */
 function showPane(ok) {
-  for (const el of [$("verdict"), document.querySelector(".chart-card"), $("steps")]) el.hidden = !ok;
+  for (const el of [$("verdict"), document.querySelector(".chart-card"), $("steps"), $("method-note")]) el.hidden = !ok;
   $("load-error").hidden = ok;
   $("error").hidden = true; // 操作失败的提示属于上一个页面
   if (!ok) {

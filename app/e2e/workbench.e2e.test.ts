@@ -1581,11 +1581,14 @@ describe("中栏：结论 → 看大局 → 找打法 → 做推演", () => {
     await page.close();
   }, 30_000);
 
-  test("结论：默认视图第一眼就是空仓、持仓两行，带价位；看得见、没被挡；回测照实说不买", async () => {
+  test("结论：默认视图第一眼就是现在 / 模糊判断两段标题和空仓、持仓两行，带价位；看得见、没被挡；空仓不买没有回测一行", async () => {
     const { page, errors } = await open();
-    for (const sel of ['#verdict .concl-row[data-situation="flat"] .what b', '#verdict .concl-row[data-situation="holding"] .what b', "#verdict .record"]) {
+    for (const sel of ["#verdict .concl-now", "#verdict .concl-lean", '#verdict .concl-row[data-situation="flat"] .what b', '#verdict .concl-row[data-situation="holding"] .what b']) {
       expect({ sel, ok: await notCovered(page, sel) }).toEqual({ sel, ok: true });
     }
+    expect((await page.textContent("#verdict .concl-now"))!.replace(/\s+/g, "")).toBe("现在加速下跌·延伸");
+    expect((await page.textContent("#verdict .concl-lean"))!.replace(/\s+/g, "")).toBe("模糊判断·接下来几周明显偏空");
+    expect(await page.getAttribute("#verdict .concl-lean", "data-tip")).toContain("不预测明天涨跌");
     const flat = (await page.textContent('#verdict .concl-row[data-situation="flat"]'))!;
     expect(flat).toContain("不做：盈亏比 0.57:1"); // 加速下跌等构造和 20 线组拐头再进，但到缺口的空间不够 3:1
     expect(flat).toContain("触发");
@@ -1593,7 +1596,18 @@ describe("中栏：结论 → 看大局 → 找打法 → 做推演", () => {
     const holding = (await page.textContent('#verdict .concl-row[data-situation="holding"]'))!;
     expect(holding).toContain("反弹再减仓");
     expect(holding).toContain("183.08");
-    expect(await page.textContent("#verdict .record")).toContain("空仓不买，回测没有进场");
+    expect(await page.locator("#verdict .record").count()).toBe(0); // 加速下跌空仓不买：没有本打法的记录
+    expect(errors).toEqual([]);
+    await page.close();
+  }, 30_000);
+
+  test("整套方法的评估免责全页只说一次：不在结论卡片里，在中栏三步下面，滚到时看得见", async () => {
+    const { page, errors } = await open(undefined, "SPY@2024-04-19");
+    const shown = await page.evaluate(() => document.body.innerText.split("没找到可验证的交易优势").length - 1);
+    expect(shown).toBe(1);
+    expect(await page.textContent("#verdict")).not.toContain("没找到可验证的交易优势");
+    await scrollIntoCenter(page, "#method-note");
+    expect(await notCovered(page, "#method-note")).toBe(true);
     expect(errors).toEqual([]);
     await page.close();
   }, 30_000);
@@ -1638,6 +1652,11 @@ describe("中栏：结论 → 看大局 → 找打法 → 做推演", () => {
     expect(f).toContain("股数804/万元"); // 没填账户：每 1 万元风险对应的股数
     expect(await page.getAttribute(`${flat} [data-item=rr]`, "class")).toContain("bad");
     expect(await page.textContent(`${holding} [data-item=stop]`)).toContain("488.03"); // 持仓止损按进场原则，不按成本
+    await scrollIntoCenter(page, "#verdict .record"); // 卡片最后一行，1280×720 下要往下滚一点
+    expect(await notCovered(page, "#verdict .record")).toBe(true); // 稳定上涨有本打法的回测记录
+    const rec = (await page.textContent("#verdict .record"))!.replace(/\s+/g, "");
+    expect(rec).toContain("5笔");
+    expect(rec).toContain("比随机进场少7.6%");
     const kinds = await page.evaluate(async () => {
       const { chartLevels } = await import("/viz.js");
       const d = await (await fetch("/api/analyze?ticker=SPY&asof=2024-04-19")).json();
@@ -1652,9 +1671,10 @@ describe("中栏：结论 → 看大局 → 找打法 → 做推演", () => {
     const { page, errors } = await open();
     expect(await notCovered(page, "#verdict .naive")).toBe(true);
     const naive = (await page.textContent("#verdict .naive"))!;
-    expect(naive).toContain("MA200 朴素规则：收盘在下方 -25.9%，空仓");
-    expect(naive.replace(/\s+/g, "")).toContain("双均线也空仓一致");
-    expect(naive).toContain("评估 MAR 0.26 vs 0.14");
+    expect(naive.replace(/\s+/g, "")).toBe("对照MA200规则：空仓｜双均线：空仓｜一致");
+    const tip = (await page.getAttribute("#verdict .naive", "data-tip"))!;
+    expect(tip).toContain("收盘在下方 25.9%");
+    expect(tip).toContain("朴素规则比双均线好");
     await page.waitForSelector("#chart canvas");
     const btn = '#legend button[data-line="MA200"]';
     expect(await page.getAttribute(btn, "aria-pressed")).toBe("false");
@@ -1664,6 +1684,21 @@ describe("中栏：结论 → 看大局 → 找打法 → 做推演", () => {
     await page.click(btn);
     expect(await page.getAttribute(btn, "aria-pressed")).toBe("true");
     expect(await page.textContent("#chart-readout")).toContain(`MA200 ${CHART.lines.MA200.at(-1)!.value.toFixed(2)}`);
+    expect(errors).toEqual([]);
+    await page.close();
+  }, 30_000);
+
+  test("结论：窄屏 390px 下对照一句的「一致」不被截掉，浮盈建议看得见", async () => {
+    const { page, errors } = await open();
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.locator("#verdict .naive").scrollIntoViewIfNeeded(); // 窄屏整页滚动，不是中栏自己滚
+    expect(await notCovered(page, "#verdict .naive-agree")).toBe(true);
+    const [agree, line] = await page.evaluate(() => ["#verdict .naive-agree", "#verdict .naive"].map((s) => document.querySelector(s)!.getBoundingClientRect().right));
+    expect(agree).toBeLessThanOrEqual(line);
+    await page.fill("#pos-cost", "133");
+    await page.locator("#verdict .pnl-advice").scrollIntoViewIfNeeded();
+    expect(await notCovered(page, "#verdict .pnl-advice")).toBe(true);
+    await page.fill("#pos-cost", "");
     expect(errors).toEqual([]);
     await page.close();
   }, 30_000);
@@ -1976,7 +2011,11 @@ describe("成本价决定浮盈 / 浮亏的做法", () => {
     await page.fill("#pos-cost", "200");
     expect(await plan.textContent()).toContain("不等回本");
     expect(await row.locator(".who").textContent()).toBe("持仓 · 浮亏");
+    await scrollIntoCenter(page, "#verdict .holding-row"); // 填完成本，往上看一眼持仓那一行
+    expect(await notCovered(page, '#verdict .concl-row[data-situation="holding"] .pnl-advice')).toBe(true);
+    expect(await row.locator(".pnl-advice").textContent()).toContain("已经浮亏：不等回本");
     await page.fill("#pos-cost", "133");
+    expect(await row.locator(".pnl-advice").textContent()).toContain("还有浮盈：止损跟着趋势结构走，不按成本 133.00 定");
     const t = (await plan.textContent())!;
     expect(t).toContain("133.00");
     expect(t).not.toContain("{cost}");

@@ -1,9 +1,13 @@
 import { describe, expect, test } from "bun:test";
 import { cardQuestions } from "../public/askmenu.js";
-import { conclusionCard, parseCost, pnlText, situationOf } from "../public/viz.js";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { conclusionCard, holdingRow, parseCost, pnlText, situationOf } from "../public/viz.js";
 import type { Analysis } from "../src/citations.ts";
+import { EVALUATION_NOTE } from "../src/record.ts";
 import { buildReport } from "../src/report.ts";
 import nvda from "./fixtures/nvda-analysis.json";
+import spyFixture from "./fixtures/spy-2024-04-19-analysis.json";
 
 describe("成本价：浏览器端解析和处境", () => {
   test("逗号、全角数字、空格都能认", () => {
@@ -81,5 +85,73 @@ describe("触发价离现价还远（ADR 0026）：结论卡的盈亏比标签�
     const qs = cardQuestions("verdict", a, r).map((q) => q.text).join("\n");
     expect(qs).toContain("触发价为什么离现价还远，20 线组最早什么时候拐头？");
     expect(qs).not.toContain("盈亏比 0.57:1 是怎么算的");
+  });
+});
+
+describe("结论卡片读起来（ADR 0028）", () => {
+  const nv = structuredClone(nvda) as Analysis;
+  const r = buildReport(nv);
+  const spyA = structuredClone(spyFixture) as Analysis;
+  const spy = buildReport(spyA);
+  const text = (html: string) => html.replace(/<[^>]+>/g, "").replace(/\s+/g, "");
+  const tipOf = (html: string, cls: string) => html.match(new RegExp(`class="${cls}"[^>]*data-tip="([^"]+)"`))![1];
+  const card = conclusionCard(r, nv.close, { pos: "flat", cost: "" });
+  const spyCard = conclusionCard(spy, spyA.close, { pos: "flat", cost: "" });
+
+  test("标题分两段：现在（看大局的类型·阶段）、模糊判断 · 接下来几周（做推演的倾向）", () => {
+    expect(text(card)).toContain("现在加速下跌·延伸");
+    expect(text(card)).toContain("模糊判断·接下来几周明显偏空");
+    expect(tipOf(card, "concl-now")).toContain("看大局");
+    expect(tipOf(card, "concl-lean")).toContain("做推演");
+    expect(tipOf(card, "concl-lean")).toContain("不预测明天涨跌");
+  });
+
+  test("填了成本、浮盈：持仓一行写浮盈时怎么办，成本填进去", () => {
+    const row = holdingRow(r, nv.close, { cost: "133" });
+    expect(text(row)).toContain("还有浮盈：止损跟着趋势结构走，不按成本133.00定");
+    expect(row).not.toContain("{cost}");
+  });
+  test("填了成本、浮亏：持仓一行写浮亏时怎么办", () => {
+    expect(text(holdingRow(r, nv.close, { cost: "200" }))).toContain("已经浮亏：不等回本");
+  });
+  test("没填成本：持仓一行没有浮盈亏的建议，成本那里提示可填", () => {
+    expect(text(holdingRow(r, nv.close, { cost: "" }))).not.toMatch(/浮盈|浮亏/);
+    expect(pnlText("", nv.close)).toContain("填了成本价");
+  });
+
+  test("对照一句话：MA200 规则怎么说｜双均线怎么说｜一不一致；评估的数放悬停，写成整句、不用缩写", () => {
+    const line = card.match(/<p class="naive[^"]*"[\s\S]*?<\/p>/)![0];
+    expect(text(line)).toBe("对照MA200规则：空仓｜双均线：空仓｜一致");
+    const t = tipOf(card, "naive same");
+    expect(t).toContain("MA200 朴素规则 0.26");
+    expect(t).toContain("双均线照方向持有 0.14");
+    expect(t).toContain("朴素规则比双均线好");
+    expect(t).not.toContain("vs");
+  });
+  test("对照不一致：标出来", () => {
+    const m = nv.ma200 as Extract<Analysis["ma200"], { available: true }>;
+    const r2 = buildReport({ ...nv, ma200: { ...m, close_above: true, distance_pct: 3.04, stance: "持有", agrees: false } });
+    const line = conclusionCard(r2, nv.close, { pos: "flat", cost: "" }).match(/<p class="naive[^"]*"[\s\S]*?<\/p>/)![0];
+    expect(text(line)).toBe("对照MA200规则：持有｜双均线：空仓｜不一致");
+    expect(line).toContain('class="naive differ"');
+  });
+
+  test("回测：空仓不买的打法没有记录，整行不显示", () => {
+    expect(card).not.toContain('class="record"');
+  });
+  test("回测：有记录时只说本打法：笔数、比随机进场差多少、区间", () => {
+    const line = text(spyCard.match(/<p class="record"[\s\S]*?<\/p>/)![0]);
+    expect(line).toContain("5笔");
+    expect(line).toContain("比随机进场少7.6%");
+    expect(line).toContain("90%区间-10.7%~-4.4%");
+  });
+
+  test("整套方法的评估免责不在卡片上；页面上固定写一次", () => {
+    for (const html of [card, spyCard]) {
+      expect(html).not.toContain(EVALUATION_NOTE);
+      expect(html).not.toContain("可验证的交易优势");
+    }
+    const page = readFileSync(resolve(import.meta.dir, "../public/index.html"), "utf8");
+    expect(page.split(EVALUATION_NOTE).length - 1).toBe(1);
   });
 });
