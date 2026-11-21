@@ -8,14 +8,15 @@ import nvda from "./fixtures/nvda-analysis.json";
 const NOW = "2026-11-20T00:00:00.000Z";
 
 /** NVDA 的分析，换掉打法键和几条规则的状态。 */
-function analysis(play: string, status: Record<string, RuleResult["status"]>, yielded: string[] = []): Analysis {
+function analysis(play: string, status: Record<string, RuleResult["status"]>, yielded: string[] = [],
+  rr: "不做" | "可做" = "可做"): Analysis {
   const a = nvda as Analysis;
   // 脚本的打法键在 trade_plan.key；横盘里 P3 满足（埋伏的底线破了）时脚本给横盘破位
   const key = play === "横盘" && status.P3 === "满足" ? "横盘破位" : play;
   return {
     ...a,
     play: { ...a.play, key: play },
-    trade_plan: { ...a.trade_plan, key },
+    trade_plan: { ...a.trade_plan, key, flat: { ...a.trade_plan.flat, rr_verdict: rr } },
     rules: a.rules.map((r) => ({ ...r, status: status[r.id] ?? r.status, yields_to: yielded.includes(r.id) ? "P17" : r.yields_to })),
   };
 }
@@ -31,6 +32,10 @@ describe("进场前一根：打法买不买、条件满足没有", () => {
   });
   test("让位的规则不算满足", () => {
     expect(entryStateOf(analysis("多头结构回撤中", { P19: "满足", P20: "不满足" }, ["P19"])).entries![0].status).toBe("不满足");
+  });
+  test("明天的单盈亏比不到 3:1 时照样让位：触发价离现价还远，规则清单的 P24 不判满足也一样（和回测同一口径，ADR 0026 后续）", () => {
+    const a = analysis("多头结构回撤中", { P19: "满足", P20: "满足", P24: "不满足" }, [], "不做");
+    expect(entryStateOf(a).entries).toEqual([{ id: "P19", status: "不满足" }, { id: "P20", status: "不满足" }]);
   });
   test("P14 需看图（练习没有小时线）：P10–P12 都满足就算满足，否则照旧", () => {
     const met = { P14: "需看图", P10: "满足", P11: "满足", P12: "满足" } as const;

@@ -124,6 +124,16 @@ def test_yielded_first_chance_is_not_an_entry():
     assert run([day("", key="多头结构回撤中", P19="让位"), day(""), day("")]) == []
 
 
+def test_backtest_reads_tomorrows_reward_risk_even_when_the_trigger_is_far():
+    """回测每天挂明天的单：触发价离现价还远时规则清单的 P24 不判满足（只是显示），回测照旧按明天的盈亏比让位（ADR 0026 后续）。"""
+    from conftest import load_fixture
+    a = bt.dma.analyze(load_fixture("QQQ", "2026-11-20"), "QQQ", "fixture")
+    assert a["trade_plan"]["flat"]["entry"]["far"] and a["trade_plan"]["flat"]["rr_verdict"] == "不做"
+    rules = [{**r, "status": "满足"} if r["id"] == "P19" else r for r in a["rules"]]   # 假设 P19 同一天满足
+    d = bt.day_of({**a, "rules": rules})
+    assert d.status["P24"] == "满足" and "P19" in d.yielded
+
+
 def test_chart_status_runs_both_ways():
     days = [day("", key="稳定上涨", P14="需看图"), day(""), day("")]
     met = run(days, tr.Chart.MET)

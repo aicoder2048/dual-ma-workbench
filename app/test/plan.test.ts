@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { Analysis } from "../src/citations.ts";
-import { buildChecklist, buildForecast, buildPlans, ma20Claim, planFacts, planLine, playKey, rrText, SOLVER_EVIDENCE } from "../src/plan.ts";
+import { buildChecklist, buildForecast, buildPlans, ma20Claim, planFacts, planLine, playKey, rrText, sizeText, SOLVER_EVIDENCE } from "../src/plan.ts";
 import nvda from "./fixtures/nvda-analysis.json";
 import spyJson from "./fixtures/spy-2024-04-19-analysis.json";
 
@@ -700,6 +700,12 @@ describe("触发价离现价还远（ADR 0026）：盈亏比到时重算，不�
     const facts = Object.fromEntries(planFacts(a.trade_plan, a.close).map(([k, , v]) => [k, v]));
     expect(facts["计划.盈亏比"]).toBe("触发价离现价还远，到时重算。");
     expect(facts["计划.进场"]).toContain("最早约 6 个交易日后、收盘站上 190.00 才会一起拐头");
+  });
+  test("股数和盈亏比一样按明天的触发价算：计划和数据字段都写到时重算", () => {
+    expect(p.flat.items.find((i) => i.label === "股数")!.text).toBe("触发价离现价还远，到时重算。");
+    const facts = Object.fromEntries(planFacts(a.trade_plan, a.close).map(([k, , v]) => [k, v]));
+    expect(facts["计划.股数"]).toBe("触发价离现价还远，到时重算。");
+    expect(sizeText(bear.trade_plan.flat)).toContain("每 1 万元风险对应 343 股");
   });
   test("做推演的最早哪天：按推演的那一天说", () => {
     expect(buildForecast(a).earliest).toContain("20 线组最早 2026-11-26（第 6 个交易日）一起拐头：收盘站上 190.00（+25.9%）");

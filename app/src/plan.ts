@@ -411,10 +411,11 @@ export function rrText(t: TradePlan): string | null {
   return `${ratio(t.rr)}，${t.rr_verdict}（不到 3:1 不做，5:1 以上理想）。`;
 }
 
-/** 股数一句：填了账户给股数，没填给每 1 万元风险对应多少股。 */
+/** 股数一句：填了账户给股数，没填给每 1 万元风险对应多少股；触发价离现价还远时和盈亏比一样到时重算。 */
 export function sizeText(t: TradePlan): string | null {
   const z = t.size;
   if (!z) return null;
+  if (t.entry?.far) return `${RR_FAR}。`;
   if (z.shares === null) return `没填账户：每 1 万元风险对应 ${z.per_10k} 股（单位亏损 ${f2(z.unit_risk)}）。在设置里填账户规模，就按每笔可承受亏损给股数。`;
   return `${z.shares} 股：${z.basis}。`;
 }

@@ -43,7 +43,7 @@ import dma_analyze as dma  # noqa: E402
 import hourly as hr  # noqa: E402
 import trades as tr  # noqa: E402
 from indicators import add_indicators  # noqa: E402
-from rules import RULES, Kind  # noqa: E402
+from rules import RULES, YIELDS_TO, Kind  # noqa: E402
 
 PROJECT = SCRIPTS.parents[3]
 WINNERS = ("NVDA", "TSLA", "AAPL", "GOOG", "META", "MSFT", "AMZN", "SPY", "QQQ")   # app 回放的默认 9 只
@@ -175,10 +175,15 @@ def analyze_on(px: pd.DataFrame, i: int, label: str, hourly: dict | None = None,
 
 
 def day_of(a: dict) -> tr.Day:
+    """P24 按明天的单判：trade_plan 的 rr_verdict 是"不做"就算满足，再按 rules.YIELDS_TO 定谁让位。
+    回测每天挂明天的单，触发价离现价还远也一样；规则清单那时不判 P24 满足，只是显示（docs/adr/0026.md 后续）。"""
+    status = {r["id"]: r["status"] for r in a["rules"]}
+    if a["trade_plan"]["flat"]["rr_verdict"] == "不做":
+        status["P24"] = "满足"
+    met = {rid for rid, s in status.items() if s == "满足"}
     return tr.Day(
         date=a["date"], key=a["play"]["key"], type=a["regime"]["type"], stage=a["regime"]["stage"],
-        status={r["id"]: r["status"] for r in a["rules"]},
-        yielded=frozenset(r["id"] for r in a["rules"] if r["yields_to"]),
+        status=status, yielded=frozenset(rid for rid, over in YIELDS_TO.items() if rid in met and met & set(over)),
         close=a["close"], ema20=next(x["ema"] for x in a["lines"] if x["period"] == 20),
         dirs=a["lean"]["dirs"], side20=a["steps"][0]["side"])
 

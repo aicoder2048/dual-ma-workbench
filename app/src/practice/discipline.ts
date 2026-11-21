@@ -32,10 +32,17 @@ type Status = RuleResult["status"];
 /** 进场前一根的打法和它的进场条件；entries 为 null 时这套打法空仓不买。 */
 export interface EntryState { play: string; entries: { id: string; status: Status }[] | null }
 
+/**
+ * 让位给 P24 的规则（rules.YIELDS_TO）。和回测一样按明天的单判（backtest.day_of）：触发价离现价还远时规则清单不判 P24 满足，
+ * 明天的单不到 3:1 照样让位（docs/adr/0026.md 后续）。
+ */
+const YIELDS_TO_RR = new Set(["P2", "P14", "P19", "P20"]);
+
 const statusOf = (a: Analysis, id: string): Status => {
   const r = a.rules.find((x) => x.id === id);
   if (!r) throw new Error(`分析结果里没有规则 ${id}`);
-  return r.yields_to ? "不满足" : r.status;
+  const tomorrowNo = r.status === "满足" && YIELDS_TO_RR.has(id) && a.trade_plan.flat.rr_verdict === "不做";
+  return r.yields_to || tomorrowNo ? "不满足" : r.status;
 };
 
 /** 某一根收盘时：打法、空仓买不买、进场条件的状态。 */

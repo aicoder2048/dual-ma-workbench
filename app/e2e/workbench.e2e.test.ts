@@ -1607,12 +1607,16 @@ describe("中栏：结论 → 看大局 → 找打法 → 做推演", () => {
     expect(row).toContain("盈亏比到时重算");
     expect(row).not.toContain("不做");
     expect(await page.getAttribute(`${flat} [data-item=rr]`, "data-tip")).toContain("按明天的触发价 212.21 算是 0.57:1");
+    expect(await notCovered(page, `${flat} [data-item=size]`)).toBe(true);
+    expect((await page.textContent(`${flat} [data-item=size]`))!.replace(/\s+/g, "")).toBe("股数到时重算");
+    expect(await page.getAttribute(`${flat} [data-item=size]`, "data-tip")).toContain("每 1 万元风险对应 343 股");
     const plan = page.locator('[data-step="play"] .plan-body');
     await scrollIntoCenter(page, '[data-step="play"]');
     const text = (await plan.textContent())!;
     expect(text).toContain("最早约 6 个交易日后（2026-11-26）、收盘站上 190.00");
     expect(text).toContain("明天要拐头得站上 212.21");
     expect(text).toContain("触发价离现价还远，到时重算。");
+    expect(text).not.toContain("343 股");
     expect(errors).toEqual([]);
     await page.close();
   }, 30_000);

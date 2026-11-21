@@ -441,9 +441,23 @@ def test_qqq_far_trigger_text_says_recompute_instead_of_no_trade(qqq_crash):
     assert "不做（P24）" not in text and "触发价离现价还远，盈亏比到时重算（P24）" in text
     lines = [x for x in dma.plan_lines(qqq_crash["trade_plan"]) if x.startswith("- 空仓")]
     assert "盈亏比：触发价离现价还远，到时重算" in lines[0] and "不做" not in lines[0]
+
+
+def test_qqq_far_trigger_does_not_mark_p24_met(qqq_crash):
+    """P24 满足读作"不做"：触发价离现价还远时不判满足，也就没有规则让位给它（ADR 0026 后续）。按明天算的数留在依据里。"""
     p24 = next(r for r in qqq_crash["rules"] if r["id"] == "P24")
-    assert p24["status"] == "满足"   # 状态照旧：P19、P20 让位给它，老回测（backtest.py）读这个
+    assert p24["status"] == "不满足"
     assert p24["basis"].startswith("触发价离现价还远，到时重算") and "0.15:1" in p24["basis"]
+    assert not any(r["yields_to"] == "P24" for r in qqq_crash["rules"])
+
+
+def test_qqq_far_trigger_shares_say_recompute_but_keep_the_json(qqq_crash):
+    """股数按明天的触发价算，和盈亏比一样是假设数：显示写到时重算，JSON 照旧（263 = 1 万 ÷ (712.20 − 674.24)）。"""
+    assert qqq_crash["trade_plan"]["flat"]["size"]["per_10k"] == 263
+    lines = [x for x in dma.plan_lines(qqq_crash["trade_plan"]) if x.startswith("- 空仓")]
+    assert "股数：触发价离现价还远，到时重算" in lines[0] and "263" not in lines[0]
+    a6 = next(r for r in qqq_crash["rules"] if r["id"] == "A6")
+    assert a6["basis"].startswith("触发价离现价还远，到时重算") and "263" in a6["basis"]
 
 
 def test_trigger_not_far_keeps_the_no_trade_text(plans):
