@@ -32,7 +32,8 @@ const CHART = (() => {
   }
   const close = days.map((_, i) => 200 + 30 * Math.sin(i / 25) - i * 0.1);
   const line = (k: number) => days.map((time, i) => ({ time, value: close[i] + k }));
-  const candles = days.map((time, i) => ({ time, open: close[i] - 1, high: close[i] + 2, low: close[i] - 2, close: close[i] }));
+  // tone：破线拐头着色的信号（脚本算好的），「着色」图层开着才用
+  const candles = days.map((time, i) => ({ time, open: close[i] - 1, high: close[i] + 2, low: close[i] - 2, close: close[i], tone: ["bull", "mixed", "bear"][i % 3] }));
   // 周线：按周五结束的自然周合并，时间是那一周最后一个交易日（和 skill 的 weekly.to_weekly 一样）；最后一周没走完
   const friday = (t: string) => { const d = new Date(`${t}T00:00:00Z`); d.setUTCDate(d.getUTCDate() + 5 - d.getUTCDay()); return d.toISOString().slice(0, 10); };
   const groups = new Map<string, typeof candles>();
@@ -681,7 +682,7 @@ describe("K 线图工具", () => {
     await page.close();
   }, 30_000);
 
-  test("价位线：结论里的触发、止损、目标和推翻判断的价位画在图上，可以关掉", async () => {
+  test("价位线：结论里的触发、止损、目标和推翻判断的价位画在图上，在「图层」里可以关掉", async () => {
     const { page } = await open();
     await page.waitForSelector("#chart canvas");
     const levels = () => page.evaluate(async () => (await import("/app.js")).getChart().levels());
@@ -693,7 +694,7 @@ describe("K 线图工具", () => {
     expect(on[1].price).toBeCloseTo(183.08, 2);
     expect(on[2].price).toBe(228.86);
     expect(on[3].price).toBeCloseTo(206.26, 2);
-    await page.click(".levels-toggle");
+    await switchLayer(page, "levels");
     expect(await levels()).toEqual([]);
     await page.close();
   }, 30_000);
@@ -869,6 +870,40 @@ const notCovered = (page: Page, sel: string) => page.evaluate((sel) => {
   const hit = document.elementFromPoint(r.x + Math.min(20, r.width / 2), r.y + r.height / 2);
   return r.height > 0 && !!hit && el.contains(hit);
 }, sel);
+/**
+ * 等页面里的条件成立（每 50ms 读一次）。读图表状态要 await import("/app.js")，而 page.waitForFunction 遇到 async 函数会立刻返回
+ * （它拿到的是 Promise，本身就是真值），等于没等；所以在测试这边轮询。
+ */
+async function until(page: Page, what: string, cond: () => Promise<boolean>, timeout = 5000) {
+  for (const end = Date.now() + timeout; !(await page.evaluate(cond));) {
+    if (Date.now() > end) throw new Error(`等了 ${timeout}ms：${what}`);
+    await page.waitForTimeout(50);
+  }
+}
+/** 「图层 ▾」菜单里的一项。 */
+const layerBtn = (key: string) => `.layers-menu [data-layer="${key}"]`;
+/** 像用户一样点开「图层 ▾」（已经开着就不动）。 */
+const openLayers = async (page: Page) => {
+  if (await page.getAttribute(".layers-toggle", "aria-expanded") !== "true") await page.click(".layers-toggle");
+};
+/** 点开菜单选一个预设，再按 Esc 收起（菜单开着会盖住一部分图）。 */
+const pickPreset = async (page: Page, preset: "simple" | "structure" | "all") => {
+  await openLayers(page);
+  await page.click(`.layers-menu [data-preset="${preset}"]`);
+  await page.keyboard.press("Escape");
+};
+/** 点开菜单开 / 关一个图层，再按 Esc 收起。 */
+const switchLayer = async (page: Page, key: string) => {
+  await openLayers(page);
+  await page.click(layerBtn(key));
+  await page.keyboard.press("Escape");
+};
+/** 菜单里这一项现在的样子：能不能点、勾没勾、整行的字（不能用时写着原因）。 */
+const layerItem = async (page: Page, key: string) => {
+  await openLayers(page);
+  const item = page.locator(layerBtn(key));
+  return { disabled: await item.isDisabled(), pressed: await item.getAttribute("aria-pressed"), text: (await item.textContent())! };
+};
 /** 像用户一样把这一块滚进中栏视野（滚到它的开头）。 */
 const scrollIntoCenter = (page: Page, sel: string) => page.evaluate(async (sel) => {
   const s = document.getElementById("center-scroll")!;
@@ -925,23 +960,23 @@ describe("结构标注", () => {
   const scene = (page: Page) => page.evaluate(async () => (await import("/app.js")).getChart().structure());
   const shown = (page: Page) => page.$$eval("#chart .struct-mark", (els) => els.filter((e) => !(e as HTMLElement).hidden).map((e) => e.textContent));
 
-  test("默认画：波段、最近的构造、M 顶和 2B 顶；「结构」看得见、没被挡，点一下全收起，再点回来", async () => {
+  test("默认不画；选「结构」预设：波段、最近的构造、M 顶和 2B 顶都画出来；回「简洁」全收起，再选回来", async () => {
     const { page, errors } = await open(undefined, "STRUCT");
-    await page.waitForSelector("#chart .struct-mark");
+    await page.waitForSelector("#chart canvas");
     await scrollIntoCenter(page, ".chart-card"); // 像用户一样滚到图
-    expect(await notCovered(page, ".struct-toggle")).toBe(true);
-    expect(await page.getAttribute(".struct-toggle", "aria-pressed")).toBe("true");
+    expect(await shown(page)).toEqual([]);
+    expect((await scene(page)).segments).toEqual([]);
+    await pickPreset(page, "structure");
     expect(await shown(page)).toEqual(["顶·已完成", "底·形成中", "M顶", "2B顶"]);
     for (const rule of ["J25", "J26"]) expect(await notCovered(page, `#chart .struct-mark[data-ref="rules#${rule}"]`)).toBe(true);
     const s = await scene(page);
     expect(s.segments.filter((x: any) => x.kind === "swing")).toHaveLength(3);
     expect(s.segments.filter((x: any) => x.kind === "neck").map((x: any) => x.label)).toEqual(["颈线", "A"]);
     expect(s.levels.map((x: any) => x.text)).toEqual([`下一根高 > ${STRUCTURE.bottom.next_at!.toFixed(2)} 底构造完成`]);
-    await page.click(".struct-toggle");
-    expect(await page.getAttribute(".struct-toggle", "aria-pressed")).toBe("false");
+    await pickPreset(page, "simple");
     expect(await shown(page)).toEqual([]);
     expect((await scene(page)).segments).toEqual([]);
-    await page.click(".struct-toggle");
+    await pickPreset(page, "structure");
     expect(await shown(page)).toHaveLength(4);
     expect(errors).toEqual([]);
     await page.close();
@@ -949,8 +984,9 @@ describe("结构标注", () => {
 
   test("点 M 顶标记：弹窗先说颈线和跌破那天，下面是 rules.md J25 原文", async () => {
     const { page, errors } = await open(undefined, "STRUCT");
-    await page.waitForSelector("#chart .struct-mark");
+    await page.waitForSelector("#chart canvas");
     await scrollIntoCenter(page, ".chart-card");
+    await pickPreset(page, "structure");
     await page.click('#chart .struct-mark[data-ref="rules#J25"]');
     await page.waitForSelector("#popover .pop-body p");
     const pop = (await page.textContent("#popover"))!;
@@ -962,19 +998,26 @@ describe("结构标注", () => {
     await page.close();
   }, 30_000);
 
-  test("回放时收起（结构按最新一天算，会露出之后的走势），按钮不能点；退出回放画回来", async () => {
+  test("回放时收起（结构按最新一天算，会露出之后的走势），菜单里这几项不能点、写着原因；退出回放画回来", async () => {
     const { page, errors } = await open(undefined, "STRUCT");
-    await page.waitForSelector("#chart .struct-mark");
+    await page.waitForSelector("#chart canvas");
     await scrollIntoCenter(page, ".chart-card");
+    await pickPreset(page, "structure");
     await page.click(".replay-toggle");
     await page.click(".replay-start");
     await page.click('[data-start="earliest"]');
     await page.waitForFunction(async () => (await import("/app.js")).getChart().replay().mode === "replay");
-    expect(await page.isDisabled(".struct-toggle")).toBe(true);
-    expect(await page.getAttribute(".struct-toggle", "title")).toContain("回放时收起");
+    for (const key of ["constructs", "patterns", "swings"]) {
+      const item = await layerItem(page, key);
+      expect({ key, disabled: item.disabled, pressed: item.pressed }).toEqual({ key, disabled: true, pressed: "false" });
+      expect(item.text).toContain("回放时收起：结构是按最新一天算的");
+      expect(await notCovered(page, layerBtn(key))).toBe(true); // 原因写在这一行，看得见
+    }
+    await page.keyboard.press("Escape");
     expect(await shown(page)).toEqual([]);
     await page.click(".replay-exit");
-    expect(await page.isDisabled(".struct-toggle")).toBe(false);
+    expect((await layerItem(page, "constructs")).disabled).toBe(false);
+    await page.keyboard.press("Escape");
     expect(await shown(page)).toHaveLength(4);
     expect(errors).toEqual([]);
     await page.close();
@@ -982,13 +1025,15 @@ describe("结构标注", () => {
 });
 
 describe("缺口", () => {
-  test("没补的缺口画成色带，被交易计划用作目标的标「目标位」；「缺口」看得见、没被挡，点一下收起；周线上不画", async () => {
+  test("默认不画；在「图层」里打开：没补的缺口画成色带，被交易计划用作目标的标「目标位」；关掉收起；周线上不画、菜单里变灰", async () => {
     const { page, errors } = await open(undefined, "STRUCT");
     await page.waitForSelector("#chart canvas");
     await scrollIntoCenter(page, ".chart-card");
     const bands = async () => (await page.evaluate(async () => (await import("/app.js")).getChart().structure())).bands;
-    expect(await notCovered(page, ".gaps-toggle")).toBe(true);
-    expect(await page.getAttribute(".gaps-toggle", "aria-pressed")).toBe("true");
+    expect(await bands()).toEqual([]);
+    await switchLayer(page, "gaps");
+    expect((await layerItem(page, "gaps")).pressed).toBe("true");
+    await page.keyboard.press("Escape");
     expect((await bands()).map((b: any) => [b.date, b.from, b.to, b.target])).toEqual([
       [GAPS[0].date, 150, CHART.candles.length - 1, false], [GAPS[1].date, 270, CHART.candles.length - 1, true],
     ]);
@@ -996,13 +1041,15 @@ describe("缺口", () => {
     // 色带真的画在图上：关掉缺口后图的样子变了（结构标注没动）
     const shot = () => page.locator("#chart").screenshot();
     const on = await shot();
-    await page.click(".gaps-toggle");
-    expect(await page.getAttribute(".gaps-toggle", "aria-pressed")).toBe("false");
+    await switchLayer(page, "gaps");
     expect(await bands()).toEqual([]);
     expect(Buffer.compare(on, await shot())).not.toBe(0);
-    await page.click(".gaps-toggle");
+    await switchLayer(page, "gaps");
+    expect(await bands()).toHaveLength(2);
     await page.click('[data-frame="week"]');
-    expect(await page.isDisabled(".gaps-toggle")).toBe(true);
+    const item = await layerItem(page, "gaps");
+    expect([item.disabled, item.text]).toEqual([true, "缺口缺口按日线算：切回日线看"]);
+    await page.keyboard.press("Escape");
     expect(await bands()).toEqual([]);
     expect(errors).toEqual([]);
     await page.close();
@@ -1018,16 +1065,14 @@ describe("筹码分布", () => {
   });
   const overlap = (a: any, b: any) => a.left < b.left + b.width && b.left < a.left + a.width && a.top < b.top + b.height && b.top < a.top + a.height;
 
-  test("「筹码」默认关、看得见没被挡；点开：贴着价格轴画可见范围的筹码，写出日期，标山脚山顶和计划的参考带，找打法里单列一行「参考」；缩放后重算；周线不画", async () => {
+  test("筹码默认不画；在「图层」里打开：贴着价格轴画可见范围的筹码，写出日期，标山脚山顶和计划的参考带，找打法里单列一行「参考」；缩放后重算；周线不画", async () => {
     const { page, errors } = await open(undefined, "PROFILE");
     await page.waitForSelector("#chart canvas");
     await scrollIntoCenter(page, ".chart-card");
-    expect(await notCovered(page, ".profile-toggle")).toBe(true);
-    expect(await page.getAttribute(".profile-toggle", "aria-pressed")).toBe("false");
     expect((await profile(page)).on).toBe(false);
     const shot = () => page.locator("#chart").screenshot();
     const off = await shot();
-    await page.click(".profile-toggle");
+    await switchLayer(page, "profile");
     const p = await profile(page);
     const v = await visible(page);
     expect(p.on).toBe(true);
@@ -1048,7 +1093,7 @@ describe("筹码分布", () => {
     expect(shown.some((l: any) => /^山(脚|顶) \d/.test(l.text))).toBe(true);
     for (const a of shown) for (const b of shown) if (a !== b) expect({ a: a.text, b: b.text, hit: overlap(a, b) }).toEqual({ a: a.text, b: b.text, hit: false });
     // 工具栏、读数条照样看得见、没被挡
-    for (const sel of [".profile-toggle", ".gaps-toggle", ".struct-toggle", ".levels-toggle", "#chart-readout"]) {
+    for (const sel of [".layers-toggle", ".chart-help-toggle", ".measure-toggle", "#chart-readout"]) {
       expect({ sel, ok: await notCovered(page, sel) }).toEqual({ sel, ok: true });
     }
     // 找打法的计划里单列一行「参考」，滚到时看得见、没被挡；「目标」一行还是原来的缺口，图上的目标线也没挪到山脚
@@ -1083,15 +1128,16 @@ describe("筹码分布", () => {
     await page.waitForSelector("#chart canvas");
     expect((await profile(page)).on).toBe(true);
     await page.click('[data-frame="week"]');
-    expect(await page.isDisabled(".profile-toggle")).toBe(true);
-    expect(await page.getAttribute(".profile-toggle", "title")).toContain("切回日线");
+    const item = await layerItem(page, "profile");
+    expect([item.disabled, item.text]).toEqual([true, "筹码筹码按日线算：切回日线看"]);
+    await page.keyboard.press("Escape");
     expect((await profile(page)).drawn).toBeNull();
     expect(errors).toEqual([]);
     await page.close();
   }, 30_000);
 
   test("回放：只用回放那天及以前的 K 线，往后放一根就多算一根；参考带属于最新一天，回放时收起", async () => {
-    const { page, errors } = await open((p) => p.addInitScript(() => localStorage.setItem("dma-profile", "1")), "PROFILE");
+    const { page, errors } = await open((p) => p.addInitScript(() => localStorage.setItem("dma-layers", JSON.stringify({ profile: true }))), "PROFILE");
     await page.waitForSelector("#chart canvas");
     await scrollIntoCenter(page, ".chart-card");
     await page.click(".replay-toggle");
@@ -1193,38 +1239,45 @@ describe("图面去杂：缺口只画要紧的，小字不压在一起", () => {
     return { count: shown.length, pairs, onLine };
   };
 
-  test("默认只画目标位和离现价最近的缺口；「+6」看得见、没被挡，点开画全部、小字照样不重叠；再点收回", async () => {
+  test("缺口只画目标位和离现价最近的；菜单里「全部」写着还有 6 个、看得见没被挡，勾上画全部、小字照样不重叠；再点收回", async () => {
     const { page, errors } = await open(undefined, "CROWD");
-    await page.waitForSelector("#chart .struct-mark");
+    await page.waitForSelector("#chart canvas");
     await scrollIntoCenter(page, ".chart-card");
+    await pickPreset(page, "structure");
     expect(await bandDates(page)).toEqual([CROWD_GAPS[0].date, CROWD_GAPS[7].date]);
-    expect(await page.textContent(".gaps-all")).toBe("+6");
-    expect(await notCovered(page, ".gaps-all")).toBe(true);
+    const more = await layerItem(page, "gapsAll");
+    expect([more.disabled, more.pressed, more.text]).toEqual([false, "false", "全部离得远、不是目标位的那 6 个也画"]);
+    expect(await notCovered(page, layerBtn("gapsAll"))).toBe(true);
+    await page.keyboard.press("Escape");
     const before = await tidy(page);
     expect(before).toMatchObject({ pairs: [], onLine: [] });
     expect(before.count).toBeGreaterThan(2);
-    await page.click(".gaps-all");
+    await switchLayer(page, "gapsAll");
     expect(await bandDates(page)).toEqual(CROWD_GAPS.map((g) => g.date));
-    expect(await page.getAttribute(".gaps-all", "aria-pressed")).toBe("true");
+    expect((await layerItem(page, "gapsAll")).pressed).toBe("true");
+    await page.keyboard.press("Escape");
     await page.waitForTimeout(100); // 等图重画一帧，小字重新摆过
     const all = await tidy(page);
     expect(all).toMatchObject({ pairs: [], onLine: [] });
     // 目标位那条一定写出来
     expect((await api<any>(page, "labels")).labels.find((l: any) => l.text.includes("目标位")).hidden).toBe(false);
-    await page.click(".gaps-all");
+    await switchLayer(page, "gapsAll");
     expect(await bandDates(page)).toHaveLength(2);
-    // 「缺口」关掉时「+6」也收起
-    await page.click(".gaps-toggle");
-    expect(await page.isVisible(".gaps-all")).toBe(false);
+    // 「缺口」关掉时「全部」也不能点，写着要先打开缺口
+    await switchLayer(page, "gaps");
+    expect(await bandDates(page)).toEqual([]);
+    const sub = await layerItem(page, "gapsAll");
+    expect([sub.disabled, sub.text]).toEqual([true, "全部先打开「缺口」"]);
+    await page.keyboard.press("Escape");
     expect(errors).toEqual([]);
     await page.close();
   }, 30_000);
 
   test("关掉价位线：小字就不用再躲它们", async () => {
     const { page, errors } = await open(undefined, "CROWD");
-    await page.waitForSelector("#chart .struct-mark");
+    await page.waitForSelector("#chart canvas");
     expect((await api<any>(page, "labels")).guides.length).toBeGreaterThan(0);
-    await page.click(".levels-toggle");
+    await switchLayer(page, "levels");
     expect((await api<any>(page, "labels")).guides).toEqual([]);
     expect(errors).toEqual([]);
     await page.close();
@@ -1251,7 +1304,7 @@ describe("日 / 周切换", () => {
     expect(ro).toContain(`${((last.close / prev.close - 1) * 100).toFixed(2).replace("-", "−")}%`);
     expect(ro).toContain(`MA20 ${W.lines.MA20.at(-1)!.value.toFixed(2)}`);
     expect(ro).not.toContain("MA200");
-    for (const sel of [".replay-toggle", ".measure-toggle", ".struct-toggle", ".range-btn[data-range='1w']", ".range-btn[data-range='1m']"]) {
+    for (const sel of [".replay-toggle", ".measure-toggle", ".range-btn[data-range='1w']", ".range-btn[data-range='1m']"]) {
       expect({ sel, off: await page.isDisabled(sel) }).toEqual({ sel, off: true });
     }
     expect(await page.getAttribute(".range-btn[data-range='all']", "aria-pressed")).toBe("true");
@@ -1811,7 +1864,9 @@ describe("K 线回放", () => {
     expect((await levels(page)).length).toBeGreaterThan(0);
     expect(await page.isVisible(".replay-badge")).toBe(false);
     expect(await page.isVisible(".replay-bar")).toBe(false);
-    expect(await page.textContent("#chart-readout")).toContain(CHART.candles.at(-1)!.time);
+    // 控制条收起后图往上挪，鼠标正好落在图上（读数条显示停着的那天）：移开才是最新一天
+    await page.mouse.move(5, 5);
+    await page.waitForFunction((t) => document.getElementById("chart-readout")!.textContent!.includes(t), CHART.candles.at(-1)!.time);
     expect(errors).toEqual([]);
     await page.close();
   }, 30_000);
@@ -2199,7 +2254,7 @@ describe("盲测练习", () => {
   test("出题 → 记计划 → 往后放到进场、止损 → 揭晓；控件都在默认视图里，揭晓前看不到真实信息", async () => {
     // 平时聚焦着 20 线组：练习时图例收起了，没法取消，所以不聚焦
     // 平时开着筹码分布：练习里照样算，但只用已经发到页面的 K 线，日期写 T+n，没有计划的参考带
-    const { page, errors } = await open((p) => p.addInitScript(() => { localStorage.setItem("dma-focus", "20"); localStorage.setItem("dma-profile", "1"); }));
+    const { page, errors } = await open((p) => p.addInitScript(() => { localStorage.setItem("dma-focus", "20"); localStorage.setItem("dma-layers", JSON.stringify({ profile: true })); }));
     expect(await usable(page, "#practice-btn")).toBe(true);
     await page.click("#practice-btn");
     await page.click("#pp-tab-combo");
@@ -2218,10 +2273,15 @@ describe("盲测练习", () => {
     expect(await page.isVisible(".replay-toggle")).toBe(false);
     // 图上的时间写成 T+n
     expect(await page.textContent("#chart-readout")).toContain("T0");
-    // 结构标注不画（会提前说出答案），按钮不能点
+    // 结构标注、缺口不画（会提前说出答案）：菜单里这几项不能点，写着原因，看得见、没被挡
     expect(await page.locator("#chart .struct-mark").count()).toBe(0);
-    expect(await page.isDisabled(".struct-toggle")).toBe(true);
-    expect(await page.isDisabled(".gaps-toggle")).toBe(true);
+    for (const key of ["constructs", "patterns", "swings", "gaps"]) {
+      const item = await layerItem(page, key);
+      expect({ key, disabled: item.disabled }).toEqual({ key, disabled: true });
+      expect(item.text).toContain("练习里不画，免得提前看到答案");
+      expect({ key, ok: await notCovered(page, layerBtn(key)) }).toEqual({ key, ok: true });
+    }
+    await page.keyboard.press("Escape");
     // 周线不能切（练习的图只到现在那根，周线会用到之后的 K 线）
     expect(await page.isDisabled('[data-frame="week"]')).toBe(true);
     expect(await page.evaluate(async () => (await import("/app.js")).getChart().focus())).toEqual({ group: null, band: [] });
@@ -2470,6 +2530,235 @@ describe("回测页", () => {
     await page.waitForFunction(() => document.getElementById("bt-msg")!.textContent!.includes("每笔风险比例"));
     expect(await usable(page, "#bt-msg")).toBe(true);
     expect(await page.isVisible("#bt-estimate")).toBe(false);
+    await page.close();
+  }, 30_000);
+});
+
+describe("图层菜单", () => {
+  const api = <T,>(page: Page, fn: string) => page.evaluate(async (fn) => (await import("/app.js")).getChart()[fn](), fn) as Promise<T>;
+  /** 图上现在画着什么：都是图表自己的读数（线、标记、色带、筹码），不是开关的状态。 */
+  const drawn = async (page: Page) => {
+    const s = await api<any>(page, "structure");
+    const p = await api<any>(page, "profile");
+    return {
+      ma: (await api<any>(page, "lineStyles")).MA20.visible as boolean,
+      levels: (await api<any[]>(page, "levels")).length,
+      drops: await api<string[]>(page, "drops"),
+      toned: (await api<number>(page, "toned")) > 0,
+      marks: await page.$$eval("#chart .struct-mark", (els) => els.filter((e) => !(e as HTMLElement).hidden).map((e) => e.textContent)),
+      swings: s.segments.filter((x: any) => x.kind === "swing").length as number,
+      necks: s.segments.filter((x: any) => x.kind === "neck").length as number,
+      nextBar: s.levels.length as number,
+      bands: s.bands.length as number,
+      profile: p.on && p.bars > 0,
+    };
+  };
+  const SIMPLE = { ma: true, levels: 4, drops: ["20扣"], toned: false, marks: [], swings: 0, necks: 0, nextBar: 0, bands: 0, profile: false };
+  const STRUCT = { ...SIMPLE, marks: ["顶·已完成", "底·形成中", "M顶", "2B顶"], swings: 3, necks: 2, nextBar: 1, bands: 2 };
+  const ALL = { ...STRUCT, toned: true, bands: CROWD_GAPS.length, profile: true };
+  const presets = (page: Page) => page.$$eval(".layers-menu [data-preset]", (els) => els.map((e) => [e.textContent, e.getAttribute("aria-pressed")]));
+  const start = async (ticker: string) => {
+    const opened = await open(undefined, ticker);
+    await opened.page.waitForSelector("#chart canvas");
+    await scrollIntoCenter(opened.page, ".chart-card"); // 像用户一样滚到图
+    return opened;
+  };
+
+  test("默认视图：工具栏只有一行，「图层」和留下的按钮都看得见、没被挡；默认是「简洁」，图上只有均线、价位线、抵扣价", async () => {
+    const { page, errors } = await start("CROWD");
+    // 一行：每个控件的上沿在同一条线上，没有谁被挤到下一行，也没有谁被挤出工具栏
+    const row = await page.evaluate(() => {
+      const t = document.querySelector<HTMLElement>(".chart-tools")!;
+      const tops = [...t.children].map((e) => e.getBoundingClientRect().top);
+      return { spread: Math.max(...tops) - Math.min(...tops), overflow: t.scrollWidth - t.clientWidth, controls: t.querySelectorAll(":scope > *").length };
+    });
+    expect(row.spread).toBeLessThan(8);
+    expect(row.overflow).toBe(0);
+    const kept = [".layers-toggle", '[data-frame="day"]', '[data-frame="week"]', ...["1w", "1m", "6m", "1y", "all", "reset"].map((k) => `.range-btn[data-range="${k}"]`),
+      ".replay-toggle", ".measure-toggle", ".draw-toggle", ".draw-clear", ".chart-help-toggle"];
+    for (const sel of kept) expect({ sel, ok: await notCovered(page, sel) }).toEqual({ sel, ok: true });
+    // 画什么的开关不再散在工具栏里
+    expect(await page.locator(".tone-toggle, .levels-toggle, .struct-toggle, .gaps-toggle, .gaps-all, .profile-toggle").count()).toBe(0);
+    expect(await page.getAttribute(".layers-toggle", "aria-expanded")).toBe("false");
+    expect(await page.isVisible(".layers-menu")).toBe(false);
+    expect(await drawn(page)).toEqual(SIMPLE);
+    expect((await api<any>(page, "layers")).preset).toBe("simple");
+    expect(errors).toEqual([]);
+    await page.close();
+  }, 30_000);
+
+  test("点开「图层 ▾」：菜单在视口里、每一项都没被挡，分组齐全；选「结构」「全部」图上跟着多出来，回「简洁」收掉；菜单一直开着", async () => {
+    const { page, errors } = await start("CROWD");
+    await page.click(".layers-toggle");
+    expect(await page.getAttribute(".layers-toggle", "aria-expanded")).toBe("true");
+    const box = (await page.locator(".layers-menu").boundingBox())!;
+    const vp = page.viewportSize()!;
+    expect(box.x >= 0 && box.y >= 0 && box.x + box.width <= vp.width && box.y + box.height <= vp.height).toBe(true);
+    const keys = ["ma", "levels", "drops", "tone", "constructs", "patterns", "swings", "gaps", "gapsAll", "profile"];
+    for (const sel of [...["simple", "structure", "all"].map((k) => `.layers-menu [data-preset="${k}"]`), ...keys.map(layerBtn)]) {
+      expect({ sel, ok: await notCovered(page, sel) }).toEqual({ sel, ok: true });
+    }
+    expect(await page.$$eval(".layers-menu .li-label", (els) => els.map((e) => e.textContent)))
+      .toEqual(["均线", "价位线", "抵扣价", "着色", "顶底构造", "形态", "波段", "缺口", "全部", "筹码"]);
+    expect(await page.textContent(layerBtn("patterns"))).toBe("形态M 顶、W 底、2B 和颈线");
+    expect(await presets(page)).toEqual([["简洁", "true"], ["结构", "false"], ["全部", "false"]]);
+    expect(await page.isVisible(".layers-custom")).toBe(false);
+
+    await page.click('.layers-menu [data-preset="structure"]');
+    expect(await drawn(page)).toEqual(STRUCT);
+    expect(await presets(page)).toEqual([["简洁", "false"], ["结构", "true"], ["全部", "false"]]);
+    for (const key of ["constructs", "patterns", "swings", "gaps"]) expect({ key, on: await page.getAttribute(layerBtn(key), "aria-pressed") }).toEqual({ key, on: "true" });
+    for (const key of ["tone", "gapsAll", "profile"]) expect({ key, on: await page.getAttribute(layerBtn(key), "aria-pressed") }).toEqual({ key, on: "false" });
+
+    await page.click('.layers-menu [data-preset="all"]');
+    expect(await drawn(page)).toEqual(ALL);
+    expect(await page.isVisible(".layers-menu")).toBe(true);
+
+    await page.click('.layers-menu [data-preset="simple"]');
+    expect(await drawn(page)).toEqual(SIMPLE);
+
+    // 「图层」贴着中栏底边时点开：菜单自己滚进视野，最后一项也点得到
+    await page.keyboard.press("Escape");
+    expect(await page.isVisible(".layers-menu")).toBe(false);
+    await page.evaluate(async () => {
+      const s = document.getElementById("center-scroll")!;
+      s.scrollTop += document.querySelector(".chart-tools")!.getBoundingClientRect().bottom - s.getBoundingClientRect().bottom + 4;
+      await new Promise((ok) => requestAnimationFrame(() => requestAnimationFrame(ok)));
+    });
+    await page.click(".layers-toggle");
+    expect(await notCovered(page, layerBtn("profile"))).toBe(true);
+    await page.click(layerBtn("profile"));
+    expect((await drawn(page)).profile).toBe(true);
+    expect(errors).toEqual([]);
+    await page.close();
+  }, 30_000);
+
+  test("手动开关：预设那行亮出「自定」、三个预设都不亮；构造、形态、波段各开各的；均线、抵扣价、价位线、着色单独关开；刷新后还记得，点「简洁」回去", async () => {
+    const { page, errors } = await start("CROWD");
+    await page.click(".layers-toggle");
+    await page.click(layerBtn("swings"));
+    expect(await drawn(page)).toEqual({ ...SIMPLE, swings: 3 });
+    expect(await page.textContent(".layers-custom")).toBe("自定");
+    expect(await notCovered(page, ".layers-custom")).toBe(true);
+    expect(await presets(page)).toEqual([["简洁", "false"], ["结构", "false"], ["全部", "false"]]);
+    expect(await page.getAttribute(".layers-toggle", "title")).toContain("自定");
+
+    await page.click(layerBtn("patterns"));
+    expect(await drawn(page)).toEqual({ ...SIMPLE, swings: 3, marks: ["M顶", "2B顶"], necks: 2 });
+    await page.click(layerBtn("constructs"));
+    expect(await drawn(page)).toEqual({ ...STRUCT, bands: 0 });
+    await page.click(layerBtn("swings"));
+    expect(await drawn(page)).toEqual({ ...STRUCT, bands: 0, swings: 0 });
+
+    await page.click(layerBtn("drops"));
+    await page.click(layerBtn("levels"));
+    await page.click(layerBtn("tone"));
+    await page.click(layerBtn("ma"));
+    const custom = { ...STRUCT, bands: 0, swings: 0, drops: [], levels: 0, toned: true, ma: false };
+    expect(await drawn(page)).toEqual(custom);
+    // 均线图层关着：读数条不写均线的值，图例点不了
+    expect(await page.textContent("#chart-readout .ro-lines")).toBe("");
+    expect(await page.isDisabled('#legend [data-line="MA20"]')).toBe(true);
+    expect(await page.isDisabled('#legend .group-focus[data-group="20"]')).toBe(true);
+
+    await page.reload();
+    await page.waitForSelector("#chart .struct-mark");
+    expect(await drawn(page)).toEqual(custom);
+    await scrollIntoCenter(page, ".chart-card");
+    await page.click(".layers-toggle");
+    expect(await page.isVisible(".layers-custom")).toBe(true);
+    await page.click('.layers-menu [data-preset="simple"]');
+    expect(await page.isVisible(".layers-custom")).toBe(false);
+    expect(await presets(page)).toEqual([["简洁", "true"], ["结构", "false"], ["全部", "false"]]);
+    expect(await drawn(page)).toEqual(SIMPLE);
+    expect(await page.textContent("#chart-readout .ro-lines")).toContain("MA20");
+    expect(await page.isDisabled('#legend [data-line="MA20"]')).toBe(false);
+    expect(errors).toEqual([]);
+    await page.close();
+  }, 30_000);
+
+  test("键盘：焦点在「图层」上按 Enter 打开，↓ 走到「着色」按空格勾上，不能用的项跳过；Esc 只关菜单（不顺带退出测量），焦点回到按钮；点菜单外面也关", async () => {
+    const { page, errors } = await start("CROWD");
+    const focused = () => page.evaluate(() => {
+      const el = document.activeElement as HTMLElement | null;
+      return el?.dataset.layer ?? el?.dataset.preset ?? el?.className ?? null;
+    });
+    await page.click(".measure-toggle");
+    await page.focus(".layers-toggle");
+    await page.keyboard.press("Enter");
+    expect(await page.isVisible(".layers-menu")).toBe(true);
+    const walked: (string | null)[] = [];
+    for (let n = 0; n < 7; n++) { await page.keyboard.press("ArrowDown"); walked.push(await focused()); }
+    expect(walked).toEqual(["simple", "structure", "all", "ma", "levels", "drops", "tone"]);
+    await page.keyboard.press("Space");
+    expect(await api<number>(page, "toned")).toBeGreaterThan(0);
+    expect(await page.getAttribute(layerBtn("tone"), "aria-pressed")).toBe("true");
+    expect(await focused()).toBe("tone"); // 勾完焦点还在这一项上，可以接着走
+    // 缺口关着，「全部」不能用：从「缺口」往下直接到「筹码」
+    for (let n = 0; n < 5; n++) await page.keyboard.press("ArrowDown");
+    expect(await focused()).toBe("profile");
+    await page.keyboard.press("ArrowUp");
+    expect(await focused()).toBe("gaps");
+
+    await page.keyboard.press("Escape");
+    expect(await page.isVisible(".layers-menu")).toBe(false);
+    expect(await focused()).toBe("layers-toggle");
+    expect(await api<string>(page, "tool")).toBe("measure");
+    await page.keyboard.press("Escape"); // 菜单关了以后，Esc 照旧退出测量
+    expect(await api<string>(page, "tool")).toBe("none");
+
+    await page.click(".layers-toggle");
+    expect(await page.isVisible(".layers-menu")).toBe(true);
+    await page.click(".chart-card .card-head h2"); // 菜单外面的任何地方
+    expect(await page.isVisible(".layers-menu")).toBe(false);
+    expect(await page.getAttribute(".layers-toggle", "aria-expanded")).toBe("false");
+    expect(errors).toEqual([]);
+    await page.close();
+  }, 30_000);
+
+  test("用不了的图层变灰、写明原因：周线上构造、形态、波段、缺口、筹码按日线算；回放时价位线、结构、缺口收起，筹码照常；回来以后原样画回", async () => {
+    const { page, errors } = await start("CROWD");
+    await pickPreset(page, "all");
+    expect(await drawn(page)).toEqual(ALL);
+
+    await page.click('[data-frame="week"]');
+    const weekOff: [string, string][] = [["constructs", "结构按日线算：切回日线看"], ["patterns", "结构按日线算：切回日线看"], ["swings", "结构按日线算：切回日线看"],
+      ["gaps", "缺口按日线算：切回日线看"], ["gapsAll", "缺口按日线算：切回日线看"], ["profile", "筹码按日线算：切回日线看"]];
+    for (const [key, why] of weekOff) {
+      const item = await layerItem(page, key);
+      expect({ key, disabled: item.disabled, pressed: item.pressed, why: item.text.endsWith(why) }).toEqual({ key, disabled: true, pressed: "false", why: true });
+      expect({ key, ok: await notCovered(page, layerBtn(key)) }).toEqual({ key, ok: true });
+    }
+    for (const key of ["ma", "levels", "drops", "tone"]) {
+      const item = await layerItem(page, key);
+      expect({ key, disabled: item.disabled, pressed: item.pressed }).toEqual({ key, disabled: false, pressed: "true" });
+    }
+    expect(await presets(page)).toEqual([["简洁", "false"], ["结构", "false"], ["全部", "true"]]); // 选的还是「全部」，只是有几样现在画不了
+    await page.keyboard.press("Escape");
+    expect(await drawn(page)).toMatchObject({ ma: true, levels: 4, drops: ["20周扣"], marks: [], swings: 0, necks: 0, nextBar: 0, bands: 0, profile: false });
+
+    await page.click('[data-frame="day"]');
+    expect(await drawn(page)).toEqual(ALL);
+
+    await page.click(".replay-toggle");
+    await page.click(".replay-start");
+    await page.fill(".replay-menu input", CHART.candles[200].time);
+    await until(page, "进入回放", async () => (await import("/app.js")).getChart().replay().mode === "replay");
+    await page.click(".replay-play"); // 暂停
+    const replayOff: [string, string][] = [["levels", "回放时收起：价位线属于最新一天的结论"], ["constructs", "回放时收起：结构是按最新一天算的，会露出之后的走势"],
+      ["gaps", "回放时收起：缺口补没补要看之后的 K 线"], ["gapsAll", "回放时收起：缺口补没补要看之后的 K 线"]];
+    for (const [key, why] of replayOff) {
+      const item = await layerItem(page, key);
+      expect({ key, disabled: item.disabled, why: item.text.endsWith(why) }).toEqual({ key, disabled: true, why: true });
+      expect({ key, ok: await notCovered(page, layerBtn(key)) }).toEqual({ key, ok: true });
+    }
+    expect(await layerItem(page, "profile")).toMatchObject({ disabled: false, pressed: "true" });
+    await page.keyboard.press("Escape");
+    expect(await drawn(page)).toMatchObject({ ma: true, levels: 0, toned: true, marks: [], swings: 0, necks: 0, nextBar: 0, bands: 0, profile: true });
+
+    await page.click(".replay-exit");
+    expect(await drawn(page)).toEqual(ALL);
+    expect(errors).toEqual([]);
     await page.close();
   }, 30_000);
 });

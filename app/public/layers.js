@@ -60,7 +60,7 @@ export const LAYERS = [
   { key: "gaps", group: "缺口", label: "缺口", hint: "没补的向下缺口", presets: STRUCTURE, available: gapsWhy,
     title: "没补的向下缺口：从跳空那天画到现在的色带，上沿是跳空前一天的最低价，下沿是还没补的那段的底；交易计划拿它当目标位的标「目标位」。默认只画目标位和离现价最近的上下各一个" },
   { key: "gapsAll", group: "缺口", label: "全部", presets: ALL,
-    hint: (c) => `还有 ${c.moreGaps} 个离得远、不是目标位的`,
+    hint: (c) => `离得远、不是目标位的那 ${c.moreGaps} 个也画`,
     available: (c) => (c.moreGaps > 0 ? null : "没有更多：要紧的那几个就是全部"),
     title: "把离得远、不是目标位的缺口也画出来" },
   { key: "profile", group: "筹码", label: "筹码", hint: "按价格统计成交量", presets: ALL, available: profileWhy,

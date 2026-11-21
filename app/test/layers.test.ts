@@ -4,26 +4,26 @@ import { DEFAULT_PRESET, LAYERS, PRESETS, layerRows, parseLayers, presetOf, pres
 /** 日线、不在回放、结构和缺口都有、有成交量：什么都能画。 */
 const DAY = { frame: "day", replay: false, structure: true, gaps: 8, moreGaps: 6, volume: true };
 const onKeys = (state: Record<string, boolean>) => Object.keys(state).filter((k) => state[k]);
-const why = (state: Record<string, boolean>, ctx: object) => Object.fromEntries(layerRows(state, ctx).map((r: any) => [r.key, r.why]));
+const why = (state: Record<string, boolean>, ctx: object) => Object.fromEntries(layerRows(state, ctx).map((r) => [r.key, r.why]));
 
 describe("图层表", () => {
   test("菜单里的分组和顺序：均线、价位线、抵扣价、着色、顶底构造、形态、波段、缺口（带「全部」）、筹码", () => {
-    expect(LAYERS.map((l: any) => [l.group, l.label])).toEqual([
+    expect(LAYERS.map((l) => [l.group, l.label])).toEqual([
       ["均线", "均线"], ["价位线", "价位线"], ["抵扣价", "抵扣价"], ["着色", "着色"], ["顶底构造", "顶底构造"],
       ["形态", "形态"], ["波段", "波段"], ["缺口", "缺口"], ["缺口", "全部"], ["筹码", "筹码"],
     ]);
   });
 
   test("形态那一行写明是 M 顶、W 底、2B 和颈线", () => {
-    const row = layerRows(presetState("all"), DAY).find((r: any) => r.key === "patterns");
+    const row = layerRows(presetState("all"), DAY).find((r) => r.key === "patterns")!;
     expect(row.hint).toBe("M 顶、W 底、2B 和颈线");
   });
 });
 
 describe("预设", () => {
   test("三个：简洁、结构、全部；默认是简洁", () => {
-    expect(PRESETS.map((p: any) => p.label)).toEqual(["简洁", "结构", "全部"]);
-    expect(PRESETS.find((p: any) => p.key === DEFAULT_PRESET).label).toBe("简洁");
+    expect(PRESETS.map((p) => p.label)).toEqual(["简洁", "结构", "全部"]);
+    expect(PRESETS.find((p) => p.key === DEFAULT_PRESET)!.label).toBe("简洁");
   });
 
   test("简洁：只画均线、价位线、抵扣价", () => {
@@ -35,7 +35,7 @@ describe("预设", () => {
   });
 
   test("全部：每个图层都开", () => {
-    expect(onKeys(presetState("all"))).toEqual(LAYERS.map((l: any) => l.key));
+    expect(onKeys(presetState("all"))).toEqual(LAYERS.map((l) => l.key));
   });
 
   test("状态和某个预设一模一样才算那个预设；手动改过一项就不是任何预设，改回来又是", () => {
@@ -91,8 +91,8 @@ describe("能不能用", () => {
     expect(why(presetState("simple"), DAY).gapsAll).toBe("先打开「缺口」");
     expect(why(presetState("all"), { ...DAY, frame: "week" }).gapsAll).toBe("缺口按日线算：切回日线看");
     expect(why(presetState("all"), { ...DAY, moreGaps: 0 }).gapsAll).toContain("没有更多");
-    const row = layerRows(presetState("structure"), DAY).find((r: any) => r.key === "gapsAll");
-    expect([row.sub, row.why, row.hint]).toEqual([true, null, "还有 6 个离得远、不是目标位的"]);
+    const row = layerRows(presetState("structure"), DAY).find((r) => r.key === "gapsAll")!;
+    expect([row.sub, row.why, row.hint]).toEqual([true, null, "离得远、不是目标位的那 6 个也画"]);
   });
 
   test("图上画不画 = 开着而且能用", () => {

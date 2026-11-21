@@ -27,6 +27,7 @@ uv run ../.agents/skills/dual-moving-averages/scripts/backtest.py   # 逐笔回�
 - **交易计划**：结论卡片的进场、止损、目标位、盈亏比、股数都读脚本 JSON 的 `trade_plan`（skill 的 `tradeplan.py`），`plan.ts` 只配措辞，不重算。盈亏比不到 3:1 时空仓做法写"不做"和差多少。
 - **财报日**：脚本 JSON 的 `earnings`（yfinance，每只票缓存一天，取不到写明原因）。图上时间轴上方标 E，最新一根右边留 4 根空位，下一次财报在里面也标；回放时只标回放那天及以前的和之后第一次。下次财报在 10 个交易日内（`EARNINGS_WARN_DAYS`，脚本自定），结论卡片多一行「N 天后财报：跳空可能越过止损价 X」，止损按找打法里选的处境取。只是信息，不改打法；长风可以引用 `[[D:财报.下次]]`。练习里没有财报日（`blind.ts` 的 `blindAnalysis`）：真实日期平移不掉，几次财报的间隔就能认出是哪只票。
 - **图上的交互模式**（`public/chart.js` 的 `tool`）：无 / 画线 / 测量 / 选回放起点，同一时刻只有一种，换模式只走 `setTool`。回放状态机（`public/replay.js`）只管 off / replay。**测量**：按住从 A 拖到 B，框里写涨跌、涨跌幅、几根 K 线（几个自然日）、几个 ATR(14)（Wilder，和 skill 的 `fullplan.atr` 一样，取靠后那根当天的值，回放不偷看）；Esc 或再点一次清掉。读数条第一行有当天的量和量比（`chart_data` 的 `ratio`，50 日均量），大量标黄。
+- **图层**（`public/layers.js` 一张表，`public/layermenu.js` 菜单，ADR 0019）：图上画什么都在工具栏的「图层 ▾」里。十个图层：均线、价位线、抵扣价、着色、顶底构造、形态、波段、缺口、缺口的「全部」、筹码。三个预设：简洁（默认，前三样）、结构（加构造、形态、波段、缺口）、全部；手动改过显示「自定」。回放、练习、周线下用不了的图层变灰并写原因（表里每行的 `available`）。开关存 localStorage 的 `dma-layers`。
 - **数据**：调 skill 脚本 `dma_analyze.py --json`（Polygon，失败回退 yfinance），key 在项目根目录 `.env`。
 - **K 线着色**：颜色由 Python 算好（skill 的 `tones.py`），放在每根 K 线的 `tone` 里，页面只负责上色。图表数据的 `tone_source` 说明颜色是谁算的：自带规则，或本机的着色插件（怎么换见根目录 README 的「换一套自己的着色规则」）。练习的 K 线只用自带规则（`practice/service.ts` 给脚本加 `--builtin-tones`，识别题的 `scan.py` 固定不读插件）。图例和按钮还没有读 `tone_source`。
 - **引用**：`[[S:编号]]` 指原文片段（`bun run sources` 列出全部编号），`[[D:字段]]` 指当前分析数据。每轮回答结束后服务端逐条核对，找不到出处的显示红色。
