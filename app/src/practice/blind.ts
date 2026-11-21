@@ -113,6 +113,15 @@ export function labeler(dates: string[], start: number, upTo: number): (d: strin
   };
 }
 
+/**
+ * 练习拿到的分析里去掉财报日：财报日是真实日期，平移不掉，几次财报的间隔就能认出是哪只票。
+ * Python 那边 --csv 本来就不取，这里再拿掉一次，不靠那边的约定。
+ */
+export function blindAnalysis<A extends { earnings?: unknown }>(a: A): Omit<A, "earnings"> {
+  const { earnings: _, ...rest } = a;
+  return rest;
+}
+
 /** 把一份 JSON 里所有字符串中的日期换掉（对象、数组逐层走；数字、布尔不动）。 */
 export function relabel<T>(value: T, fn: (date: string) => string): T {
   const walk = (v: unknown): unknown => {

@@ -224,6 +224,7 @@ export function showAnalysis(data, asof = null) {
   v.hidden = false;
   v.style.setProperty("--stance", `var(--${r.stance === "bullish" ? "up" : r.stance === "bearish" ? "down" : "neutral"})`);
   chartApi?.setData(practiceChart ?? data.chart, a.label);
+  chartApi?.setEarnings(practiceChart ? null : a.earnings);
 
   const steps = $("steps");
   steps.innerHTML = "";

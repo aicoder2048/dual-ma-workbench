@@ -15,7 +15,7 @@ import type { AnalyzeResult, ChartData, Runner } from "../analyze.ts";
 import { captureSnapshot, type Journal, type JournalEntry, type Order } from "../journal.ts";
 import { buildReport } from "../report.ts";
 import { PROJECT_ROOT } from "../sources.ts";
-import { addDays, isPracticeLabel, labeler, labelOf, PRACTICE_LABEL, parseCsv, parseT, rebase, relabel, tLabel, toCsv, type Bar } from "./blind.ts";
+import { addDays, blindAnalysis, isPracticeLabel, labeler, labelOf, PRACTICE_LABEL, parseCsv, parseT, rebase, relabel, tLabel, toCsv, type Bar } from "./blind.ts";
 import { DEFAULT_SINCE, HORIZON, pickStart, pickTicker, POOL, seeded, windowStart, type PoolEntry } from "./pool.ts";
 import { entryStateOf, scoreOf, scoreTrade, type TradeDiscipline } from "./discipline.ts";
 import { fillOn, next, PHASE_LABEL, practiceStats, PracticeError, resultOf, type Manual, type Prepared, type Session, type SessionStore } from "./session.ts";
@@ -247,7 +247,7 @@ export class Practice {
     if (!r) {
       const date = this.barsOf(s.id)[index].date;
       r = this.python(["--csv", this.csvPath(s.id), "--asof", date, "--json"])
-        .then(({ analysis }) => ({ analysis: { ...analysis, label: labelOf(s.no), source: SOURCE } }));
+        .then(({ analysis }) => ({ analysis: { ...blindAnalysis(analysis), label: labelOf(s.no), source: SOURCE } }));
       this.raws.set(key, r);
       r.catch(() => this.raws.delete(key));
     }

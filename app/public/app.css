@@ -517,23 +517,37 @@ body.offline .status-pill .dot { background: var(--bad); }
 .chart-tools .levels-toggle { margin-left: auto; }
 .chart-readout { display: grid; gap: 2px; font: 12px var(--mono); color: var(--muted); min-height: 36px; margin-bottom: 4px; }
 /* 两行：开高低收 + 涨跌一行，均线值一行；放不下就横向省略，不折行把图往下挤 */
-.chart-readout > div { display: flex; gap: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.chart-readout > div { display: flex; gap: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .chart-readout .up { color: var(--up); }
 .chart-readout .down { color: var(--down); }
 .chart-readout b { color: var(--fg); font-weight: 600; }
 .chart-readout i { display: inline-block; width: 12px; border-top: 2px solid var(--c); margin-right: 4px; vertical-align: middle; }
 .chart-readout i.dash { border-top-style: dashed; }
+.chart-readout .ro-ohlc span > b { margin-left: 2px; }  /* 开152.00：标签和数紧挨着（照 TradingView 的 O152.00），省出地方放量 */
+.chart-readout .ro-ratio { margin-left: 4px; }
+.chart-readout .ro-ohlc.tight .ro-abs { display: none; }
+.chart-readout .ro-ratio.spike { color: var(--fg); background: color-mix(in srgb, var(--drop) 35%, transparent); border-radius: 4px; padding: 0 4px; }
 .chart-help { font-size: 13px; line-height: 1.7; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 4px 14px; margin-bottom: 8px; }
 .chart-help p { margin: 8px 0; }
 .chart.drawing { cursor: crosshair; outline: 2px dashed var(--accent); outline-offset: 2px; }
-.chart-tools .draw-toggle { margin-left: auto; }
+.chart-tools .measure-toggle { margin-left: auto; }
 .chart-tools .levels-toggle { margin-left: 0; }
 .chart-tools .tone-toggle i { display: inline-block; width: 4px; height: 10px; border-radius: 1px; background: var(--c); margin-right: 1px; vertical-align: -1px; }
 .chart-tools .tone-toggle i:last-of-type { margin-right: 4px; }
 .chart-tools .tone-toggle[aria-pressed="false"] i { opacity: .35; }
 
 /* K 线回放：选起点的覆盖层、「回放」按钮下方的控制条（菜单向下展开，盖在图上）、标题旁的「回放中」 */
-.chart.replay-selecting { cursor: crosshair; }
+.chart.replay-selecting, .chart.measuring { cursor: crosshair; }
+/* 测量：A 到 B 的框和读数（盖在图上，不挡鼠标）；往下量用跌的颜色 */
+.measure-layer { position: absolute; inset: 0; pointer-events: none; z-index: 3; --m: var(--up); }
+.measure-layer.down { --m: var(--down); }
+.measure-layer[hidden] { display: none; }
+.measure-rect { position: absolute; background: color-mix(in srgb, var(--m) 14%, transparent); border: 1px solid color-mix(in srgb, var(--m) 60%, transparent); }
+.measure-label { position: absolute; font: 11.5px/1.45 var(--mono); white-space: nowrap; color: var(--card); background: var(--m); border-radius: 6px; padding: 3px 8px; box-shadow: var(--shadow); }
+.earnings-layer { position: absolute; left: 0; height: 0; pointer-events: none; z-index: 2; }
+.e-mark { position: absolute; bottom: 3px; transform: translateX(-50%); width: 15px; height: 15px; border-radius: 50%; pointer-events: auto; cursor: default;
+  font: 600 10px/13px var(--mono); text-align: center; color: var(--neutral); background: var(--card); border: 1px solid var(--neutral); }
+.e-mark.next { color: var(--card); background: var(--neutral); }
 .replay-overlay { position: absolute; left: 0; top: 0; pointer-events: none; z-index: 3; }
 .replay-dim { position: absolute; top: 0; bottom: 0; background: color-mix(in srgb, var(--card) 65%, transparent); }
 .replay-line { position: absolute; top: 0; bottom: 0; width: 0; border-left: 2px solid var(--accent); transform: translateX(-1px); }
@@ -644,11 +658,13 @@ ul.solves li { display: flex; justify-content: space-between; gap: 12px; padding
 .pchip.rr.good { border-color: var(--up); color: var(--up); }
 .pchip .muted { color: var(--muted); font-size: 11.5px; }
 .verdict .pos-cost { padding-left: calc(5.5em + 10px); }
-.verdict .record, .verdict .naive { margin: 0; font-size: 12.5px; color: var(--muted); border-top: 1px dashed var(--line); padding-top: 6px; }
+.verdict .record, .verdict .naive, .verdict .earnings-warn { margin: 0; font-size: 12.5px; color: var(--muted); border-top: 1px dashed var(--line); padding-top: 6px; }
 .verdict .naive-agree { margin-left: 4px; font-weight: 600; white-space: nowrap; } .naive-agree.same { color: var(--up); } .naive-agree.differ { color: var(--neutral); }
 .verdict .naive { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } /* 只占一行：窄屏截掉的部分悬停看整句 */
 .verdict .naive-ev { font-size: 11.5px; margin-left: 8px; }
-.verdict .record .pl, .verdict .naive .pl, .answer .missing .pl { display: inline-block; font-size: 11.5px; color: var(--muted); border: 1px solid var(--line); border-radius: 6px; padding: 0 6px; margin-right: 8px; }
+.verdict .earnings-warn { color: var(--fg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.verdict .record .pl, .verdict .naive .pl, .verdict .earnings-warn .pl, .answer .missing .pl { display: inline-block; font-size: 11.5px; color: var(--muted); border: 1px solid var(--line); border-radius: 6px; padding: 0 6px; margin-right: 8px; }
+.verdict .earnings-warn .pl { color: var(--neutral); border-color: var(--neutral); }
 
 /* 找打法：条件清单 */
 .checklist { list-style: none; padding: 0; margin: 2px 0; font-size: 13.5px; }

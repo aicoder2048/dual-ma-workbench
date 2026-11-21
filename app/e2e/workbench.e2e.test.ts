@@ -34,11 +34,20 @@ const CHART = (() => {
   const line = (k: number) => days.map((time, i) => ({ time, value: close[i] + k }));
   return {
     candles: days.map((time, i) => ({ time, open: close[i] - 1, high: close[i] + 2, low: close[i] - 2, close: close[i] })),
-    volume: days.map((time) => ({ time, value: 1e6, spike: false })),
+    // 量 33.8M、1.2 倍均量；最后一根是大量（2.4 倍，读数条标黄）
+    volume: days.map((time, i) => (i === 299 ? { time, value: 81.1e6, spike: true, ratio: 2.4 } : { time, value: 33.8e6, spike: false, ratio: 1.2 })),
     lines: { MA20: line(5), EMA20: line(4), MA60: line(10), EMA60: line(9), MA120: line(15), EMA120: line(14), MA200: line(20).slice(199) },
     drops: [{ time: days[280], period: 20 }],
   };
 })();
+
+/** 财报日替身：图上三次过去的财报，下一次在最后一根之后 3 个交易日（提醒窗口 10 天内）。 */
+const EARN_NEXT = (() => {
+  const d = new Date(`${CHART.candles.at(-1)!.time}T00:00:00Z`);
+  for (let n = 0; n < 3;) { d.setUTCDate(d.getUTCDate() + 1); if (d.getUTCDay() % 6) n++; }
+  return d.toISOString().slice(0, 10);
+})();
+const EARNINGS = { available: true, past: [CHART.candles[120].time, CHART.candles[183].time, CHART.candles[246].time], next: EARN_NEXT, days_to_next: 3, source: "yfinance" };
 
 const MP3 = readFileSync(resolve(import.meta.dir, "../test/fixtures/tts-sample.mp3"));
 const ttsCalls: { text: string; voice: string }[] = [];
@@ -76,6 +85,11 @@ beforeAll(async () => {
         const flat = { ...n.trade_plan.flat, entry: null, stop: null, targets: [], rr: null, rr_verdict: null, rr_gap: null, risk_pct: null, size: null };
         return JSON.stringify({ analysis: { ...n, label: "BOUNCE", play: { ...n.play, key: "空头结构反弹中", rules: ["P17", "J18", "J17"] },
           trade_plan: { ...n.trade_plan, key: "空头结构反弹中", flat } }, chart: CHART });
+      }
+      if (args[0] === "EARN") { // 3 天后财报：图上标 E，结论卡片提醒跳空
+        const n = nvda as Analysis;
+        return JSON.stringify({ analysis: { ...n, label: "EARN", earnings: EARNINGS,
+          thresholds: { ...n.thresholds, EARNINGS_WARN_DAYS: { value: 10, source: "脚本自定" } } }, chart: CHART });
       }
       return JSON.stringify({ analysis: { ...(nvda as Analysis), label: args[0], warning: warningNext ?? nvda.warning }, chart: CHART });
   }, Date.now, () => "polygon", () => sizingArgs(settings.get()));
@@ -562,24 +576,32 @@ describe("K 线图工具", () => {
     await page.close();
   });
 
-  test("读数条照 TradingView：开高低收和涨跌一行，均线值一行，各占一行不挤", async () => {
+  test("读数条照 TradingView：开高低收、涨跌、量和量比一行，均线值一行，各占一行不挤；第一行不被截掉", async () => {
     const { page } = await open();
     await page.waitForSelector("#chart canvas");
     await page.locator("#chart-readout").scrollIntoViewIfNeeded();  // 图在结论卡片下面，用户往下滚就看到读数条
     const c = CHART.candles.at(-1)!, prev = CHART.candles.at(-2)!;
     const ohlc = (await page.textContent("#chart-readout .ro-ohlc"))!;
-    for (const [k, v] of [["开", c.open], ["高", c.high], ["低", c.low], ["收", c.close]] as const) expect(ohlc).toContain(`${k} ${v.toFixed(2)}`);
+    for (const [k, v] of [["开", c.open], ["高", c.high], ["低", c.low], ["收", c.close]] as const) expect(ohlc).toContain(`${k}${v.toFixed(2)}`);
     const chg = c.close - prev.close;
     expect(ohlc).toContain(`${chg >= 0 ? "+" : "−"}${Math.abs(chg).toFixed(2)}`);
     expect(ohlc).toContain(`${((chg / prev.close) * 100).toFixed(2).replace("-", "−")}%`);
+    expect(ohlc).toContain("量81.1M2.4× 均量");
+    expect(await page.getAttribute("#chart-readout .ro-ratio", "class")).toContain("spike"); // 大量标黄
     expect(await page.textContent("#chart-readout .ro-lines")).toContain("MA20");
-    // 两行各自不换行（默认视图下），且都没被挡住
-    const rows = await page.$$eval("#chart-readout > div", (els) => els.map((el) => {
+    // 两行各自不换行（默认视图下），且都没被挡住；第一行放得下（窄栏收起涨跌额，量和量比不被省略号截掉）
+    const rows = () => page.$$eval("#chart-readout > div", (els) => els.map((el) => {
       const r = el.getBoundingClientRect(), lh = parseFloat(getComputedStyle(el).lineHeight) || 16;
       const hit = document.elementFromPoint(r.x + 4, r.y + r.height / 2);
-      return { lines: Math.round(r.height / lh), visible: !!hit && el.contains(hit) };
+      return { lines: Math.round(r.height / lh), fits: el.scrollWidth <= el.clientWidth, visible: !!hit && el.contains(hit) };
     }));
-    expect(rows).toEqual([{ lines: 1, visible: true }, { lines: 1, visible: true }]);
+    expect((await rows()).map(({ fits, ...r }, i) => (i === 0 ? { ...r, fits } : r))).toEqual([{ lines: 1, fits: true, visible: true }, { lines: 1, visible: true }]);
+    // 悬停到普通的一天：1.2× 均量，不标黄
+    const box = (await page.locator("#chart").boundingBox())!;
+    await page.mouse.move(box.x + box.width * 0.5, box.y + box.height * 0.4);
+    await page.waitForFunction(() => document.querySelector("#chart-readout .ro-vol")?.textContent?.includes("1.2×"));
+    expect(await page.getAttribute("#chart-readout .ro-ratio", "class")).not.toContain("spike");
+    expect((await rows()).map(({ fits, ...r }, i) => (i === 0 ? { ...r, fits } : r))).toEqual([{ lines: 1, fits: true, visible: true }, { lines: 1, visible: true }]);
     await page.close();
   }, 30_000);
 
@@ -646,6 +668,124 @@ describe("自己画水平线", () => {
 });
 
 
+describe("测量工具和交互模式", () => {
+  const api = <T,>(page: Page, fn: string) => page.evaluate(async (fn) => (await import("/app.js")).getChart()[fn](), fn) as Promise<T>;
+  /** 第 i 根 K 线、图高 frac 处的屏幕坐标（先把图放到滚动区顶部，坐标才稳）。 */
+  async function at(page: Page, i: number, frac: number) {
+    await page.evaluate(() => document.getElementById("chart")!.scrollIntoView({ block: "start" }));
+    const x = await page.evaluate(async (t) => (await import("/app.js")).getChart().chart.timeScale().timeToCoordinate(t), CHART.candles[i].time);
+    const box = (await page.locator("#chart").boundingBox())!;
+    return { x: box.x + x!, y: box.y + box.height * frac };
+  }
+  async function drag(page: Page, from: { x: number; y: number }, to: { x: number; y: number }) {
+    await page.mouse.move(from.x, from.y);
+    await page.mouse.down();
+    await page.mouse.move((from.x + to.x) / 2, (from.y + to.y) / 2, { steps: 4 });
+    await page.mouse.move(to.x, to.y, { steps: 4 });
+    await page.mouse.up();
+  }
+  const range = (page: Page) => page.evaluate(async () => (await import("/app.js")).getChart().chart.timeScale().getVisibleLogicalRange());
+
+  test("点「测量」再按住拖动：框里写涨跌、涨跌幅、根数、天数、几个 ATR；图不跟着平移；Esc 清掉", async () => {
+    const { page, errors } = await open();
+    await page.waitForSelector("#chart canvas");
+    await scrollIntoCenter(page, ".chart-card"); // 图在结论下面：像用户一样滚到图
+    expect(await notCovered(page, ".measure-toggle")).toBe(true);
+    await page.click(".measure-toggle");
+    expect(await page.getAttribute(".measure-toggle", "aria-pressed")).toBe("true");
+    const askLabel = () => page.evaluate(() => document.getElementById("ask-advisor")!.textContent);
+    const ask = await askLabel();
+    const before = await range(page);
+    await drag(page, await at(page, 230, 0.6), await at(page, 260, 0.3));
+    const m = (await api<any>(page, "measured"))!;
+    expect([m.a.index, m.b.index, m.bars]).toEqual([230, 260, 30]);
+    expect(m.days).toBe(Math.round((Date.parse(CHART.candles[260].time) - Date.parse(CHART.candles[230].time)) / 864e5));
+    expect(m.change).toBeGreaterThan(0); // 从下往上拉
+    const label = (await page.textContent(".measure-label"))!;
+    expect(label).toContain(`+${m.change.toFixed(2)}（+${m.pct.toFixed(2)}%）`);
+    expect(label).toContain(`30 根 · ${m.days} 天`);
+    expect(label).toContain(`${m.atrUnits.toFixed(1)} ATR（ATR ${m.atr.toFixed(2)}）`);
+    expect(await page.isVisible(".measure-label")).toBe(true);
+    expect(await range(page)).toEqual(before); // 按住拖动是量，不是平移
+    expect(await askLabel()).toBe(ask); // 测量时点图不问鸿雁
+    await page.keyboard.press("Escape");
+    expect(await page.isVisible(".measure-layer")).toBe(false);
+    expect(await api(page, "tool")).toBe("none");
+    expect(await page.getAttribute(".measure-toggle", "aria-pressed")).toBe("false");
+    // 退出测量后按住拖动照常平移
+    const p = await at(page, 250, 0.5);
+    await drag(page, p, { x: p.x + 120, y: p.y });
+    expect((await range(page))!.to).not.toBe(before!.to);
+    expect(errors).toEqual([]);
+    await page.close();
+  }, 30_000);
+
+  test("四种模式互斥：画线、测量、选回放起点一次只有一个；再点一次或 Esc 回到无", async () => {
+    const { page, errors } = await open();
+    await page.waitForSelector("#chart canvas");
+    await scrollIntoCenter(page, ".chart-card");
+    const state = async () => ({
+      tool: await api(page, "tool"),
+      draw: await page.getAttribute(".draw-toggle", "aria-pressed"),
+      measure: await page.getAttribute(".measure-toggle", "aria-pressed"),
+      replay: await page.textContent(".replay-toggle"),
+      bar: await page.isVisible(".replay-bar"),
+    });
+    const none = { tool: "none", draw: "false", measure: "false", replay: "回放", bar: false };
+    expect(await state()).toEqual(none);
+    await page.click(".draw-toggle");
+    expect(await state()).toEqual({ ...none, tool: "draw", draw: "true" });
+    await page.click(".measure-toggle");
+    expect(await state()).toEqual({ ...none, tool: "measure", measure: "true" });
+    await drag(page, await at(page, 240, 0.6), await at(page, 270, 0.4));
+    expect(await page.isVisible(".measure-layer")).toBe(true);
+    await page.click(".replay-toggle");
+    expect(await state()).toEqual({ ...none, tool: "pick-start", replay: "取消选起点", bar: true });
+    expect(await page.isVisible(".measure-layer")).toBe(false); // 换模式清掉量的框
+    await page.click(".draw-toggle");
+    expect(await state()).toEqual({ ...none, tool: "draw", draw: "true" });
+    await page.click(".draw-toggle");
+    expect(await state()).toEqual(none);
+    await page.click(".measure-toggle");
+    await page.click(".measure-toggle");
+    expect(await state()).toEqual(none);
+    await page.click(".draw-toggle");
+    await page.keyboard.press("Escape");
+    expect(await state()).toEqual(none);
+    expect(await api(page, "drawn")).toEqual([]); // 切来切去没画出线
+    expect(errors).toEqual([]);
+    await page.close();
+  }, 30_000);
+
+  test("回放中也能测量：只量到回放那天，往后放一根框还在；退回到量的那根之前就清掉", async () => {
+    const { page, errors } = await open(undefined, "MEAS");
+    await page.waitForSelector("#chart canvas");
+    await scrollIntoCenter(page, ".chart-card");
+    await page.click(".replay-toggle");
+    await page.selectOption(".replay-speed", "0.1");
+    const p = await at(page, 200, 0.4);
+    await page.mouse.click(p.x, p.y);
+    await page.waitForFunction(async () => (await import("/app.js")).getChart().replay().mode === "replay");
+    await page.click(".replay-play"); // 暂停
+    await page.click(".measure-toggle");
+    expect(await notCovered(page, ".measure-toggle")).toBe(true);
+    await drag(page, await at(page, 170, 0.5), await at(page, 200, 0.7));
+    const m = (await api<any>(page, "measured"))!;
+    expect([m.a.index, m.b.index]).toEqual([170, 200]);
+    expect(m.change).toBeLessThan(0);
+    expect(await page.getAttribute(".measure-layer", "class")).toContain("down");
+    await page.click(".replay-forward");
+    expect((await api<any>(page, "replay")).index).toBe(201);
+    expect(await page.isVisible(".measure-layer")).toBe(true);
+    expect(await api(page, "tool")).toBe("measure");
+    await page.click(".replay-back");
+    await page.click(".replay-back");
+    expect(await page.isVisible(".measure-layer")).toBe(false); // 第 200 根已经不在图上
+    expect(errors).toEqual([]);
+    await page.close();
+  }, 30_000);
+});
+
 /** 元素在当前视图里看得见、没被别的东西挡住（elementFromPoint 落在它自己身上）。 */
 const notCovered = (page: Page, sel: string) => page.evaluate((sel) => {
   const el = document.querySelector<HTMLElement>(sel)!;
@@ -660,6 +800,50 @@ const scrollIntoCenter = (page: Page, sel: string) => page.evaluate(async (sel) 
   s.scrollTop += el.getBoundingClientRect().top - s.getBoundingClientRect().top - 40;
   await new Promise((ok) => requestAnimationFrame(() => requestAnimationFrame(ok)));
 }, sel);
+
+/** 把图的底边（时间轴）滚进中栏视野：默认视口里图在结论下面，底边要往下滚才看得见。 */
+const scrollChartBottomIntoView = (page: Page) => page.evaluate(async () => {
+  const s = document.getElementById("center-scroll")!;
+  s.scrollTop += document.getElementById("chart")!.getBoundingClientRect().bottom - s.getBoundingClientRect().bottom + 12;
+  await new Promise((ok) => requestAnimationFrame(() => requestAnimationFrame(ok)));
+});
+
+describe("财报日", () => {
+  test("结论卡片：3 天后财报、跳空可能越过止损价，默认视图看得见、没被挡；打法不变", async () => {
+    const { page, errors } = await open(undefined, "EARN");
+    const sel = "#verdict [data-item=earnings]";
+    expect(await notCovered(page, sel)).toBe(true);
+    expect((await page.textContent(sel))!.replace(/\s+/g, "")).toContain(`3天后财报（${EARN_NEXT}）：跳空可能越过止损价183.08`);
+    expect(await page.textContent('#verdict .concl-row[data-situation="flat"]')).toContain("不做：盈亏比 0.6:1"); // 和 NVDA 一样
+    expect(errors).toEqual([]);
+    await page.close();
+  }, 30_000);
+
+  test("图上：过去的财报和下一次标 E（下一次在右边留白里），看得见、没被挡；没有财报日的票不标", async () => {
+    const { page, errors } = await open(undefined, "EARN");
+    await page.waitForSelector("#chart .e-mark.next");
+    await scrollChartBottomIntoView(page); // E 在图的底边：像用户一样往下滚到看见时间轴
+    const marks = await page.$$eval("#chart .e-mark", (els) => els.map((e) => [(e as HTMLElement).dataset.date, e.classList.contains("next")]));
+    expect(marks).toEqual([...EARNINGS.past.map((d) => [d, false]), [EARN_NEXT, true]]);
+    for (const d of [EARNINGS.past[2], EARN_NEXT]) expect(await notCovered(page, `#chart .e-mark[data-date="${d}"]`)).toBe(true);
+    expect(await page.getAttribute("#chart .e-mark.next", "title")).toContain("跳空");
+    // E 在时间轴上方、图内：底边不超过图的绘图区
+    const inPane = await page.evaluate(async () => {
+      const { getChart } = await import("/app.js");
+      const box = document.getElementById("chart")!.getBoundingClientRect();
+      const m = document.querySelector("#chart .e-mark")!.getBoundingClientRect();
+      return m.bottom <= box.bottom - getChart().chart.timeScale().height() + 1 && m.top > box.top;
+    });
+    expect(inPane).toBe(true);
+    expect(errors).toEqual([]);
+    await page.close();
+    const nv = await open(); // NVDA 的替身没有财报日
+    await nv.page.waitForSelector("#chart canvas");
+    expect(await nv.page.locator("#chart .e-mark").count()).toBe(0);
+    expect(await nv.page.locator("#verdict [data-item=earnings]").count()).toBe(0);
+    await nv.page.close();
+  }, 30_000);
+});
 
 describe("中栏：结论 → 看大局 → 找打法 → 做推演", () => {
   test("顺序：结论、K 线图、看大局、找打法、做推演；没有单独的规则清单卡", async () => {
@@ -1065,6 +1249,7 @@ describe("成本价决定浮盈 / 浮亏的做法", () => {
 describe("K 线回放", () => {
   const rp = (page: Page) => page.evaluate(async () => (await import("/app.js")).getChart().replay());
   const levels = (page: Page) => page.evaluate(async () => (await import("/app.js")).getChart().levels());
+  const tool = (page: Page) => page.evaluate(async () => (await import("/app.js")).getChart().tool());
   /** 等回放状态满足条件（轮询，最多 10 秒）。 */
   async function waitRp(page: Page, ok: (r: any) => boolean) {
     for (const end = Date.now() + 10_000; Date.now() < end; await page.waitForTimeout(50)) if (ok(await rp(page))) return;
@@ -1119,7 +1304,7 @@ describe("K 线回放", () => {
     expect(await page.isVisible(".replay-bar")).toBe(false);
     await page.click(".replay-toggle");
     await slow(page);
-    expect((await rp(page)).mode).toBe("select");
+    expect(await tool(page)).toBe("pick-start");
     expect(await page.textContent(".replay-label")).toContain("点图上的一天作为回放起点");
     const askLabel = () => page.evaluate(() => document.getElementById("ask-advisor")!.textContent);
     const before = await askLabel();
@@ -1285,7 +1470,7 @@ describe("K 线回放", () => {
     const before = (await range())!;
     await page.click(".replay-start");
     await page.click(".replay-menu [data-start=click]");
-    expect((await rp(page)).mode).toBe("select");
+    expect(await tool(page)).toBe("pick-start");
     await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
     const after = (await range())!;
     expect(Math.abs(after.to - before.to)).toBeLessThan(1);

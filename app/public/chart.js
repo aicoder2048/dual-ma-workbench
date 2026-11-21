@@ -1,5 +1,8 @@
 // K 线 + 6 条均线 + 抵扣价小黄点 + 成交量（TradingView lightweight-charts 4.2.0）。
 import { baseCandleStyle, candleBar as styledBar } from "./candles.js";
+import { earningsMarks, logicalOf } from "./earnings.js";
+import { measure, measureLines } from "./measure.js";
+import { volumeCell } from "./readout.js";
 import { DEFAULT_SPEED, OFF, SPEEDS, appendDelta, earliestIndex, indexOnOrBefore, randomIndex, sliceAt, speedMs, step } from "./replay.js";
 
 const SPECS = [];
@@ -14,6 +17,11 @@ function isoDate(t) {
   if (typeof t === "number") return new Date(t * 1000).toISOString().slice(0, 10);
   return `${t.year}-${String(t.month).padStart(2, "0")}-${String(t.day).padStart(2, "0")}`;
 }
+
+/** 最新一根右边留几根的空位（下一次财报的 E 标在这里）。 */
+const RIGHT_ROOM = 4;
+/** 下一次财报在这么多根之内，右边的空位留到能看见它（覆盖 10 个交易日的财报提醒）。 */
+const NEXT_EARNINGS_ROOM = 15;
 
 const css = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
 
@@ -39,7 +47,7 @@ export function createChart(box, legendEl) {
     autoSize: true,
     rightPriceScale: { scaleMargins: { top: 0.06, bottom: 0.24 } },
     // 练习时坐标轴的刻度也写 T+n；返回 null 用默认刻度
-    timeScale: { rightOffset: 4, tickMarkFormatter: (t) => (timeLabel ? showTime(t) : null) },
+    timeScale: { rightOffset: RIGHT_ROOM, tickMarkFormatter: (t) => (timeLabel ? showTime(t) : null) },
     // 十字线底部的日期统一写成 2026-10-22（默认按浏览器语言写成 "22 10月 '26"，不好读）
     localization: { timeFormatter: showTime },
     crosshair: { mode: 0 },
@@ -104,16 +112,21 @@ export function createChart(box, legendEl) {
     const c = view.candles.find((x) => x.time === time) ?? view.candles.at(-1);
     const prev = view.candles[view.candles.indexOf(c) - 1];
     const at = (k) => (view.lines[k] || []).find((p) => p.time === c.time)?.value;
-    // 照 TradingView：第一行日期 + 开高低收 + 比前一天涨跌，第二行各条均线的值
+    // 照 TradingView：第一行日期 + 开高低收 + 比前一天涨跌 + 量和量比，第二行各条均线的值
     const chg = prev ? c.close - prev.close : null;
     const tone = chg == null ? "" : chg >= 0 ? "up" : "down";
     const sign = (x) => (x >= 0 ? "+" : "−") + Math.abs(x).toFixed(2);
-    const chgText = chg == null ? "" : `<span class="ro-chg ${tone}">${sign(chg)}（${sign((chg / prev.close) * 100)}%）</span>`;
+    // 涨跌额放括号外的 ro-abs：一行放不下时先收起涨跌额，留涨跌幅（见下面的 tight）
+    const chgText = chg == null ? ""
+      : `<span class="ro-chg ${tone}"><span class="ro-abs">${sign(chg)}（</span>${sign((chg / prev.close) * 100)}%<span class="ro-abs">）</span></span>`;
     const ohlc = [["开", c.open], ["高", c.high], ["低", c.low], ["收", c.close]]
-      .map(([k, v]) => `<span>${k} <b class="${tone}">${f2(v)}</b></span>`).join("");
+      .map(([k, v]) => `<span>${k}<b class="${tone}">${f2(v)}</b></span>`).join("");
     const lines = SPECS.filter((sp) => series[sp.key].options().visible)
       .map((sp) => `<span><i class="${sp.dashed ? "dash" : ""}" style="--c: var(${sp.token})"></i>${sp.key} ${f2(at(sp.key))}</span>`).join("");
-    readout.innerHTML = `<div class="ro-ohlc"><b>${showTime(c.time)}</b>${ohlc}${chgText}</div><div class="ro-lines">${lines}</div>`;
+    const vol = volumeCell(view.volume.find((v) => v.time === c.time));
+    readout.innerHTML = `<div class="ro-ohlc"><b>${showTime(c.time)}</b>${ohlc}${chgText}${vol}</div><div class="ro-lines">${lines}</div>`;
+    const row = readout.firstChild;
+    if (row.scrollWidth > row.clientWidth) row.classList.add("tight"); // 窄栏（默认视口）：量和量比比涨跌额要紧
   };
   chart.subscribeCrosshairMove((param) => showReadout(param.time));
 
@@ -126,6 +139,7 @@ export function createChart(box, legendEl) {
   tools.innerHTML = RANGES.map(([k, label]) => `<button type="button" class="range-btn" data-range="${k}">${label}</button>`).join("")
     + `<button type="button" class="range-btn" data-range="reset" title="回到当前范围的默认视图">复位</button>`
     + `<button type="button" class="replay-toggle" aria-pressed="false" title="从过去某一天开始，一根一根往后放 K 线">回放</button>`
+    + `<button type="button" class="measure-toggle" aria-pressed="false" title="点这里，再在图上按住从一点拖到另一点：量涨跌多少、隔几根 K 线、几个 ATR（看止损离得远不远）。Esc 清掉">测量</button>`
     + `<button type="button" class="draw-toggle" aria-pressed="false" title="点这里，再点图上任意一处，就在那个价位画一条横线">画线</button>`
     + `<button type="button" class="draw-clear" title="删掉这只股票上自己画的线">清除</button>`
     + `<button type="button" class="tone-toggle" title="${TONE_TITLE}">`
@@ -149,12 +163,15 @@ export function createChart(box, legendEl) {
     tools.querySelectorAll(".range-btn").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.range === rangeKey)));
     if (!view?.candles.length) return;
     const days = RANGES.find(([k]) => k === rangeKey)[2];
-    const last = view.candles.at(-1).time; // 回放时以回放到的那天为准
-    if (!days) { chart.timeScale().fitContent(); return; }
-    const from = new Date(last);
-    from.setDate(from.getDate() - days);
-    const first = view.candles.find((c) => c.time >= from.toISOString().slice(0, 10))?.time ?? view.candles[0].time;
-    chart.timeScale().setVisibleRange({ from: first, to: last });
+    const last = view.candles.length - 1; // 回放时以回放到的那天为准
+    const from = new Date(view.candles[last].time);
+    from.setDate(from.getDate() - (days ?? Infinity));
+    const first = days ? Math.max(0, view.candles.findIndex((c) => c.time >= from.toISOString().slice(0, 10))) : 0;
+    // 右边留几根的空位；下一次财报在三周内就留到能看见它的 E
+    const next = earningsMarks(earnings, view.candles[last].time).find((m) => m.next);
+    const ahead = next ? logicalOf(next.date, view.candles) - last : 0;
+    const room = ahead > 0 && ahead <= NEXT_EARNINGS_ROOM ? Math.max(RIGHT_ROOM, ahead + 1) : RIGHT_ROOM;
+    chart.timeScale().setVisibleLogicalRange({ from: first, to: last + room });
   };
   tools.addEventListener("click", (e) => {
     const b = e.target.closest(".range-btn");
@@ -200,7 +217,7 @@ export function createChart(box, legendEl) {
   help.className = "chart-help";
   help.hidden = true;
   help.innerHTML = `
-    <p><b>悬停读数</b>：鼠标停在某天，上方显示那天的收盘和 6 条线。用来看"那次回调碰到了哪条线、守没守住"。</p>
+    <p><b>悬停读数</b>：鼠标停在某天，上方显示那天的开高低收、涨跌、成交量（"1.2× 均量"是和 50 日均量比，超过 2 倍的大量标黄）和 6 条线。用来看"那次回调碰到了哪条线、守没守住"。</p>
     <p><b>缩放</b>：按住 ⌘（或 Ctrl）滚轮，或触控板双指捏合，以最新一天为准放大缩小；按住拖动可以左右平移。只滚轮时滚动的是页面。</p>
     <p><b>固定范围</b>（1 周 / 1 月 / 半年 / 1 年 / 全部）：均线的斜率（几点钟方向）只有在同样长的时间里比才不失真，所以要固定时长、用对数坐标。
       <b>1 年</b>（默认）判断现在是几点钟、属于哪种趋势；<b>全部</b>看大周期和横盘有多长（"横有多长，竖有多高"）；<b>半年</b>看最近的细节，比如这次回调比上次深还是浅；<b>1 周、1 月</b>看最近几根 K 线怎么走。</p>
@@ -208,6 +225,10 @@ export function createChart(box, legendEl) {
       图上的<b>虚线价位线</b>是自动画的：绿色是结论里的触发价（不买的打法是"先看"），红色是止损，黄色是推翻判断的价位。</p>
     <p><b>着色</b>：绿 = 收盘在 MA20 上方且高于 20 日抵扣价（MA20 向上）；黑 = 两样都不满足（MA20 向下）；灰 = 只满足一样。
       第一根黑柱就是 20 线破线拐头；连续黑柱、收不回去，才说明拐头确认了。点工具栏里的「着色」可以关掉。</p>
+    <p><b>测量</b>：点「测量」，在图上按住从一点拖到另一点，框里写涨跌多少、涨跌幅、隔几根 K 线（几个自然日），和这段距离是几个 ATR(14)。
+      用来看止损离进场几个 ATR：不到 1 个 ATR 的止损，平常的波动就可能扫到。回放时一样能用；Esc 或再点一次「测量」清掉。</p>
+    <p><b>财报 E</b>：时间轴上方的小 E 是财报日，实心的是下一次。财报后常常跳空开盘，止损单按开盘价成交，可能比止损价差很多；
+      下一次财报在 10 个交易日内时，结论卡片会提醒。只是提醒，不改打法。</p>
     <p><b>看量</b>：底部的量柱，黄色是超过 50 日均量 2 倍的大量。看两种情况：横盘末期突然放量，是要变盘的信号；
       急涨或急跌的末端连续放量，说明多空分歧在化解，行情往往快要转向，并不代表强势。看到放量先提高警惕，动手还是要等均线拐头。</p>
     <p><b>回放</b>：点「回放」，再点图上的一天（或在「选起点」里选日期、最早一天、随机一天），图上就只剩那天及以前的 K 线，
@@ -220,11 +241,12 @@ export function createChart(box, legendEl) {
     helpBtn.setAttribute("aria-expanded", String(!help.hidden));
   });
 
+  let tool = "none"; // 图上的交互模式，见下面的 setTool
+
   // ---------- 自己画的水平线：按股票记在本机浏览器里 ----------
   let drawKey = null; // 当前股票
   let drawn = []; // 价格
   let drawnLines = [];
-  let drawing = false;
   const storeKey = () => `dma-lines:${drawKey}`;
   const loadDrawn = () => {
     try { drawn = JSON.parse(localStorage.getItem(storeKey()) ?? "[]").filter(Number.isFinite); } catch { drawn = []; }
@@ -239,26 +261,20 @@ export function createChart(box, legendEl) {
     }));
   };
   const drawBtn = tools.querySelector(".draw-toggle");
-  const setDrawing = (on) => {
-    drawing = on;
-    drawBtn.setAttribute("aria-pressed", String(on));
-    drawBtn.textContent = on ? "点图上的价位…" : "画线";
-    box.classList.toggle("drawing", on);
-  };
-  drawBtn.addEventListener("click", () => setDrawing(!drawing));
+  drawBtn.addEventListener("click", () => setTool(tool === "draw" ? "none" : "draw"));
   tools.querySelector(".draw-clear").addEventListener("click", () => {
     drawn = [];
     saveDrawn();
     paintDrawn();
   });
   chart.subscribeClick((param) => {
-    if (!drawing || rs.mode === "select" || !param.point) return;
+    if (tool !== "draw" || !param.point) return;
     const price = candles.coordinateToPrice(param.point.y);
     if (price == null) return;
     drawn.push(Math.round(price * 100) / 100);
     saveDrawn();
     paintDrawn();
-    setTimeout(() => setDrawing(false)); // 同一次点击的其他处理（问鸿雁）还要看到"正在画线"
+    setTimeout(() => setTool("none")); // 同一次点击的其他处理（问鸿雁）还要看到"正在画线"
   });
 
   let data = null; // 完整数据
@@ -289,7 +305,31 @@ export function createChart(box, legendEl) {
     candles.setMarkers(view.drops.slice().sort((a, b) => (a.time < b.time ? -1 : 1)).map((d) => ({
       time: d.time, position: "belowBar", color: drop, shape: "circle", text: `${d.period}扣`,
     })));
+    paintEarnings();
+    paintRuler();
   }
+
+  // ---------- 财报日：时间轴上方的小 E（照 TradingView）；之后的第一次在右边留白里也标 ----------
+  let earnings = null;
+  const eLayer = document.createElement("div");
+  eLayer.className = "earnings-layer";
+  box.append(eLayer);
+  function paintEarnings() {
+    const ts = chart.timeScale();
+    const width = ts.width();
+    eLayer.style.bottom = `${ts.height()}px`;
+    eLayer.style.width = `${width}px`;
+    const marks = view?.candles.length ? earningsMarks(earnings, view.candles.at(-1).time) : [];
+    eLayer.innerHTML = marks.map(({ date, next }) => {
+      const i = logicalOf(date, view.candles);
+      const x = i === null ? null : ts.logicalToCoordinate(i);
+      if (x === null || x < 0 || x > width) return "";
+      const what = next ? `下次财报 ${date}：财报后常跳空，止损可能按不到原价` : `财报 ${date}`;
+      return `<span class="e-mark${next ? " next" : ""}" style="left:${x}px" data-date="${date}" title="${what}">E</span>`;
+    }).join("");
+  }
+  chart.timeScale().subscribeVisibleLogicalRangeChange(() => { paintEarnings(); paintRuler(); });
+  chart.timeScale().subscribeSizeChange(() => { paintEarnings(); paintRuler(); });
   /** 把一份图表数据（完整的，或回放截到某天的）画到图上。 */
   function show(v) {
     view = v;
@@ -369,7 +409,7 @@ export function createChart(box, legendEl) {
     if (rs.mode !== "replay") {
       if (view !== data) {
         // 回放中重选起点：视图留在原处（逻辑序号前后一致），退出回放才回到默认范围
-        const r = rs.mode === "select" ? chart.timeScale().getVisibleLogicalRange() : null;
+        const r = tool === "pick-start" ? chart.timeScale().getVisibleLogicalRange() : null;
         show(data);
         if (r) chart.timeScale().setVisibleLogicalRange(r); else applyRange();
       }
@@ -410,8 +450,8 @@ export function createChart(box, legendEl) {
   /** 按钮、提示、徽标、十字线、选起点的覆盖层跟着状态走。 */
   let shownMode = "off";
   function syncReplay() {
-    const on = rs.mode !== "off";
-    const selecting = rs.mode === "select";
+    const selecting = tool === "pick-start";
+    const on = rs.mode === "replay" || selecting;
     replayBtn.setAttribute("aria-pressed", String(on));
     replayBtn.textContent = selecting ? "取消选起点" : rs.mode === "replay" ? "退出回放" : "回放";
     bar.hidden = !on;
@@ -419,7 +459,8 @@ export function createChart(box, legendEl) {
     box.classList.toggle("replay-selecting", selecting);
     chart.applyOptions({ crosshair: { vertLine: { visible: !selecting, labelVisible: !selecting } } });
     if (!selecting) overlay.hidden = true;
-    if (rs.mode !== shownMode) { setMenu(false); shownMode = rs.mode; } // 只在换状态时收菜单：播放中每走一根不收
+    const shown = selecting ? "select" : rs.mode;
+    if (shown !== shownMode) { setMenu(false); shownMode = shown; } // 只在换状态时收菜单：播放中每走一根不收
     const last = (data?.candles.length ?? 0) - 1;
     const atEnd = rs.mode === "replay" && rs.index >= last;
     $r(".replay-play").textContent = rs.playing ? "⏸ 暂停" : "▶ 播放";
@@ -435,18 +476,30 @@ export function createChart(box, legendEl) {
   }
 
   replayBtn.addEventListener("click", () => {
-    if (rs.mode === "off") { setDrawing(false); dispatch({ type: "enter" }); } else dispatch({ type: "exit" });
+    if (tool === "pick-start") setTool("none");
+    else if (rs.mode === "replay") dispatch({ type: "exit" });
+    else setTool("pick-start");
   });
+  /** 选好回放起点：退出选起点，从那天开始放。 */
+  const pickAt = (index) => {
+    setTool("none");
+    dispatch({ type: "pick", index });
+  };
+  /** 退出回放和选起点（练习、取数失败、收起图表时）。 */
+  const leaveReplay = () => {
+    if (tool === "pick-start") setTool("none");
+    dispatch({ type: "exit" });
+  };
   $r(".replay-start").addEventListener("click", () => setMenu(menu.hidden));
   menu.addEventListener("click", (e) => {
     const how = e.target.closest("[data-start]")?.dataset.start;
     if (!how || !data) return;
-    if (how === "click") { dispatch({ type: "enter" }); return; }
-    dispatch({ type: "pick", index: how === "earliest" ? earliestIndex(data) : randomIndex(data) });
+    if (how === "click") { setTool("pick-start"); return; }
+    pickAt(how === "earliest" ? earliestIndex(data) : randomIndex(data));
   });
   menu.querySelector("input").addEventListener("change", (e) => {
     const i = data ? indexOnOrBefore(data.candles, e.target.value) : -1;
-    if (i >= 0) dispatch({ type: "pick", index: i });
+    if (i >= 0) pickAt(i);
   });
   $r(".replay-play").addEventListener("click", () => dispatch({ type: "toggle" }));
   $r(".replay-back").addEventListener("click", () => dispatch({ type: "back" }));
@@ -467,7 +520,7 @@ export function createChart(box, legendEl) {
 
   // 选起点：竖线跟着鼠标，右边变暗，时间轴上写出日期
   chart.subscribeCrosshairMove((param) => {
-    if (rs.mode !== "select" || !param.point || !param.time) { overlay.hidden = true; return; }
+    if (tool !== "pick-start" || !param.point || !param.time) { overlay.hidden = true; return; }
     const x = chart.timeScale().timeToCoordinate(param.time) ?? param.point.x;
     const w = chart.timeScale().width();
     const axis = chart.timeScale().height();
@@ -480,15 +533,97 @@ export function createChart(box, legendEl) {
     dateEl.textContent = `回放起点 ${isoDate(param.time)}`;
   });
   chart.subscribeClick((param) => {
-    if (rs.mode !== "select" || !param.time) return;
+    if (tool !== "pick-start" || !param.time) return;
     const i = data.candles.findIndex((c) => c.time === isoDate(param.time));
-    setTimeout(() => dispatch({ type: "pick", index: i })); // 同一次点击的问鸿雁还要看到"正在选起点"
+    setTimeout(() => pickAt(i)); // 同一次点击的问鸿雁还要看到"正在选起点"
   });
 
-  // 快捷键：Shift+↓ 播放 / 暂停，Shift+→ 前进一根；Esc 取消选起点。焦点在输入框里时不管。
+  // ---------- 图上的交互模式：无 / 画线 / 测量 / 选回放起点，同一时刻只有一种 ----------
+  // 点图做什么由 tool 决定；换模式只走 setTool，按钮、光标、提示都从它同步
+  function setTool(next) {
+    if (next === tool) return;
+    tool = next;
+    if (tool === "pick-start" && rs.mode === "replay") dispatch({ type: "exit" }); // 回放中重选起点：先回到完整数据，视图留在原处
+    syncTool();
+  }
+  function syncTool() {
+    drawBtn.setAttribute("aria-pressed", String(tool === "draw"));
+    drawBtn.textContent = tool === "draw" ? "点图上的价位…" : "画线";
+    box.classList.toggle("drawing", tool === "draw");
+    measureBtn.setAttribute("aria-pressed", String(tool === "measure"));
+    box.classList.toggle("measuring", tool === "measure");
+    chart.applyOptions({ handleScroll: { pressedMouseMove: tool !== "measure" } }); // 测量时按住拖动是量，不是平移
+    if (tool !== "measure") { ruler = null; dragging = false; paintRuler(); }
+    syncReplay();
+  }
+
+  // ---------- 测量：按住从 A 拖到 B，量涨跌、根数、自然日、几个 ATR（照 TradingView 的标尺）；回放时一样能用 ----------
+  const measureBtn = tools.querySelector(".measure-toggle");
+  measureBtn.addEventListener("click", () => setTool(tool === "measure" ? "none" : "measure"));
+  const mLayer = document.createElement("div");
+  mLayer.className = "measure-layer";
+  mLayer.hidden = true;
+  mLayer.innerHTML = '<div class="measure-rect"></div><div class="measure-label"></div>';
+  box.append(mLayer);
+  const [mRect, mLabel] = mLayer.children;
+  let ruler = null; // { a, b }：两点都落在 K 线上，{ index（图上第几根）, price }
+  let dragging = false;
+
+  /** 鼠标位置 → 落在第几根 K 线、什么价位；不在绘图区（时间轴、价格轴上）返回 null。 */
+  function pointAt(e) {
+    if (!view?.candles.length) return null;
+    const r = box.getBoundingClientRect();
+    const x = e.clientX - r.left, y = e.clientY - r.top;
+    const ts = chart.timeScale();
+    if (x < 0 || x > ts.width() || y < 0 || y > r.height - ts.height()) return null;
+    const logical = ts.coordinateToLogical(x);
+    const price = candles.coordinateToPrice(y);
+    if (logical === null || price === null) return null;
+    return { index: Math.min(Math.max(Math.round(logical), 0), view.candles.length - 1), price };
+  }
+
+  function paintRuler() {
+    // 回放退回到量的那几根之前：那两点已经不在图上，清掉
+    if (ruler && view && Math.max(ruler.a.index, ruler.b.index) >= view.candles.length) ruler = null;
+    const ts = chart.timeScale();
+    const xs = ruler ? [ts.logicalToCoordinate(ruler.a.index), ts.logicalToCoordinate(ruler.b.index)] : [];
+    const ys = ruler ? [candles.priceToCoordinate(ruler.a.price), candles.priceToCoordinate(ruler.b.price)] : [];
+    mLayer.hidden = !ruler || [...xs, ...ys].some((v) => v === null);
+    if (mLayer.hidden) return;
+    const m = measure(ruler.a, ruler.b, view.candles);
+    const [left, top] = [Math.min(...xs), Math.min(...ys)];
+    mLayer.classList.toggle("down", m.change < 0);
+    Object.assign(mRect.style, { left: `${left}px`, top: `${top}px`, width: `${Math.max(...xs) - left}px`, height: `${Math.max(...ys) - top}px` });
+    mLabel.innerHTML = measureLines(m).map((t) => `<div>${t}</div>`).join("");
+    // 标签放在终点那头（往上量在框上方，往下量在框下方），水平居中；靠边时收回图里
+    const paneH = box.clientHeight - ts.height();
+    const w = mLabel.offsetWidth, h = mLabel.offsetHeight;
+    const y = m.change >= 0 ? top - h - 6 : Math.max(...ys) + 6;
+    mLabel.style.left = `${Math.min(Math.max((xs[0] + xs[1]) / 2 - w / 2, 0), ts.width() - w)}px`;
+    mLabel.style.top = `${Math.min(Math.max(y, 0), paneH - h)}px`;
+  }
+
+  box.addEventListener("mousedown", (e) => {
+    if (tool !== "measure" || e.button !== 0) return;
+    const p = pointAt(e);
+    if (!p) return;
+    e.preventDefault();
+    ruler = { a: p, b: p };
+    dragging = true;
+    paintRuler();
+  }, true);
+  document.addEventListener("mousemove", (e) => {
+    const p = dragging ? pointAt(e) : null;
+    if (!p) return;
+    ruler = { ...ruler, b: p };
+    paintRuler();
+  });
+  document.addEventListener("mouseup", () => { dragging = false; });
+
+  // 快捷键：Shift+↓ 播放 / 暂停，Shift+→ 前进一根；Esc 退出画线、测量、选起点。焦点在输入框里时不管。
   document.addEventListener("keydown", (e) => {
     if (e.target.closest?.("input, textarea, select, [contenteditable]")) return;
-    if (e.key === "Escape" && rs.mode === "select") { dispatch({ type: "exit" }); return; }
+    if (e.key === "Escape" && tool !== "none") { setTool("none"); return; }
     if (rs.mode !== "replay" || !e.shiftKey || e.metaKey || e.ctrlKey || e.altKey) return;
     const action = { ArrowDown: "toggle", ArrowRight: "forward", ArrowLeft: "back" }[e.key];
     if (!action) return;
@@ -511,6 +646,8 @@ export function createChart(box, legendEl) {
       data = d;
       const index = at ? indexOnOrBefore(d.candles, at) : -1;
       rs = index >= 0 ? { mode: "replay", index, playing: false } : OFF;
+      if (tool === "pick-start") tool = "none"; // 换了数据：选到一半的起点作废
+      ruler = null; // 量的两点属于旧数据
       arm();
       if (!sameTicker) { drawKey = key; loadDrawn(); }
       paintDrawn();
@@ -522,7 +659,7 @@ export function createChart(box, legendEl) {
         applyRange();
       }
       paintLevels();
-      syncReplay();
+      syncTool();
     },
     /** 盲测练习：往后多了一根（服务端只发到现在那根）。只追加，视图不跳。 */
     extend(delta) {
@@ -547,11 +684,17 @@ export function createChart(box, legendEl) {
     },
     /** 练习时收起「回放」：数据本来就只到现在那根，自己的回放会和练习的推进混在一起。 */
     setPractice(on) {
-      if (on) dispatch({ type: "exit" });
+      if (on) leaveReplay();
       replayBtn.hidden = on;
     },
     /** 停止回放、回到完整数据（取数失败、中栏收起图表时用）。 */
-    stopReplay() { dispatch({ type: "exit" }); },
+    stopReplay() { leaveReplay(); },
+    /** 财报日（分析 JSON 的 earnings）：图上标 E；练习里没有，传 null 清掉。 */
+    setEarnings(e) {
+      earnings = e ?? null;
+      if (rs.mode === "replay") paintEarnings(); // 回放中重新载入：视图留在原处
+      else applyRange(); // 右边的空位要不要放宽到下一次财报
+    },
     /** 价位线：[{ kind: trigger | stop | target | invalid, price, title }]，来自 viz.js 的 chartLevels。 */
     setLevels(list) {
       levels = list;
@@ -562,13 +705,17 @@ export function createChart(box, legendEl) {
     /** 自己画的线（价格列表）。 */
     drawn: () => [...drawn],
     /** 回放状态（测试用）：mode / index / playing，加上速度、回放到的日期、图上几根 K 线。 */
+    /** 图上的交互模式（测试用）：none | draw | measure | pick-start。 */
+    tool: () => tool,
+    /** 测量的结果（测试用）：没有在量时为 null。 */
+    measured: () => (ruler && !mLayer.hidden ? { a: { ...ruler.a }, b: { ...ruler.b }, ...measure(ruler.a, ruler.b, view.candles) } : null),
     replay: () => ({ ...rs, speed, date: rs.mode === "replay" ? data.candles[rs.index].time : null, bars: view?.candles.length ?? 0 }),
     /** 回放里点「按这一天分析」时回调那天的日期。 */
     onAnalyzeDate(cb) { analyzeDate = cb; },
-    /** 点图表时回调 { time, candle, lines, drops, point }，给"问鸿雁"用。画线、选回放起点时不回调；回放时按回放到的数据。 */
+    /** 点图表时回调 { time, candle, lines, drops, point }，给"问鸿雁"用。画线、测量、选回放起点时不回调；回放时按回放到的数据。 */
     onPick(cb) {
       chart.subscribeClick((param) => {
-        if (drawing || rs.mode === "select" || !param.time || !view) return;
+        if (tool !== "none" || !param.time || !view) return;
         const candle = view.candles.find((c) => c.time === param.time);
         if (!candle) return; // 回放时右边空白处
         const lines = Object.fromEntries(SPECS.map((s) => [s.key, (view.lines[s.key] || []).find((p) => p.time === param.time)?.value]));

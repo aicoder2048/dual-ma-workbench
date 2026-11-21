@@ -431,7 +431,22 @@ export function conclusionCard(r, close, p) {
     <div class="holding-row">${holdingRow(r, close, p)}</div>
     <div class="pos-cost"><label for="pos-cost">持仓成本</label><input id="pos-cost" inputmode="decimal" placeholder="可不填" value="${esc(p.cost ?? "")}"><span class="pnl">${pnlText(p.cost, close)}</span></div>
     ${naiveLine(r.naive)}
+    ${earningsLine(r, p)}
     <p class="record"><span class="pl">回测</span>${esc(r.record.text)}</p>`;
+}
+
+/**
+ * 财报提醒一行：下次财报在提醒窗口内才有（report.earnings）。只是信息，不改打法。
+ * 止损价按找打法里选的处境（空仓：进场后止损；持仓：止损），这一处没有就用另一处的。
+ */
+export function earningsLine(r, p) {
+  const e = r.earnings;
+  if (!e) return "";
+  const [mine, other] = p.pos === "holding" ? [r.plans.holding, r.plans.flat] : [r.plans.flat, r.plans.holding];
+  const stop = mine.stop ?? other.stop;
+  const risk = stop ? `跳空可能越过止损价 <b class="num">${f2(stop.price)}</b>` : "跳空可能一下走很远";
+  return `<p class="earnings-warn" data-item="earnings" ${tip(`下次财报 ${e.next}。财报后常跳空开盘，止损单按开盘价成交，可能比止损价差很多。只是提醒，不改打法`)}>`
+    + `<span class="pl">财报</span>${e.days} 天后财报（${esc(e.next)}）：${risk}</p>`;
 }
 
 /** 对照一行：MA200 朴素规则怎么说、双均线怎么说、一不一致，带评估的出处（悬停看整句）。 */
