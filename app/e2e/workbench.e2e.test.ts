@@ -1131,6 +1131,7 @@ describe("成本价决定浮盈 / 浮亏的做法", () => {
 describe("K 线回放", () => {
   const rp = (page: Page) => page.evaluate(async () => (await import("/app.js")).getChart().replay());
   const levels = (page: Page) => page.evaluate(async () => (await import("/app.js")).getChart().levels());
+  const tool = (page: Page) => page.evaluate(async () => (await import("/app.js")).getChart().tool());
   /** 等回放状态满足条件（轮询，最多 10 秒）。 */
   async function waitRp(page: Page, ok: (r: any) => boolean) {
     for (const end = Date.now() + 10_000; Date.now() < end; await page.waitForTimeout(50)) if (ok(await rp(page))) return;
@@ -1185,7 +1186,7 @@ describe("K 线回放", () => {
     expect(await page.isVisible(".replay-bar")).toBe(false);
     await page.click(".replay-toggle");
     await slow(page);
-    expect((await rp(page)).mode).toBe("select");
+    expect(await tool(page)).toBe("pick-start");
     expect(await page.textContent(".replay-label")).toContain("点图上的一天作为回放起点");
     const askLabel = () => page.evaluate(() => document.getElementById("ask-advisor")!.textContent);
     const before = await askLabel();
@@ -1351,7 +1352,7 @@ describe("K 线回放", () => {
     const before = (await range())!;
     await page.click(".replay-start");
     await page.click(".replay-menu [data-start=click]");
-    expect((await rp(page)).mode).toBe("select");
+    expect(await tool(page)).toBe("pick-start");
     await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
     const after = (await range())!;
     expect(Math.abs(after.to - before.to)).toBeLessThan(1);

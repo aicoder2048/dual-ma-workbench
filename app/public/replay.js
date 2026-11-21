@@ -1,5 +1,5 @@
 // K 线回放：从过去某一天开始，一根一根往后放。纯逻辑，不碰页面。
-// 状态：{ mode: "off" } | { mode: "select" } | { mode: "replay", index, playing }
+// 状态：{ mode: "off" } | { mode: "replay", index, playing }。"点图选起点"是图上的交互模式（chart.js 的 tool），不在这里。
 
 export const OFF = { mode: "off" };
 export const PERIODS = [20, 60, 120];
@@ -14,10 +14,8 @@ const at = (index, playing = false) => ({ mode: "replay", index, playing });
 export function step(s, action, total) {
   const last = total - 1;
   switch (action.type) {
-    case "enter":
-      return s.mode === "select" ? s : { mode: "select" };
     case "pick":
-      if (s.mode === "off" || !Number.isInteger(action.index) || action.index < 0 || action.index > last) return s;
+      if (!Number.isInteger(action.index) || action.index < 0 || action.index > last) return s;
       return at(action.index, action.index < last); // 选好起点就开始播放（最后一根没东西可放）
     case "realtime":
     case "exit":

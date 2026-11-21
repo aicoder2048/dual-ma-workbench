@@ -232,11 +232,12 @@ export function createChart(box, legendEl) {
     helpBtn.setAttribute("aria-expanded", String(!help.hidden));
   });
 
+  let tool = "none"; // 图上的交互模式，见下面的 setTool
+
   // ---------- 自己画的水平线：按股票记在本机浏览器里 ----------
   let drawKey = null; // 当前股票
   let drawn = []; // 价格
   let drawnLines = [];
-  let drawing = false;
   const storeKey = () => `dma-lines:${drawKey}`;
   const loadDrawn = () => {
     try { drawn = JSON.parse(localStorage.getItem(storeKey()) ?? "[]").filter(Number.isFinite); } catch { drawn = []; }
@@ -251,26 +252,20 @@ export function createChart(box, legendEl) {
     }));
   };
   const drawBtn = tools.querySelector(".draw-toggle");
-  const setDrawing = (on) => {
-    drawing = on;
-    drawBtn.setAttribute("aria-pressed", String(on));
-    drawBtn.textContent = on ? "点图上的价位…" : "画线";
-    box.classList.toggle("drawing", on);
-  };
-  drawBtn.addEventListener("click", () => setDrawing(!drawing));
+  drawBtn.addEventListener("click", () => setTool(tool === "draw" ? "none" : "draw"));
   tools.querySelector(".draw-clear").addEventListener("click", () => {
     drawn = [];
     saveDrawn();
     paintDrawn();
   });
   chart.subscribeClick((param) => {
-    if (!drawing || rs.mode === "select" || !param.point) return;
+    if (tool !== "draw" || !param.point) return;
     const price = candles.coordinateToPrice(param.point.y);
     if (price == null) return;
     drawn.push(Math.round(price * 100) / 100);
     saveDrawn();
     paintDrawn();
-    setTimeout(() => setDrawing(false)); // 同一次点击的其他处理（问鸿雁）还要看到"正在画线"
+    setTimeout(() => setTool("none")); // 同一次点击的其他处理（问鸿雁）还要看到"正在画线"
   });
 
   let data = null; // 完整数据
@@ -404,7 +399,7 @@ export function createChart(box, legendEl) {
     if (rs.mode !== "replay") {
       if (view !== data) {
         // 回放中重选起点：视图留在原处（逻辑序号前后一致），退出回放才回到默认范围
-        const r = rs.mode === "select" ? chart.timeScale().getVisibleLogicalRange() : null;
+        const r = tool === "pick-start" ? chart.timeScale().getVisibleLogicalRange() : null;
         show(data);
         if (r) chart.timeScale().setVisibleLogicalRange(r); else applyRange();
       }
@@ -445,8 +440,8 @@ export function createChart(box, legendEl) {
   /** 按钮、提示、徽标、十字线、选起点的覆盖层跟着状态走。 */
   let shownMode = "off";
   function syncReplay() {
-    const on = rs.mode !== "off";
-    const selecting = rs.mode === "select";
+    const selecting = tool === "pick-start";
+    const on = rs.mode === "replay" || selecting;
     replayBtn.setAttribute("aria-pressed", String(on));
     replayBtn.textContent = selecting ? "取消选起点" : rs.mode === "replay" ? "退出回放" : "回放";
     bar.hidden = !on;
@@ -454,7 +449,8 @@ export function createChart(box, legendEl) {
     box.classList.toggle("replay-selecting", selecting);
     chart.applyOptions({ crosshair: { vertLine: { visible: !selecting, labelVisible: !selecting } } });
     if (!selecting) overlay.hidden = true;
-    if (rs.mode !== shownMode) { setMenu(false); shownMode = rs.mode; } // 只在换状态时收菜单：播放中每走一根不收
+    const shown = selecting ? "select" : rs.mode;
+    if (shown !== shownMode) { setMenu(false); shownMode = shown; } // 只在换状态时收菜单：播放中每走一根不收
     const last = (data?.candles.length ?? 0) - 1;
     const atEnd = rs.mode === "replay" && rs.index >= last;
     $r(".replay-play").textContent = rs.playing ? "⏸ 暂停" : "▶ 播放";
@@ -470,18 +466,30 @@ export function createChart(box, legendEl) {
   }
 
   replayBtn.addEventListener("click", () => {
-    if (rs.mode === "off") { setDrawing(false); dispatch({ type: "enter" }); } else dispatch({ type: "exit" });
+    if (tool === "pick-start") setTool("none");
+    else if (rs.mode === "replay") dispatch({ type: "exit" });
+    else setTool("pick-start");
   });
+  /** 选好回放起点：退出选起点，从那天开始放。 */
+  const pickAt = (index) => {
+    setTool("none");
+    dispatch({ type: "pick", index });
+  };
+  /** 退出回放和选起点（练习、取数失败、收起图表时）。 */
+  const leaveReplay = () => {
+    if (tool === "pick-start") setTool("none");
+    dispatch({ type: "exit" });
+  };
   $r(".replay-start").addEventListener("click", () => setMenu(menu.hidden));
   menu.addEventListener("click", (e) => {
     const how = e.target.closest("[data-start]")?.dataset.start;
     if (!how || !data) return;
-    if (how === "click") { dispatch({ type: "enter" }); return; }
-    dispatch({ type: "pick", index: how === "earliest" ? earliestIndex(data) : randomIndex(data) });
+    if (how === "click") { setTool("pick-start"); return; }
+    pickAt(how === "earliest" ? earliestIndex(data) : randomIndex(data));
   });
   menu.querySelector("input").addEventListener("change", (e) => {
     const i = data ? indexOnOrBefore(data.candles, e.target.value) : -1;
-    if (i >= 0) dispatch({ type: "pick", index: i });
+    if (i >= 0) pickAt(i);
   });
   $r(".replay-play").addEventListener("click", () => dispatch({ type: "toggle" }));
   $r(".replay-back").addEventListener("click", () => dispatch({ type: "back" }));
@@ -502,7 +510,7 @@ export function createChart(box, legendEl) {
 
   // 选起点：竖线跟着鼠标，右边变暗，时间轴上写出日期
   chart.subscribeCrosshairMove((param) => {
-    if (rs.mode !== "select" || !param.point || !param.time) { overlay.hidden = true; return; }
+    if (tool !== "pick-start" || !param.point || !param.time) { overlay.hidden = true; return; }
     const x = chart.timeScale().timeToCoordinate(param.time) ?? param.point.x;
     const w = chart.timeScale().width();
     const axis = chart.timeScale().height();
@@ -515,15 +523,30 @@ export function createChart(box, legendEl) {
     dateEl.textContent = `回放起点 ${isoDate(param.time)}`;
   });
   chart.subscribeClick((param) => {
-    if (rs.mode !== "select" || !param.time) return;
+    if (tool !== "pick-start" || !param.time) return;
     const i = data.candles.findIndex((c) => c.time === isoDate(param.time));
-    setTimeout(() => dispatch({ type: "pick", index: i })); // 同一次点击的问鸿雁还要看到"正在选起点"
+    setTimeout(() => pickAt(i)); // 同一次点击的问鸿雁还要看到"正在选起点"
   });
 
-  // 快捷键：Shift+↓ 播放 / 暂停，Shift+→ 前进一根；Esc 取消选起点。焦点在输入框里时不管。
+  // ---------- 图上的交互模式：无 / 画线 / 测量 / 选回放起点，同一时刻只有一种 ----------
+  // 点图做什么由 tool 决定；换模式只走 setTool，按钮、光标、提示都从它同步
+  function setTool(next) {
+    if (next === tool) return;
+    tool = next;
+    if (tool === "pick-start" && rs.mode === "replay") dispatch({ type: "exit" }); // 回放中重选起点：先回到完整数据，视图留在原处
+    syncTool();
+  }
+  function syncTool() {
+    drawBtn.setAttribute("aria-pressed", String(tool === "draw"));
+    drawBtn.textContent = tool === "draw" ? "点图上的价位…" : "画线";
+    box.classList.toggle("drawing", tool === "draw");
+    syncReplay();
+  }
+
+  // 快捷键：Shift+↓ 播放 / 暂停，Shift+→ 前进一根；Esc 退出画线、测量、选起点。焦点在输入框里时不管。
   document.addEventListener("keydown", (e) => {
     if (e.target.closest?.("input, textarea, select, [contenteditable]")) return;
-    if (e.key === "Escape" && rs.mode === "select") { dispatch({ type: "exit" }); return; }
+    if (e.key === "Escape" && tool !== "none") { setTool("none"); return; }
     if (rs.mode !== "replay" || !e.shiftKey || e.metaKey || e.ctrlKey || e.altKey) return;
     const action = { ArrowDown: "toggle", ArrowRight: "forward", ArrowLeft: "back" }[e.key];
     if (!action) return;
@@ -546,6 +569,7 @@ export function createChart(box, legendEl) {
       data = d;
       const index = at ? indexOnOrBefore(d.candles, at) : -1;
       rs = index >= 0 ? { mode: "replay", index, playing: false } : OFF;
+      if (tool === "pick-start") tool = "none"; // 换了数据：选到一半的起点作废
       arm();
       if (!sameTicker) { drawKey = key; loadDrawn(); }
       paintDrawn();
@@ -557,7 +581,7 @@ export function createChart(box, legendEl) {
         applyRange();
       }
       paintLevels();
-      syncReplay();
+      syncTool();
     },
     /** 盲测练习：往后多了一根（服务端只发到现在那根）。只追加，视图不跳。 */
     extend(delta) {
@@ -582,11 +606,11 @@ export function createChart(box, legendEl) {
     },
     /** 练习时收起「回放」：数据本来就只到现在那根，自己的回放会和练习的推进混在一起。 */
     setPractice(on) {
-      if (on) dispatch({ type: "exit" });
+      if (on) leaveReplay();
       replayBtn.hidden = on;
     },
     /** 停止回放、回到完整数据（取数失败、中栏收起图表时用）。 */
-    stopReplay() { dispatch({ type: "exit" }); },
+    stopReplay() { leaveReplay(); },
     /** 财报日（分析 JSON 的 earnings）：图上标 E；练习里没有，传 null 清掉。 */
     setEarnings(e) {
       earnings = e ?? null;
@@ -602,13 +626,15 @@ export function createChart(box, legendEl) {
     /** 自己画的线（价格列表）。 */
     drawn: () => [...drawn],
     /** 回放状态（测试用）：mode / index / playing，加上速度、回放到的日期、图上几根 K 线。 */
+    /** 图上的交互模式（测试用）：none | draw | measure | pick-start。 */
+    tool: () => tool,
     replay: () => ({ ...rs, speed, date: rs.mode === "replay" ? data.candles[rs.index].time : null, bars: view?.candles.length ?? 0 }),
     /** 回放里点「按这一天分析」时回调那天的日期。 */
     onAnalyzeDate(cb) { analyzeDate = cb; },
-    /** 点图表时回调 { time, candle, lines, drops, point }，给"问鸿雁"用。画线、选回放起点时不回调；回放时按回放到的数据。 */
+    /** 点图表时回调 { time, candle, lines, drops, point }，给"问鸿雁"用。画线、测量、选回放起点时不回调；回放时按回放到的数据。 */
     onPick(cb) {
       chart.subscribeClick((param) => {
-        if (drawing || rs.mode === "select" || !param.time || !view) return;
+        if (tool !== "none" || !param.time || !view) return;
         const candle = view.candles.find((c) => c.time === param.time);
         if (!candle) return; // 回放时右边空白处
         const lines = Object.fromEntries(SPECS.map((s) => [s.key, (view.lines[s.key] || []).find((p) => p.time === param.time)?.value]));

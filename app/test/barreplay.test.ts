@@ -14,13 +14,10 @@ const D = {
 
 describe("回放状态机", () => {
   const off = { mode: "off" } as const;
-  const select = { mode: "select" } as const;
   const at = (index: number, playing = false) => ({ mode: "replay", index, playing }) as const;
 
-  test("关 → 选起点 → 选中某天就开始播放 → 暂停 → 播放", () => {
-    let s: any = step(off, { type: "enter" }, N);
-    expect(s).toEqual(select);
-    s = step(s, { type: "pick", index: 50 }, N);
+  test("关 → 选中某天就开始播放 → 暂停 → 播放（点图选起点是图上的交互模式，不在这台状态机里）", () => {
+    let s: any = step(off, { type: "pick", index: 50 }, N);
     expect(s).toEqual(at(50, true)); // 选好起点立刻动起来，用户不用再找播放键
     s = step(s, { type: "toggle" }, N);
     expect(s).toEqual(at(50));
@@ -44,7 +41,6 @@ describe("回放状态机", () => {
     const first = at(0);
     expect(step(first, { type: "back" }, N)).toBe(first);
     expect(step(off, { type: "back" }, N)).toBe(off);
-    expect(step(select, { type: "back" }, N)).toBe(select);
   });
 
   test("在最后一根上不能开始播放", () => {
@@ -52,24 +48,22 @@ describe("回放状态机", () => {
     expect(step(at(N - 1), { type: "toggle" }, N)).toEqual(at(N - 1));
   });
 
-  test("回放中可以重选起点（enter 停下播放）、直接换一天（pick 接着播）、回到最新", () => {
-    expect(step(at(50, true), { type: "enter" }, N)).toEqual(select);
+  test("回放中直接换一天（pick 接着播）、回到最新、退出", () => {
     expect(step(at(50, true), { type: "pick", index: 10 }, N)).toEqual(at(10, true));
     expect(step(at(50, true), { type: "realtime" }, N)).toEqual(off);
-    expect(step(select, { type: "exit" }, N)).toEqual(off);
+    expect(step(at(50, true), { type: "exit" }, N)).toEqual(off);
   });
 
   test("最后一根也能选（没东西可放，不播放）；越界的选不了", () => {
-    expect(step(select, { type: "pick", index: N - 1 }, N)).toEqual(at(N - 1));
-    for (const index of [-1, N, 1.5, NaN]) expect(step(select, { type: "pick", index }, N)).toBe(select);
+    expect(step(off, { type: "pick", index: N - 1 }, N)).toEqual(at(N - 1));
+    for (const index of [-1, N, 1.5, NaN]) expect(step(off, { type: "pick", index }, N)).toBe(off);
   });
 
   test("不合法的动作原样返回", () => {
     const s = at(5);
-    for (const a of [{ type: "forward" }, { type: "play" }, { type: "pick", index: 3 }, { type: "exit" }] as const) {
+    for (const a of [{ type: "forward" }, { type: "play" }, { type: "back" }, { type: "exit" }] as const) {
       expect(step(off, a, N)).toBe(off);
     }
-    for (const a of [{ type: "forward" }, { type: "play" }, { type: "enter" }] as const) expect(step(select, a, N)).toBe(select);
     expect(step(s, { type: "nonsense" } as any, N)).toBe(s);
     expect(step(at(5), { type: "pause" }, N)).toEqual(at(5));
   });
