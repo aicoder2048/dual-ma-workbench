@@ -14,7 +14,8 @@ const SIMPLE = ["simple", "structure", "all"], STRUCTURE = ["structure", "all"],
 /**
  * 能不能用看图表现在的情况 ctx：
  * { frame: "day" | "week", replay: 在不在回放, structure: 这份数据有没有结构标注,
- *   gaps: 没补的缺口有几个（null：这份数据没有缺口）, moreGaps: 默认不画的缺口有几个, volume: 有没有成交量 }。
+ *   gaps: 没补的缺口有几个（null：这份数据没有缺口）, moreGaps: 默认不画的缺口有几个, volume: 有没有成交量,
+ *   tone: 颜色的来源 { name, legend, warning }（tones.js 的 toneInfo，日线、周线各一份） }。
  * 返回不能用的原因；能用返回 null。
  */
 const always = () => null;
@@ -31,7 +32,9 @@ const profileWhy = (c) => (c.frame === "week" ? "筹码按日线算：切回日�
 
 /**
  * 每个图层一行。key：状态里的键；group：菜单里的分组，同一组里第一行是主项，后面的是它的子项（主项关着或不能用，子项也不能用）；
- * hint：菜单里标签后面的一句小字（可以看 ctx）；title：悬停看的说明；presets：属于哪些预设；available(ctx)：见上。
+ * presets：属于哪些预设；available(ctx)：见上。菜单里的字都可以写成看 ctx 的函数：
+ * hint：标签后面的一句小字；lead：小字前面单独一行、不变灰的字（「着色」写颜色是谁算的）；title：悬停看的说明；
+ * note：这一行下面的一句提醒，没有就不占地方。
  */
 export const LAYERS = [
   { key: "ma", group: "均线", label: "均线", hint: "MA、EMA 20 / 60 / 120", presets: SIMPLE, available: always,
@@ -41,16 +44,10 @@ export const LAYERS = [
     title: "把结论里的触发价、止损、目标和推翻判断的价位画成虚线" },
   { key: "drops", group: "抵扣价", label: "抵扣价", hint: "小黄点", presets: SIMPLE, available: always,
     title: "小黄点：明天各条 MA 要扣掉的那根 K 线（抵扣价）" },
-  { key: "tone", group: "着色", label: "着色", hint: "按 20 线破线拐头给 K 线上色", presets: ALL, available: always,
-    title: [
-      "破线拐头信号着色：按 20 线有没有破线拐头给 K 线上色",
-      "绿：收盘在 MA20 上方，且高于 20 日抵扣价（MA20 向上）",
-      "黑：两样都不满足（MA20 向下）。第一根黑柱就是破线拐头信号",
-      "灰：只满足一样，过渡状态",
-      "这是 LEI 黑绿线指标第一个因子的简化版，只看 MA20 破线和拐头；不是他的黑绿线（他还看 60 线组、20/60 交叉和 MACD 强度，代码没公开）",
-      "怎么读（视频 P）：多头排列里绿 = 持有 / 做多，黑 = 离场；空头排列里见绿也不做多；灰 = 不动",
-      "三点钟方向的横盘里颜色会来回翻，别跟着翻来翻去地交易",
-    ].join("\n") },
+  // 颜色按什么规则算、怎么读，都由图表数据的 tone_source 说（自带规则或本机的着色插件），这里不留一份
+  { key: "tone", group: "着色", label: "着色", presets: ALL, available: always,
+    lead: (c) => c.tone.name, hint: (c) => c.tone.legend[0] ?? "", note: (c) => c.tone.warning,
+    title: (c) => [c.tone.name, ...c.tone.legend].filter(Boolean).join("\n") },
   { key: "constructs", group: "顶底构造", label: "顶底构造", hint: "最近的顶部、底部构造", presets: STRUCTURE, available: structureWhy,
     title: "最近的顶部 / 底部构造和它的状态；形成中时旁边的短虚线写着下一根 K 线怎样就完成。点图上的标记看规则原文" },
   { key: "patterns", group: "形态", label: "形态", hint: "M 顶、W 底、2B 和颈线", presets: STRUCTURE, available: structureWhy,
@@ -77,16 +74,18 @@ export const presetOf = (state) => PRESETS.find((p) => LAYERS.every((l) => Boole
 export const toggleLayer = (state, key) => ({ ...state, [key]: !state[key] });
 
 /**
- * 菜单的每一行：{ key, group, label, hint, title, sub（是不是子项）, on（开关开着）, why（不能用的原因或 null）, shown（图上画不画 = 开着而且能用） }。
+ * 菜单的每一行：{ key, group, label, lead, hint, title, note, sub（是不是子项）, on（开关开着）, why（不能用的原因或 null）,
+ * shown（图上画不画 = 开着而且能用） }。lead、note 没有时是 null。
  */
 export function layerRows(state, ctx) {
+  const text = (v) => (typeof v === "function" ? v(ctx) : v) ?? null;
   const rows = [];
   for (const l of LAYERS) {
     const head = rows.find((r) => r.group === l.group);
     const why = head ? head.why ?? (head.on ? l.available(ctx) : `先打开「${head.label}」`) : l.available(ctx);
     const on = Boolean(state[l.key]);
-    rows.push({ key: l.key, group: l.group, label: l.label, hint: typeof l.hint === "function" ? l.hint(ctx) : l.hint,
-      title: l.title, sub: Boolean(head), on, why, shown: on && !why });
+    rows.push({ key: l.key, group: l.group, label: l.label, lead: text(l.lead), hint: text(l.hint), title: text(l.title), note: text(l.note),
+      sub: Boolean(head), on, why, shown: on && !why });
   }
   return rows;
 }

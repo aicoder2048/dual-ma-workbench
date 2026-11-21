@@ -1,6 +1,6 @@
 // K 线 + 6 条均线 + 抵扣价小黄点 + 成交量（TradingView lightweight-charts 4.2.0）。
 import { baseCandleStyle, candleBar as styledBar } from "./candles.js";
-import { CHART_HELP } from "./charthelp.js";
+import { CHART_HELP, toneHelp } from "./charthelp.js";
 import { createOverlay } from "./chartoverlay.js";
 import { earningsMarks, logicalOf } from "./earnings.js";
 import { createLayerMenu } from "./layermenu.js";
@@ -11,6 +11,7 @@ import { gapBands, pickGaps, structureScene } from "./overlays.js";
 import { createProfileLayer } from "./profilelayer.js";
 import { ohlcRow, weekLabel } from "./readout.js";
 import { DEFAULT_SPEED, OFF, SPEEDS, appendDelta, earliestIndex, indexOnOrBefore, randomIndex, sliceAt, speedMs, step } from "./replay.js";
+import { toneInfo } from "./tones.js";
 import { visibleProfile } from "./volprofile.js";
 
 /** 图表库传来的时间（"2026-10-22"、{year,month,day} 或 UTC 秒）→ "2026-10-22"。 */
@@ -27,7 +28,7 @@ const NEXT_EARNINGS_ROOM = 15;
 
 const css = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
 
-// 破线拐头着色：tone 由 Python 算好（见 html_report.bar_tones），这里只查颜色
+// 着色：每根 K 线的 tone 由 Python 算好（skill 的 tones.py 的 bar_tones：自带规则或本机的着色插件），这里只查颜色
 const TONE_TOKENS = { bull: "--bar-bull", bear: "--bar-bear", mixed: "--bar-mixed" };
 /** 点结论卡片上的价位，图上那条线亮多久（毫秒）。 */
 const FLASH_MS = 4000;
@@ -166,8 +167,10 @@ export function createChart(box, legendEl) {
   /** 图表现在的情况，决定哪些图层能用（layers.js 的 ctx）。 */
   const layerCtx = () => {
     const { all, picked } = gapSets();
+    const whole = data ? frameData(data) : null; // 这一档（日线或周线）的完整数据：回放截短了的图上没带 tone_source
     return { frame, replay: rs.mode === "replay", structure: Boolean(structure?.available),
-      gaps: gaps ? gaps.list.length : null, moreGaps: all.length - picked.length, volume: Boolean(view?.volume?.length) };
+      gaps: gaps ? gaps.list.length : null, moreGaps: all.length - picked.length, volume: Boolean(view?.volume?.length),
+      tone: toneInfo(whole?.tone_source) };
   };
   /** 图上现在画哪些图层：开着而且能用。 */
   const shown = () => shownLayers(layers, layerCtx());
@@ -176,7 +179,12 @@ export function createChart(box, legendEl) {
     onPreset: (name) => setLayers(presetState(name)),
     onToggle: (key) => setLayers(toggleLayer(layers, key)),
   });
-  const syncLayers = () => layerMenu.render(layerRows(layers, layerCtx()), presetOf(layers));
+  /** 菜单和「怎么用」里讲着色的那段，都照图表现在的情况写。 */
+  const syncLayers = () => {
+    const ctx = layerCtx();
+    layerMenu.render(layerRows(layers, ctx), presetOf(layers));
+    help.querySelector('[data-help="tone"]').innerHTML = toneHelp(ctx.tone);
+  };
   function setLayers(next) {
     layers = next;
     try { localStorage.setItem(LAYERS_KEY, JSON.stringify(layers)); } catch { /* 忽略 */ }
@@ -894,7 +902,7 @@ export function createChart(box, legendEl) {
     layers: () => ({ preset: presetOf(layers), rows: layerRows(layers, layerCtx()).map(({ key, on, shown: drawn, why }) => ({ key, on, shown: drawn, why })) }),
     /** 图上的抵扣价小黄点（测试用）：["20扣", …]。 */
     drops: () => candles.markers().map((m) => m.text),
-    /** 有几根 K 线按破线拐头着了色（测试用）。 */
+    /** 有几根 K 线着了色（测试用）。 */
     toned: () => candles.data().filter((b) => b.borderColor).length,
     /** 自己画的线（价格列表）。 */
     drawn: () => [...drawn],

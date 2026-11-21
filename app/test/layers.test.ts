@@ -1,8 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import { DEFAULT_PRESET, LAYERS, PRESETS, layerRows, parseLayers, presetOf, presetState, shownLayers, toggleLayer } from "../public/layers.js";
 
+/** 一眼看得出是假的颜色来源。 */
+const FAKE_TONE = { name: "假规则：按日期单双", legend: ["单号绿、双号黑（测试用）", "第二行"], warning: null };
 /** 日线、不在回放、结构和缺口都有、有成交量：什么都能画。 */
-const DAY = { frame: "day", replay: false, structure: true, gaps: 8, moreGaps: 6, volume: true };
+const DAY = { frame: "day", replay: false, structure: true, gaps: 8, moreGaps: 6, volume: true, tone: FAKE_TONE };
 const onKeys = (state: Record<string, boolean>) => Object.keys(state).filter((k) => state[k]);
 const why = (state: Record<string, boolean>, ctx: object) => Object.fromEntries(layerRows(state, ctx).map((r) => [r.key, r.why]));
 
@@ -17,6 +19,41 @@ describe("图层表", () => {
   test("形态那一行写明是 M 顶、W 底、2B 和颈线", () => {
     const row = layerRows(presetState("all"), DAY).find((r) => r.key === "patterns")!;
     expect(row.hint).toBe("M 顶、W 底、2B 和颈线");
+  });
+});
+
+describe("「着色」那一行的说明跟着颜色的来源走", () => {
+  const tone = (ctx: object) => layerRows(presetState("all"), ctx).find((r) => r.key === "tone")!;
+
+  test("写来源的名字，小字是说明的第一行，悬停看整段", () => {
+    const row = tone(DAY);
+    expect([row.label, row.lead, row.hint]).toEqual(["着色", "假规则：按日期单双", "单号绿、双号黑（测试用）"]);
+    expect(row.title).toBe("假规则：按日期单双\n单号绿、双号黑（测试用）\n第二行");
+    expect(row.note).toBeNull();
+  });
+
+  test("换了来源（切到周线、换了数据）说明跟着换", () => {
+    const row = tone({ ...DAY, tone: { name: "假规则：周线版", legend: ["周线的说明"], warning: null } });
+    expect([row.lead, row.hint, row.title]).toEqual(["假规则：周线版", "周线的说明", "假规则：周线版\n周线的说明"]);
+  });
+
+  test("插件没用上：原因写在这一行下面", () => {
+    expect(tone({ ...DAY, tone: { ...FAKE_TONE, warning: "着色插件 fake.py 没用上，退回自带规则：文件不存在" } }).note)
+      .toBe("着色插件 fake.py 没用上，退回自带规则：文件不存在");
+  });
+
+  test("没有来源：不写名字，小字是那一行兜底说明", () => {
+    const row = tone({ ...DAY, tone: { name: null, legend: ["兜底说明"], warning: null } });
+    expect([row.lead, row.hint, row.title, row.note]).toEqual([null, "兜底说明", "兜底说明", null]);
+  });
+
+  test("插件只给了名字、没给说明：小字空着，不报错", () => {
+    const row = tone({ ...DAY, tone: { name: "假规则：没写说明", legend: [], warning: null } });
+    expect([row.lead, row.hint, row.title]).toEqual(["假规则：没写说明", "", "假规则：没写说明"]);
+  });
+
+  test("别的行没有来源名字和下面那句", () => {
+    for (const r of layerRows(presetState("all"), DAY).filter((x) => x.key !== "tone")) expect([r.key, r.lead, r.note]).toEqual([r.key, null, null]);
   });
 });
 

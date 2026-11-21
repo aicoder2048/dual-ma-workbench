@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { DEFAULT_SPEED, SPEEDS, earliestIndex, indexOnOrBefore, randomIndex, sliceAt, speedMs, step } from "../public/replay.js";
+import { DEFAULT_SPEED, SPEEDS, appendDelta, earliestIndex, indexOnOrBefore, randomIndex, sliceAt, speedMs, step } from "../public/replay.js";
 
 /** 200 根日线，前 119 根没有 MA120（和真数据一样：长均线晚开始）。drops 按 Python 的 close[-n] 写死。 */
 const N = 200;
@@ -105,6 +105,21 @@ describe("截到某一天的图表数据", () => {
 
   test("截到最后一根 = 原样的抵扣价", () => {
     expect(sliceAt(D, N - 1).drops).toEqual(D.drops);
+  });
+});
+
+describe("练习往后放一根", () => {
+  test("新的一根接在后面；颜色的来源说明留着（图层菜单里「着色」那行要用）", () => {
+    const source = { key: "builtin", name: "假规则：按日期单双", legend: ["测试用"], warning: null };
+    const candle = { time: "2025-07-20", open: 1, high: 2, low: 0, close: 1, tone: "bull" };
+    const next = appendDelta({ ...D, tone_source: source }, { candle, volume: [{ time: candle.time, value: 5, spike: false }],
+      lines: { MA20: [{ time: candle.time, value: 9 }] }, drops: [{ time: days[N - 19], period: 20 }] });
+    expect(next.candles).toHaveLength(N + 1);
+    expect(next.candles.at(-1)).toEqual(candle);
+    expect(next.lines.MA20.at(-1)).toEqual({ time: candle.time, value: 9 });
+    expect(next.lines.EMA20).toHaveLength(D.lines.EMA20.length);
+    expect(next.drops).toEqual([{ time: days[N - 19], period: 20 }]);
+    expect(next.tone_source).toEqual(source);
   });
 });
 

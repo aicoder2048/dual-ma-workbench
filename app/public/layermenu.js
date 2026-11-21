@@ -13,7 +13,9 @@ export function createLayerMenu(wrap, { onPreset, onToggle }) {
     + PRESETS.map((p) => `<button type="button" data-preset="${p.key}" aria-pressed="false" title="${p.title}">${p.label}</button>`).join("")
     + `<span class="layers-custom" title="手动改过，和三个预设都不一样；点一个预设就换回去" hidden>自定</span></div>`
     + LAYERS.map((l) => `<button type="button" class="layer-item" data-layer="${l.key}" aria-pressed="false">`
-      + `<span class="li-check" aria-hidden="true"></span><span class="li-label">${l.label}</span><span class="li-hint"></span></button>`).join("")
+      + `<span class="li-check" aria-hidden="true"></span><span class="li-label">${l.label}</span>`
+      + `<span class="li-hint"><span class="li-lead"></span><span class="li-text"></span></span></button>`
+      + `<p class="layer-note" data-note="${l.key}" hidden></p>`).join("")
     + `</div>`;
   const btn = wrap.querySelector(".layers-toggle");
   const menu = wrap.querySelector(".layers-menu");
@@ -74,7 +76,11 @@ export function createLayerMenu(wrap, { onPreset, onToggle }) {
         item.classList.toggle("sub", r.sub);
         item.setAttribute("aria-pressed", String(r.shown));
         item.title = r.why ?? r.title;
-        item.querySelector(".li-hint").textContent = r.why ?? r.hint; // 不能用时这一行直接写原因
+        item.querySelector(".li-lead").textContent = r.why ? "" : r.lead ?? "";
+        item.querySelector(".li-text").textContent = r.why ?? r.hint; // 不能用时这一行直接写原因
+        const note = menu.querySelector(`[data-note="${r.key}"]`);
+        note.hidden = !r.note;
+        note.textContent = r.note ?? "";
       }
       for (const b of menu.querySelectorAll("[data-preset]")) b.setAttribute("aria-pressed", String(b.dataset.preset === preset));
       custom.hidden = preset !== null;
