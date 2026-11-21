@@ -10,8 +10,9 @@ const MAX_WIDTH = 160;
 const FRAME_PAD = 4;
 const LABEL_H = 13;
 
+const barsWidth = (paneW) => Math.min(paneW * WIDTH_SHARE, MAX_WIDTH);
 /** 直方图连山框从绘图区右边往左占多宽（像素）：图右边按它留白，最新一根 K 线停在它左边。 */
-export const profileWidth = (paneW) => Math.min(paneW * WIDTH_SHARE, MAX_WIDTH) + FRAME_PAD;
+export const profileWidth = (paneW) => barsWidth(paneW) + FRAME_PAD;
 
 /**
  * 返回 set({ profile, ref, close, guides, colors }) 和测试用的读数。profile 为 null 时不画。
@@ -37,8 +38,8 @@ export function createProfileLayer(chart, series) {
     drawn = null;
     if (!p) return;
     const paneW = size.width;
+    const maxW = barsWidth(paneW);
     const left = paneW - profileWidth(paneW);
-    const maxW = paneW - left - FRAME_PAD;
     const peak = Math.max(...p.volumes);
     const inMountain = (j) => p.mountains.some((m) => m.foot <= p.edges[j] && p.edges[j + 1] <= m.top);
     for (let j = 0; j < p.volumes.length; j++) {

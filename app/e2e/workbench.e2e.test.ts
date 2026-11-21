@@ -1209,6 +1209,8 @@ describe("筹码分布", () => {
     await zoom(page, -400);
     await until(page, "放大后重算", async (n) => (await import("/app.js")).getChart().profile().bars < n, 5000, bars);
     await parked(page, "放大");
+    // 以最新一根为锚放大：看得见的 K 线按比例变少（滚 400 是 e^(-4/3) 倍），不是以右边的空白为锚、只剩最后几根
+    expect(Math.abs((await profile(page)).bars - bars * Math.exp(-400 / 300))).toBeLessThan(3);
     bars = (await profile(page)).bars;
     await zoom(page, 600);
     await until(page, "缩小后重算", async (n) => (await import("/app.js")).getChart().profile().bars > n, 5000, bars);
