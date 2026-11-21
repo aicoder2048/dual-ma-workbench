@@ -83,6 +83,15 @@ const STRUCTURE = (() => {
   };
 })();
 
+/** 标记挤在最右边的替身：底部构造在倒数第 3 根、顶部构造在倒数第 2 根、2B 顶确认在最新一根，正好在价格轴标签旁边。 */
+const EDGE_STRUCTURE = (() => {
+  const d = (i: number) => CHART.candles[i].time;
+  return { ...STRUCTURE,
+    top: { ...STRUCTURE.top, pivot_date: d(298), pivot_price: CHART.candles[298].high, lh_date: d(299), done_date: d(299) },
+    bottom: { ...STRUCTURE.bottom, pivot_date: d(297), pivot_price: CHART.candles[297].low, lh_date: d(298) },
+    patterns: [{ name: "2B 顶", state: "已形成", dates: [d(290), d(298)], level: CHART.candles[290].high, confirmed: d(299) }] };
+})();
+
 /** 缺口替身：第 150、270 根跳空向下，之后没补满（下沿是之后最高价够到的地方）。 */
 const GAPS = [150, 270].map((i) => ({ date: CHART.candles[i].time, top: CHART.candles[i - 1].low + 6, bottom: CHART.candles[i - 1].low + 1 }));
 
@@ -167,6 +176,9 @@ beforeAll(async () => {
       }
       if (args[0] === "TONE") { // 颜色是着色插件算的；带结构标注，看小三角和构造、形态的标记在同一根上怎么放
         return JSON.stringify({ analysis: { ...(nvda as Analysis), label: "TONE", structure: STRUCTURE }, chart: TONE_CHART });
+      }
+      if (args[0] === "EDGE") { // 结构标记、变色提示都在最右边几根，挨着价格轴标签
+        return JSON.stringify({ analysis: { ...(nvda as Analysis), label: "EDGE", structure: EDGE_STRUCTURE }, chart: TONE_CHART });
       }
       if (args[0] === "TONEWARN") { // 着色插件没用上：退回自带规则，tone_source 里带着原因
         return JSON.stringify({ analysis: { ...(nvda as Analysis), label: "TONEWARN" },
@@ -1057,6 +1069,60 @@ describe("结构标注", () => {
     expect((await layerItem(page, "constructs")).disabled).toBe(false);
     await page.keyboard.press("Escape");
     expect(await shown(page)).toHaveLength(4);
+    expect(errors).toEqual([]);
+    await page.close();
+  }, 30_000);
+
+  test("最右边几根上的标记、变色三角和小字，不盖住价格轴上的标签（价位线的名字和价格、最新价、均线值）", async () => {
+    const { page, errors } = await open(undefined, "EDGE");
+    await page.waitForSelector("#chart canvas");
+    await scrollIntoCenter(page, ".chart-card");
+    await pickPreset(page, "all");
+    await switchLayer(page, "profile"); // 筹码开着时图让出右边一截；关掉，标记才挨着价格轴
+    // 价位线就在最新一根旁边：上面「先看」、下面「进场后止损」（名字最长的那种）
+    const c = CHART.candles.at(-1)!;
+    await page.evaluate(async (c) => (await import("/app.js")).getChart().setLevels([
+      { kind: "trigger", price: c.high + 1, title: "先看" }, { kind: "stop", price: c.low - 1.5, title: "进场后止损" }]), c);
+    await page.mouse.move(1, 1); // 十字线不在图上
+    expect(await shown(page)).toEqual(["顶·已完成", "底·形成中", "2B顶"]);
+    await until(page, "价格轴标签和变色三角都画出来", async () => {
+      const g = (await import("/app.js")).getChart();
+      return g.axisLabels().length >= 6 && g.turns().length > 0;
+    });
+    const seen = await page.evaluate(async () => {
+      const g = (await import("/app.js")).getChart();
+      const chart = document.getElementById("chart")!, origin = chart.getBoundingClientRect();
+      const [paneTd, axisTd] = [...chart.querySelectorAll("table tr:first-child > td")].slice(1, 3);
+      const paneRight = axisTd.getBoundingClientRect().left - origin.left;
+      const boxes: { left: number; top: number; width: number; height: number }[] = g.axisLabels();
+      const hit = (a: any, b: any) => a.left < b.left + b.width && b.left < a.left + a.width && a.top < b.top + b.height && b.top < a.top + a.height;
+      const marks = [...chart.querySelectorAll<HTMLElement>(".struct-mark")].filter((e) => !e.hidden).map((e) => {
+        const r = e.getBoundingClientRect();
+        const box = { left: r.left - origin.left, top: r.top - origin.top, width: r.width, height: r.height };
+        return { text: e.textContent, box, inPane: box.left + box.width <= paneRight + 0.5, clear: !boxes.some((b) => hit(b, box)) };
+      });
+      const apart = marks.every((a, k) => marks.slice(k + 1).every((b) => !hit(a.box, b.box))); // 让开以后也不叠在一起
+      const labels = g.labels().labels.filter((l: any) => !l.hidden).map((l: any) => ({ text: l.text, clear: !boxes.some((b) => hit(b, l)) }));
+      // 变色三角和小字画在绘图区的上层画布：价格轴标签（名字那一截在绘图区里）的范围内这层一个像素都不画
+      const [main, top] = paneTd.querySelectorAll("canvas");
+      const dpr = top.width / top.getBoundingClientRect().width;
+      const covered = boxes.filter((b) => b.left < paneRight).map((b) => {
+        const px = top.getContext("2d")!.getImageData(Math.floor(b.left * dpr), Math.floor(Math.max(b.top, 0) * dpr),
+          Math.ceil((paneRight - b.left) * dpr), Math.ceil(b.height * dpr)).data;
+        return px.some((v, k) => k % 4 === 3 && v > 0);
+      });
+      // 名字那一截确实在算出来的地方：底下的画布在框的中线上有颜色，不是图的底色
+      const bg = getComputedStyle(document.documentElement).getPropertyValue("--card").trim();
+      const hex = (d: Uint8ClampedArray) => "#" + [...d.slice(0, 3)].map((v) => v.toString(16).padStart(2, "0")).join("");
+      const titled = boxes.filter((b) => b.left < paneRight).map((b) => hex(main.getContext("2d")!.getImageData(
+        Math.round((b.left + 4) * dpr), Math.round((b.top + b.height / 2) * dpr), 1, 1).data) !== bg);
+      return { marks: marks.map(({ box, ...m }) => m), apart, labels, covered, titled };
+    });
+    for (const m of seen.marks) expect(m).toEqual({ text: m.text, inPane: true, clear: true });
+    expect(seen.apart).toBe(true);
+    for (const l of seen.labels) expect(l).toEqual({ text: l.text, clear: true });
+    expect(seen.titled).toEqual([true, true]); // 「先看」「进场后止损」两个名字
+    expect(seen.covered).toEqual([false, false]);
     expect(errors).toEqual([]);
     await page.close();
   }, 30_000);

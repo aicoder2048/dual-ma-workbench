@@ -1,6 +1,6 @@
 // 把 overlays.js 换算好的结构标注画到 K 线图上：线和色带画在图表的画布里（series primitive，跟着缩放、平移、坐标轴走），
 // 标记是盖在图上的小按钮（点开看规则原文，和正文里的规则编号同一个弹窗）。变色提示的小三角也画在这块画布里。
-import { layoutLabels } from "./labels.js";
+import { axisLabelBoxes, dodgeLeft, layoutLabels } from "./labels.js";
 
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
@@ -21,9 +21,10 @@ const PRIORITY = { target: 0, level: 1, neck: 2, gap: 3 };
 
 /**
  * chart、series：lightweight-charts 的图和 K 线；box：图的容器。
+ * axisLabels()：价格轴上现在写着的标签 [{ price, title }]（标记、小字、小三角都不压在上面）。
  * 返回 set(scene, colors)：scene 是 { segments, levels, marks, bands }（见 overlays.js），colors 是颜色键 → 颜色。
  */
-export function createOverlay(chart, series, box) {
+export function createOverlay(chart, series, box, axisLabels = () => []) {
   let scene = { segments: [], levels: [], marks: [], bands: [] };
   let colors = {};
   let candles = [];
@@ -33,6 +34,8 @@ export function createOverlay(chart, series, box) {
   let turns = { list: [], colors: {} };
   let drawnTurns = []; // 上一次画的小三角（测试用）
   let request = null;
+  let axisBoxes = []; // 价格轴标签占的地方（含绘图区里价位线的名字），每次重画前算一遍
+  const measurer = document.createElement("canvas").getContext("2d");
 
   const layer = document.createElement("div");
   layer.className = "struct-layer";
@@ -62,10 +65,12 @@ export function createOverlay(chart, series, box) {
     return { text, color, priority, left: right ? px - 1 - w : px + 1, top: py - 15, width: w, height: LABEL_H };
   }
 
-  /** 摆好再画：互相不压、不压在价位线上，放不下的不写。 */
+  /** 摆好再画：先往左让开价格轴标签，再互相不压、不压在价位线上，放不下的不写。 */
   function drawLabels(g, labels) {
     const ys = guides.map(y).filter((v) => ok(v));
-    laidOut = layoutLabels(labels, ys, box.clientHeight - chart.timeScale().height());
+    const paneW = chart.timeScale().width();
+    const dodged = labels.map((l) => ({ ...l, left: dodgeLeft(l, axisBoxes, paneW) }));
+    laidOut = layoutLabels(dodged, ys, box.clientHeight - chart.timeScale().height(), axisBoxes);
     g.font = `11px ${colors.font}`;
     g.textBaseline = "bottom";
     for (const l of laidOut) {
@@ -154,16 +159,39 @@ export function createOverlay(chart, series, box) {
     }
   };
 
+  /**
+   * 三角、线和小字画在 K 线图的上层画布，盖得住图表库画的价位线名字。名字那几块（axisBoxes）挖掉不画，
+   * 名字就压在它们上面：线穿过名字时断开，三角落在名字上时不画。
+   */
+  const besideAxis = (draw) => (g) => {
+    g.save();
+    g.beginPath();
+    g.rect(0, 0, box.clientWidth, box.clientHeight);
+    for (const b of axisBoxes) g.rect(b.left, b.top, b.width, b.height);
+    g.clip("evenodd");
+    draw(g);
+    g.restore();
+  };
+
   const view = (draw, zOrder) => ({
     zOrder: () => zOrder,
     renderer: () => ({ draw: (target) => target.useMediaCoordinateSpace(({ context }) => draw(context)) }),
   });
-  const views = [view(drawBands, "bottom"), view(drawTurns, "top"), view(drawLines, "top")]; // 小字最后画：压在三角上也看得清
+  const views = [view(drawBands, "bottom"), view(besideAxis(drawTurns), "top"), view(besideAxis(drawLines), "top")]; // 小字最后画：压在三角上也看得清
+
+  /** 价格轴标签占的地方：名字的字宽照图表库的字体量（12px、图的等宽字体）。 */
+  function measureAxis() {
+    measurer.font = `12px ${colors.font}`;
+    const items = axisLabels().map((l) => ({ y: y(l.price), titleWidth: l.title ? measurer.measureText(l.title).width : 0 })).filter((l) => ok(l.y));
+    axisBoxes = axisLabelBoxes(items, { width: chart.timeScale().width(), height: box.clientHeight - chart.timeScale().height(), axisWidth: chart.priceScale("right").width() });
+  }
 
   /** 标记跟着图走：每次重画之前算一遍位置（缩放、平移、价格轴拖动都会重画）。 */
   function placeMarks() {
+    measureAxis();
     const width = chart.timeScale().width();
     const paneH = box.clientHeight - chart.timeScale().height();
+    const shown = [];
     for (const el of layer.children) {
       const m = scene.marks[Number(el.dataset.n)];
       const c = candles[m.i];
@@ -173,9 +201,16 @@ export function createOverlay(chart, series, box) {
       el.hidden = !show;
       if (!show) continue;
       const off = MARK_GAP + m.stack * MARK_STEP;
-      const top = m.side === "top" ? py - off - el.offsetHeight : py + off;
-      el.style.left = `${px}px`;
-      el.style.top = `${Math.min(Math.max(top, 0), paneH - el.offsetHeight)}px`;
+      const w = el.offsetWidth, h = el.offsetHeight;
+      shown.push({ el, left: px - w / 2, top: Math.min(Math.max(m.side === "top" ? py - off - h : py + off, 0), paneH - h), width: w, height: h });
+    }
+    // 从右往左摆：最右边几根上的标记往左让，不伸进价格轴、不压价格轴标签（含价位线的名字），也不压已经摆好的标记
+    const placed = [...axisBoxes];
+    for (const b of shown.sort((p, q) => q.left - p.left)) {
+      const left = dodgeLeft(b, placed, width);
+      placed.push({ ...b, left });
+      b.el.style.left = `${left + b.width / 2}px`; // 标记用 translateX(-50%) 居中
+      b.el.style.top = `${b.top}px`;
     }
   }
 
@@ -217,6 +252,8 @@ export function createOverlay(chart, series, box) {
     },
     /** 上一次画的小三角（测试用）：[{ time, to, left, top, width, height }]。 */
     turns: () => drawnTurns,
+    /** 价格轴标签占的地方（测试用）：[{ left, top, width, height }]，见 labels.js 的 axisLabelBoxes。 */
+    axisBoxes: () => axisBoxes,
     /** 现在画着的东西（测试和问鸿雁用）。 */
     scene: () => scene,
     ribbon: () => ribbon,

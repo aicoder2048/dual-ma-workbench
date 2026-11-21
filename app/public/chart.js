@@ -273,7 +273,20 @@ export function createChart(box, legendEl) {
   }
 
   // ---------- 结构标注：波段、最近的顶部 / 底部构造、M 顶 / W 底 / 2B（skill 的 structure.py 算好的，这里只画） ----------
-  const structLayer = createOverlay(chart, candles, box);
+  /** 价格轴上现在写着的标签：K 线和写值的均线写最后一根看得见的值，价位线（结论、亮着的、自己画的）写价格和名字。 */
+  const axisLabels = () => {
+    const r = chart.timeScale().getVisibleLogicalRange();
+    if (!r) return [];
+    const lastValue = (s) => {
+      const o = s.options();
+      const d = o.visible && o.lastValueVisible ? s.dataByIndex(Math.ceil(r.to), -1) : null;
+      return d ? [{ price: d.close ?? d.value, title: "" }] : [];
+    };
+    const priceLines = [...levelLines, ...drawnLines, ...(flash ? [flash.line] : [])].map((l) => l.options())
+      .filter((o) => o.axisLabelVisible).map((o) => ({ price: o.price, title: o.title }));
+    return [candles, ...SPECS.map((sp) => series[sp.key])].flatMap(lastValue).concat(priceLines);
+  };
+  const structLayer = createOverlay(chart, candles, box, axisLabels);
   let structure = null;
   const overlayColors = () => ({ swing: css("--muted"), neck: css("--neutral"), up: css("--up"), down: css("--down"),
     gap: css("--neutral"), target: css("--accent"), bg: css("--card"), font: css("--mono") });
@@ -969,6 +982,8 @@ export function createChart(box, legendEl) {
     flashing: () => (flash ? { kind: flash.kind, price: flash.price, title: flash.title, y: candles.priceToCoordinate(flash.price) } : null),
     /** 图层（测试用）：现在是哪个预设（null = 自定），每个图层开没开、画没画、不能用的原因。 */
     layers: () => ({ preset: presetOf(layers), rows: layerRows(layers, layerCtx()).map(({ key, on, shown: drawn, why }) => ({ key, on, shown: drawn, why })) }),
+    /** 价格轴标签占的地方（测试用）：[{ left, top, width, height }]，结构标记、变色三角和小字都不压在上面。 */
+    axisLabels: () => structLayer.axisBoxes(),
     /** 图上的变色提示（测试用）：上一次画的小三角 [{ time, to: "bull" | "bear", left, top, width, height }]。 */
     turns: () => structLayer.turns(),
     /** 图上的抵扣价小黄点（测试用）：["20扣", …]。 */
