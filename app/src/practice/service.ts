@@ -35,7 +35,7 @@ interface FullChart { chart: ChartData; first: number }
 /** 真实日线从哪里来。 */
 export interface PriceSource { load(entry: PoolEntry): Promise<Bar[]> }
 
-/** yfinance 复权日线，交给 skill 的 backtest.py --fetch-only（有缓存，7 天内不重取）。 */
+/** yfinance 日线（只按拆股复权），交给 skill 的 backtest.py --fetch-only（有缓存，7 天内不重取）。 */
 export function yfinancePrices(dir = resolve(PROJECT_ROOT, "data/practice/prices")): PriceSource {
   return {
     async load(entry) {

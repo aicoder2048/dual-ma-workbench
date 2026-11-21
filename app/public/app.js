@@ -211,7 +211,7 @@ export function showAnalysis(data, asof = null) {
   updatePeek(a, leanName(data.report.visual.lean), a.regime.name);
   const status = $("data-status");
   status.classList.toggle("partial", Boolean(a.warning));
-  $("data-status-v").textContent = `${a.source.replace(/（(复权日线|真实日线换算成指数[^）]*)）/, "")} · ${a.warning ? "盘中" : a.date}`;
+  $("data-status-v").textContent = `${a.source.replace(/（(日线，只按拆股复权|复权日线|真实日线换算成指数[^）]*)）/, "")} · ${a.warning ? "盘中" : a.date}`;
   status.title = a.warning ?? `数据来源：${a.source}`;
 
   // 盘中提醒关掉一次，同一交易日不再弹出；顶部「盘中」标记和悬停全文照旧

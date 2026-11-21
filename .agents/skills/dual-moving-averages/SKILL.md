@@ -63,13 +63,13 @@ uv run <SKILL_DIR>/scripts/dma_analyze.py --csv prices.csv   # 列：Date, Close
 依赖（pandas、yfinance）用 PEP 723 写在脚本开头，`uv run` 自动安装。装了 yfinance 只是为了能回退，不代表用了它。
 
 数据来源（报告第一行会写明用的哪个）：
-- **默认先用 Polygon/Massive 付费 API**（`/v2/aggs` 复权日线）。`POLYGON_API_KEY` 按这个顺序找：环境变量 → `--env-file` → 当前目录及父目录的 `.env` → `~/Python/Playground/DualMovingAveragesTrading/.env`。
+- **默认先用 Polygon/Massive 付费 API**（`/v2/aggs` 日线，`adjusted=true` 只按拆股复权）。`POLYGON_API_KEY` 按这个顺序找：环境变量 → `--env-file` → 当前目录及父目录的 `.env` → `~/Python/Playground/DualMovingAveragesTrading/.env`。
 - Polygon 失败、没有 key，或返回的 K 线不够（付费档位只有最近约 5 年，回放更早的日期会 403），**自动回退 yfinance**，并写明回退原因。
 - `--source polygon` 或 `--source yfinance` 强制只用一个数据源。
 
 注意：
 - **今日 K 线未完成**：最后一根 K 线是今天、且美东时间还没到 16:15（16:00 收盘，再加数据延迟 15 分钟）时，报告顶部会出现警告。这时"收盘价"其实是盘中价格。回答用户时要把这个警告放在结论前面，说明结论是"假如今天收在这里"，建议收盘后再确认。
-- 两个数据源都是拆股/分红复权价，和视频或券商图上的绝对价格可能不同（例如 TSLA 2021 年的 700 美元在复权后约 233）。方向和相对关系不受影响。
+- 两个数据源都只按拆股复权、不按分红调（yfinance 用 `auto_adjust=False` 的开高低收，和回测一样），拆股之前的价格和视频或券商图上的不复权价不同（例如 TSLA 2021 年的 700 美元在复权后约 233）。方向和相对关系不受影响。
 - **小时线**：脚本多取一次常规时段的小时线（Polygon 30 分钟线合成，约 5 年；取不到用 yfinance 1h，只有约 730 天），算出 P13（小时线是否多头 / 空头排列）。回放日期早于数据窗口、`--csv` 或 `--no-hourly` 时 P13 是"需看图"。
 - 规则清单里"需看图"的规则脚本算不了（磨蹭、真突破的感觉、取不到数据的小时线），回答时要说明。钟表阈值是用视频标注的 GOOGL、AAPL、TSLA 案例定的校准值，见 `rules.md` 文末。
 

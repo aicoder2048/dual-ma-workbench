@@ -3,7 +3,7 @@
  "date": "2026-11-18",
  "close": 150.96,
  "change_pct": -2.8946352759552263,
- "source": "Polygon/Massive（复权日线）",
+ "source": "Polygon/Massive（日线，只按拆股复权）",
  "warning": null,
  "lines": [
   {

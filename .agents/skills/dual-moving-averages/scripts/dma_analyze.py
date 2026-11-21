@@ -145,7 +145,7 @@ def polygon_json(url: str) -> dict:
 
 
 def fetch_polygon(ticker: str, start: str, end: str, api_key: str) -> pd.DataFrame:
-    """Polygon /v2/aggs 日线（复权），跟随 next_url 翻页。"""
+    """Polygon /v2/aggs 日线（adjusted=true 只按拆股复权，不按分红），跟随 next_url 翻页。"""
     url = (f"{POLYGON_BASE}/v2/aggs/ticker/{urllib.parse.quote(ticker.upper())}/range/1/day/"
            f"{start}/{end}?adjusted=true&sort=asc&limit=50000")
     rows: list[dict] = []
@@ -166,13 +166,14 @@ def fetch_polygon(ticker: str, start: str, end: str, api_key: str) -> pd.DataFra
 
 
 def fetch_yfinance(ticker: str, start: str, end: str) -> pd.DataFrame:
+    """yfinance 日线，开高低收只按拆股复权（auto_adjust=False），和 Polygon、回测同一口径；不用 Adj Close。"""
     import yfinance as yf
 
     end_excl = (pd.Timestamp(end) + pd.Timedelta(days=1)).strftime("%Y-%m-%d")
-    df = yf.download(ticker, start=start, end=end_excl, auto_adjust=True, progress=False)
+    df = yf.download(ticker, start=start, end=end_excl, auto_adjust=False, progress=False)
     if isinstance(df.columns, pd.MultiIndex):
         df.columns = df.columns.get_level_values(0)
-    return df
+    return df[[c for c in ("Open", "High", "Low", "Close", "Volume") if c in df.columns]]
 
 
 def windows(df: pd.DataFrame, end: pd.Timestamp) -> tuple[pd.DataFrame, pd.DataFrame]:
@@ -203,13 +204,13 @@ def load_prices(ticker: str | None, csv: str | None, asof: str | None,
                 try:
                     got = fetch_polygon(ticker, start, end, key)
                     if len(got) >= MIN_BARS:
-                        df, src = got, "Polygon/Massive（复权日线）"
+                        df, src = got, "Polygon/Massive（日线，只按拆股复权）"
                     else:
                         notes.append(f"Polygon：只有 {len(got)} 根 K 线（{got.index[0].date()} 起），不够用")
                 except Exception as exc:  # 网络/权限/档位限制都退回 yfinance
                     notes.append(f"Polygon：{exc}")
         if df is None and source in ("auto", "yfinance"):
-            df, src = fetch_yfinance(ticker, start, end), "yfinance（复权日线）"
+            df, src = fetch_yfinance(ticker, start, end), "yfinance（日线，只按拆股复权）"
         if df is None:
             sys.exit("取数失败：" + "；".join(notes))
         if notes:
