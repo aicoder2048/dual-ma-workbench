@@ -1778,29 +1778,46 @@ describe("中栏：结论 → 看大局 → 找打法 → 做推演", () => {
     await page.close();
   }, 30_000);
 
-  test("做推演：三问只看 30 天，推翻判断的价位写出来；只给 2–3 个求解，其余折叠", async () => {
-    const { page } = await open();
+  test("做推演：滚到这一步，第一眼是结论句（大字）和历史评估标签，然后推翻条件、关键变化；数据默认折叠（ADR 0030）", async () => {
+    const { page, errors } = await open();
     const card = '[data-step="forecast"]';
-    await scrollIntoCenter(page, card);
-    expect(await notCovered(page, `${card} .q3 li`)).toBe(true);
-    const qs = await page.locator(`${card} .q3 li .pl`).allTextContents();
-    expect(qs).toEqual(["类型线能撑多久", "条件最早哪天齐", "什么价位推翻判断"]);
-    const ans = (await page.textContent(`${card} .answer`))!;
-    expect(ans).toContain("30 天");
-    expect(ans).toContain("206.26");
-    expect(await page.locator(`${card} .answer ul.solves li`).count()).toBeLessThanOrEqual(3);
-    expect(await page.locator(`${card} details.more`).getAttribute("open")).toBeNull();
+    await scrollIntoCenter(page, card); // 像用户一样把这一步滚到中栏上方
+    const headline = `${card} .fc-headline`;
+    expect(await page.locator(headline).isVisible()).toBe(true);
+    expect(await notCovered(page, headline)).toBe(true);
+    expect(await page.textContent(headline)).toBe("接下来几周均线向下：反弹是减仓机会，不是抄底机会");
+    // 结论句在推翻条件、关键变化上面
+    const tops = await page.$$eval([headline, `${card} .fc-invalid`, `${card} .fc-changes`].join(","), (els) => els.map((e) => e.getBoundingClientRect().top));
+    expect([...tops].sort((x, y) => x - y)).toEqual(tops);
+    // H1 标签看得见、没被挡；悬停写出评估结论和出处
+    const tag = `${card} .fc-h1`;
+    expect(await notCovered(page, tag)).toBe(true);
+    expect(await page.textContent(tag)).toBe("历史评估：没验证出效果");
+    await page.hover(tag);
+    await page.waitForSelector("#viz-tip:not([hidden])");
+    expect(await page.textContent("#viz-tip")).toContain("方向和主张相反");
+    // 推翻条件：206.26，来自求解，标辅助；附 H4
+    expect(await page.textContent(`${card} .fc-invalid`)).toContain("206.26");
+    expect(await page.textContent(`${card} .fc-invalid .aux-tag`)).toContain("辅助");
+    expect(await page.textContent(`${card} .answer .ev-note`)).toContain("97% 真的发生了，但未达到事先定的有用标准（H4）");
+    expect(await page.locator(`${card} .fc-changes li`).evaluateAll((els) => els.map((e) => (e as HTMLElement).dataset.group))).toEqual(["20", "60"]);
+    // 数据默认折叠：门槛表、持平情景看不见
+    expect(await page.locator(`${card} details.fc-data`).getAttribute("open")).toBeNull();
+    expect(await page.locator(`${card} table.hurdles`).first().isVisible()).toBe(false);
+    expect(await page.locator(`${card} .flow.scenario`).isVisible()).toBe(false);
+    expect(errors).toEqual([]);
     await page.close();
   }, 30_000);
 
-  test("做推演：求解给的答案标「辅助」，相关求解折叠，评估结论（H4）一行小字；滚到时看得见、没被挡", async () => {
+  test("做推演：窄屏 390px 下结论句整句看得见、不溢出，历史评估标签没被挡", async () => {
     const { page, errors } = await open();
-    const card = '[data-step="forecast"] .answer';
-    await scrollIntoCenter(page, card);
-    expect(await page.textContent(`${card} .q3 li.invalid .aux-tag`)).toContain("辅助");
-    expect(await page.locator(`${card} details.aux-solves`).getAttribute("open")).toBeNull();
-    expect(await notCovered(page, `${card} .ev-note`)).toBe(true);
-    expect(await page.textContent(`${card} .ev-note`)).toContain("97% 真的发生了，但未达到事先定的有用标准（H4）");
+    await page.setViewportSize({ width: 390, height: 844 });
+    const card = '[data-step="forecast"]';
+    await page.locator(`${card} .fc-call`).scrollIntoViewIfNeeded(); // 窄屏整页滚动
+    for (const sel of [`${card} .fc-headline`, `${card} .fc-h1`]) expect({ sel, ok: await notCovered(page, sel) }).toEqual({ sel, ok: true });
+    const fits = await page.$eval(`${card} .fc-headline`, (el) => el.scrollWidth <= el.clientWidth + 1 && el.getBoundingClientRect().right <= innerWidth);
+    expect(fits).toBe(true);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
     expect(errors).toEqual([]);
     await page.close();
   }, 30_000);
@@ -2410,13 +2427,19 @@ describe("规则编号都能点到 rules.md", () => {
     await page.close();
   }, 30_000);
 
-  test("做推演默认只列 MA60、MA120 的 30 天门槛；持平情景折叠在「更多推演」里", async () => {
+  test("做推演的依据：点开先是打法的条件和相关求解，再是 MA60、MA120 的 30 天门槛，持平情景也在里面", async () => {
     const { page } = await open();
     const card = page.locator('[data-step="forecast"]');
-    const first = card.locator("table.hurdles").first();
+    const data = card.locator("details.fc-data");
+    await scrollIntoCenter(page, '[data-step="forecast"] details.fc-data > summary');
+    await data.locator("> summary").click();
+    expect(await data.locator(".fc-earliest").textContent()).toContain("空仓不买");
+    expect(await data.locator("ul.solves").first().locator("li").count()).toBeLessThanOrEqual(3);
+    const first = data.locator("table.hurdles").first();
+    expect(await first.isVisible()).toBe(true);
     expect(await first.locator("tbody tr").count()).toBe(2);
     expect(await first.textContent()).toContain("239.24"); // MA60 30 天抵扣价最高
-    expect(await card.locator("details.more .flow").textContent()).toContain("30 个交易日");
+    expect(await data.locator(".flow").textContent()).toContain("30 个交易日");
     await page.close();
   }, 30_000);
 });

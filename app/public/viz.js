@@ -75,13 +75,9 @@ function leanFlips(l, close) {
   return `<ul class="lean-flips">${rows}</ul>`;
 }
 
-export function leanCard(l, close, trend, tie) {
-  return `<div class="lean-top">
-      <div class="lean-verdict"><span class="eyebrow">接下来几周 · 对谁有利</span>
-        <div class="lean-label ${stanceOf(l)}">${esc(l.label)}</div>
-        <div class="lean-trend">趋势类型 <b>${esc(trend)}</b></div></div>
-      ${leanScale(l)}
-    </div>
+/** 模糊判断的证据（做推演的依据里）：刻度条、6 条线的方向、排布、什么会改变判断。结论句在做推演的第一行。 */
+export function leanCard(l, close, tie) {
+  return `<div class="lean-top">${leanScale(l)}</div>
     <div class="lean-evidence">
       <div class="ev"><div class="ev-k">方向：6 条成本线往哪走 <span>${l.up} 上 · ${l.flat} 平 · ${l.down} 下</span></div>${leanArrows(l)}</div>
       <div class="ev"><div class="ev-k">排布：短期线组在上还是在下 <span>相差 &lt; ${tie}% 算贴近</span></div>${leanPairs(l)}</div>
@@ -427,7 +423,7 @@ export function holdingRow(r, close, p) {
 
 const NOW_TIP = "看大局的结论：现在是哪种趋势（类型·阶段），按 6 条均线今天的排列、方向和乖离判的。证据在下面「看大局」。";
 const LEAN_TIP = "做推演的结论（模糊判断）：不预测明天涨跌，只判断接下来几周均线（市场的持仓成本）往哪走、对多头还是空头有利。"
-  + "依据在下面「做推演」的「更多推演」里。";
+  + "依据在下面「做推演」：第一句把它翻成动作，挨着写什么价位推翻它、历史评估靠不靠得住。";
 
 /** 结论卡片。标题分「现在」和「往后」两段；整套方法的评估不在卡片上，页面上固定写一次（#method-note，ADR 0028）。 */
 export function conclusionCard(r, close, p) {
@@ -621,17 +617,29 @@ export function playAnswer(r, p, close) {
     </div>`;
 }
 
-// ---------- 做推演：三问，跨度 30 天；推演求解给的答案标「辅助」，相关求解折叠 ----------
-export function forecastAnswer(f) {
-  const aux = (k) => (f.aux.includes(k) ? `<span class="aux-tag">辅助 · 推演求解</span>` : "");
-  return `<div class="answer forecast"><span class="ak">只看 ${f.days} 天</span>
-      <ol class="q3">
-        <li><span class="pl">类型线能撑多久</span>${esc(f.hold)}</li>
-        <li><span class="pl">条件最早哪天齐</span>${esc(f.earliest)}${aux("earliest")}</li>
-        <li class="invalid"><span class="pl">什么价位推翻判断</span>${esc(f.invalid.text)}${aux("invalid")}</li>
-      </ol>
-      ${f.solves.length ? `<details class="aux-solves"><summary>辅助：和这套打法有关的求解（${f.days} 天）</summary>${solveList(f.solves)}</details>` : ""}
-      ${f.aux.length || f.solves.length ? evidenceNote(f.evidence) : ""}
+// ---------- 做推演：先给结论，再给推翻条件和关键变化；数据折叠在依据里（docs/adr/0030.md） ----------
+const AUX_TAG = `<span class="aux-tag">辅助 · 推演求解</span>`;
+const GROUP_CLS = { 向上: "bullish", 向下: "bearish" };
+
+/**
+ * 做推演的回答：① 模糊判断翻成的一句动作（大字），旁边是历史评估（H1）的小标签；② 推翻条件；③ 20、60 线组最近的关键变化。
+ * 推演求解给的那几句标「辅助」，末尾一行 H4 的评估结论。
+ */
+export function forecastAnswer(r) {
+  const f = r.forecast, l = r.visual.lean;
+  const groups = f.groups.map((g) => `<li data-group="${g.group}"><b class="fc-g">${g.group} 线组</b><b class="fc-dir ${GROUP_CLS[g.now] ?? "neutral"}">${esc(g.now)}</b>`
+    + `<span class="fc-gt">${esc(g.text)}</span>${g.aux ? `<span class="fc-aux">${esc(g.aux)}${AUX_TAG}</span>` : ""}</li>`).join("");
+  const anyAux = f.aux.includes("invalid") || f.groups.some((g) => g.aux);
+  return `<div class="answer forecast">
+      <div class="fc-call ${stanceOf(l)}" data-part="call">
+        <div class="fc-eyebrow"><span class="ak">模糊判断 · 接下来几周</span><b class="fc-label">${esc(l.label)}</b>`
+    + `<span class="ev-tag fc-h1" tabindex="0" ${tip(f.leanEvidence.tip)}>${esc(f.leanEvidence.tag)}</span></div>
+        <p class="fc-headline">${esc(f.headline)}</p>
+        <p class="fc-basis">依据（只看 ${f.days} 天，不预测明天涨跌）：${esc(f.hold)}</p>
+      </div>
+      <p class="fc-invalid" data-part="invalid"><span class="pl">推翻条件</span>${esc(f.invalid.text)}${f.aux.includes("invalid") ? AUX_TAG : ""}</p>
+      <div class="fc-changes" data-part="changes"><span class="pl">最近的关键变化</span><ul>${groups}</ul></div>
+      ${anyAux ? evidenceNote(f.evidence) : ""}
     </div>`;
 }
 
@@ -659,17 +667,18 @@ function bigPictureEvidence(v) {
     + `<details class="ref"><summary>趋势类型对照（现在是哪一种）</summary>${trendTable(v)}</details>`;
 }
 
-/** 每一步的证据（结论在 step-answer 里）。forecast 只给 30 天的门槛，其余推演折叠；f 是做推演的三问（跨度、求解的评估结论）。 */
+/** 每一步的证据（结论在 step-answer 里）。做推演的数据全部折叠在「依据」里，默认收起；f 是做推演的回答（跨度、条件最早哪天、求解的评估结论）。 */
 export function stepVisuals(key, v, f) {
   const days = f.days;
   if (key === "big_picture") return bigPictureEvidence(v);
   if (key === "play") return allRules(v);
   if (key === "forecast") {
     const long = { ...v, hurdles: v.hurdles.filter((h) => h.days === days) };
-    return `<p class="evidence-title">证据：MA60、MA120 未来 ${days} 天要扣掉的价格里最高、最低是多少。</p>`
-      + hurdleTable(long)
-      + `<details class="ref more"><summary>更多推演：模糊判断、抵扣价、持平情景、全部求解</summary>`
-      + `<div class="lean-box">${leanCard(v.lean, v.close, v.trend, v.tie)}</div>`
+    return `<details class="ref more fc-data"><summary>依据：打法的条件、门槛路径、模糊判断的证据、抵扣价、持平情景、全部求解</summary>`
+      + `<p class="fc-earliest"><span class="pl">打法的条件最早哪天齐</span>${esc(f.earliest)}${f.aux.includes("earliest") ? AUX_TAG : ""}</p>`
+      + (f.solves.length ? `<p class="evidence-title">和这套打法有关的求解（${days} 天，辅助）</p>${solveList(f.solves)}` : "")
+      + `<p class="evidence-title">MA60、MA120 未来 ${days} 天要扣掉的价格里最高、最低是多少</p>` + hurdleTable(long)
+      + `<div class="lean-box">${leanCard(v.lean, v.close, v.tie)}</div>`
       + dropMultiples(v) + hurdleTable(v) + scenarioFlow(v) + solveList(v.solves) + evidenceNote(f.evidence) + `</details>`;
   }
   return "";

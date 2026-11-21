@@ -438,12 +438,9 @@ body.offline .status-pill .dot { background: var(--bad); }
 
 /* ===================== 模糊判断卡 ===================== */
 .verdict { padding: 14px 18px 12px; }
-.lean-top { display: grid; grid-template-columns: minmax(150px, auto) 1fr; gap: 10px 28px; align-items: end; }
 .eyebrow { display: block; font-size: 11px; letter-spacing: .06em; color: var(--muted); }
 .lean-label { font: 700 26px/1.25 var(--heading); color: var(--stance); }
 .lean-label em { font-style: normal; font-size: 16px; font-weight: 600; margin-left: 6px; color: var(--neutral); }
-.lean-trend { font-size: 12px; color: var(--muted); }
-.lean-trend b { color: var(--fg); font-weight: 500; }
 .lean-scale { min-width: 0; }
 .lean-track { position: relative; height: 10px; border-radius: 5px; margin: 26px 0 4px;
   background: linear-gradient(90deg, var(--down), color-mix(in srgb, var(--down) 25%, var(--grid)) 30%, var(--grid) 50%, color-mix(in srgb, var(--up) 25%, var(--grid)) 70%, var(--up)); }
@@ -479,7 +476,6 @@ body.offline .status-pill .dot { background: var(--bad); }
 .scale-toggle { margin-left: auto; font-family: var(--sans) !important; }
 .scale-toggle[aria-pressed="false"] { opacity: 1 !important; color: var(--muted); }
 @media (max-width: 1100px) {
-  .lean-top { grid-template-columns: 1fr; }
   .lean-evidence { grid-template-columns: 1fr; }
 }
 
@@ -760,9 +756,22 @@ details.basis[open] > summary { margin-bottom: 4px; }
 details.basis .checklist { margin-top: 0; }
 details.play-why .play-text { margin-top: 4px; }
 
-/* 做推演：三问 */
-.q3 { margin: 0; padding-left: 1.4em; display: grid; gap: 6px; font-size: 14px; }
-.q3 li::marker { color: var(--muted); }
+/* 做推演：结论句（大字）→ 推翻条件 → 关键变化；数据折叠在依据里（ADR 0030） */
+.answer.forecast { display: grid; gap: 10px; }
+.fc-call { --c: var(--neutral); border-left: 3px solid var(--c); padding: 2px 0 2px 12px; display: grid; gap: 4px; }
+.fc-call.bullish { --c: var(--up); } .fc-call.bearish { --c: var(--down); }
+.fc-eyebrow { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 8px; }
+.fc-eyebrow .fc-label { color: var(--c); font-size: 13px; }
+.fc-eyebrow .ev-tag { margin-left: 0; cursor: help; }
+.answer .fc-headline { font: 700 19px/1.45 var(--heading); color: var(--fg); }
+.answer .fc-basis { font-size: 12.5px; color: var(--muted); }
+.fc-earliest .pl { display: inline-block; font-size: 11.5px; color: var(--muted); border: 1px solid var(--line); border-radius: 6px; padding: 0 6px; margin-right: 8px; }
+.fc-changes ul { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 6px; font-size: 13.5px; }
+.fc-changes li { display: grid; grid-template-columns: auto auto minmax(0, 1fr); gap: 2px 8px; align-items: baseline; }
+.fc-changes .fc-g { white-space: nowrap; }
+.fc-changes .fc-dir { white-space: nowrap; font-weight: 600; }
+.fc-changes .fc-aux { grid-column: 3; font-size: 12.5px; color: var(--muted); }
+.fc-data .fc-earliest { font-size: 13.5px; }
 /* 推演求解给的辅助信息：小一号、灰，带评估结论 */
 .aux-tag, .ev-tag { display: inline-block; font-size: 11px; color: var(--muted); border: 1px dashed var(--line); border-radius: 6px; padding: 0 6px; margin-left: 6px; white-space: nowrap; }
 .ev-tag { color: var(--neutral); border-color: currentColor; }
@@ -770,7 +779,6 @@ details.play-why .play-text { margin-top: 4px; }
 .checklist .ev-tag { grid-column: 3 / -1; }
 .plan-items li.aux { font-size: 12.5px; color: var(--muted); }
 .ev-note, .answer .ev-note { margin: 2px 0 0; font-size: 11.5px; color: var(--muted); }
-details.aux-solves > summary { cursor: pointer; font-size: 12.5px; color: var(--muted); }
 details.more > *:not(summary) { margin-top: 10px; }
 
 @media (max-width: 640px) {
@@ -779,6 +787,8 @@ details.more > *:not(summary) { margin-top: 10px; }
   .verdict .naive .sep { margin: 0 3px; }
   .pcell { grid-template-columns: minmax(0, 1fr); }
   .pcell > details.basis { grid-column: 1; }
+  .fc-changes li { grid-template-columns: auto minmax(0, 1fr); }
+  .fc-changes .fc-gt, .fc-changes .fc-aux { grid-column: 1 / -1; }
 }
 
 /* ===================== 交易日志 ===================== */

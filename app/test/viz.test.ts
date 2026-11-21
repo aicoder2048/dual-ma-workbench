@@ -2,8 +2,9 @@ import { describe, expect, test } from "bun:test";
 import { cardQuestions } from "../public/askmenu.js";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { conclusionCard, holdingRow, parseCost, planBody, pnlText, situationOf } from "../public/viz.js";
+import { conclusionCard, forecastAnswer, holdingRow, parseCost, planBody, pnlText, situationOf, stepVisuals } from "../public/viz.js";
 import type { Analysis } from "../src/citations.ts";
+import { LEAN_EVIDENCE, SOLVER_EVIDENCE } from "../src/plan.ts";
 import { EVALUATION_NOTE } from "../src/record.ts";
 import { buildReport } from "../src/report.ts";
 import nvda from "./fixtures/nvda-analysis.json";
@@ -260,5 +261,70 @@ describe("找打法排成固定的格子，按做决定的顺序（ADR 0029）",
     const profit = planBody(r, { pos: "holding", cost: "133" }, nv.close);
     expect(cell(profit, "pnl").main).toContain("还有浮盈：止损跟着趋势结构走，不按成本133.00定");
     expect(profit).not.toContain("{cost}");
+  });
+});
+
+describe("做推演：先给结论，再给数据（ADR 0030）", () => {
+  const nv = structuredClone(nvda) as Analysis;
+  const r = buildReport(nv);
+  const html = forecastAnswer(r);
+  const text = (h: string) => h.replace(/<[^>]+>/g, "").replace(/\s+/g, "");
+  const at = (needle: string) => {
+    const i = html.indexOf(needle);
+    if (i < 0) throw new Error(`做推演里没有 ${needle}`);
+    return i;
+  };
+  /** 一块：从 data-part="name" 所在的标签起，到下一块之前。 */
+  const part = (name: string) => {
+    const start = html.lastIndexOf("<", at(`data-part="${name}"`));
+    const next = html.slice(start + 1).search(/<[a-z]+ [^>]*data-part="/);
+    return next < 0 ? html.slice(start) : html.slice(start, start + 1 + next);
+  };
+
+  test("第一句是模糊判断翻成的动作，大字，在推翻条件和关键变化前面", () => {
+    expect(text(part("call"))).toContain("接下来几周均线向下：反弹是减仓机会，不是抄底机会");
+    expect(part("call")).toContain('class="fc-headline');
+    expect(at('data-part="call"')).toBeLessThan(at('data-part="invalid"'));
+    expect(at('data-part="invalid"')).toBeLessThan(at('data-part="changes"'));
+  });
+  test("结论句上面写「模糊判断 · 接下来几周」和档位，和结论卡片同一个说法", () => {
+    expect(text(part("call"))).toContain("模糊判断·接下来几周明显偏空");
+  });
+  test("历史评估小标签（H1）挨着模糊判断，悬停写清结论和出处", () => {
+    const tag = part("call").match(/<span class="ev-tag fc-h1"[^>]*>([^<]+)<\/span>/)!;
+    expect(tag[1]).toBe(LEAN_EVIDENCE.tag);
+    expect(tag[0].match(/data-tip="([^"]+)"/)![1]).toBe(LEAN_EVIDENCE.tip);
+  });
+  test("推翻条件：收盘到哪个价位、多少天内；来自推演求解时标辅助，附 H4", () => {
+    const inv = text(part("invalid"));
+    expect(inv).toContain("推翻条件");
+    expect(inv).toContain("206.26");
+    expect(inv).toContain("30天内");
+    expect(part("invalid")).toContain("辅助 · 推演求解");
+    expect(html).toContain(SOLVER_EVIDENCE);
+  });
+  test("最近的关键变化：20 线组、60 线组各一行，写站上 / 跌破什么价才拐头", () => {
+    const ch = part("changes");
+    expect(ch.match(/data-group="\d+"/g)).toEqual(['data-group="20"', 'data-group="60"']);
+    expect(text(ch)).toContain("20线组向下");
+    expect(text(ch)).toContain("MA20抵扣价212.21");
+  });
+  test("数据不在第一眼：抵扣价表、持平情景、全部求解都折叠在依据里，默认收起", () => {
+    expect(html).not.toContain("hurdles");
+    const data = stepVisuals("forecast", r.visual, r.forecast);
+    expect(data.trimStart()).toStartWith('<details class="ref more fc-data">');
+    expect(data).not.toMatch(/<details[^>]*\sopen/);
+    for (const s of ['table class="vt hurdles"', 'class="drops"', "flow scenario", 'class="solves"', "lean-evidence"]) expect(data).toContain(s);
+    expect(text(data)).toContain("打法的条件最早哪天齐");
+  });
+  test("偏多（SPY 2024-04-19）：回撤是加仓机会；推翻条件不是求解给的，不标辅助", () => {
+    const h = forecastAnswer(buildReport(structuredClone(spyFixture) as Analysis));
+    expect(text(h)).toContain("接下来几周均线向上：回撤是加仓机会");
+    expect(h).not.toContain("辅助 · 推演求解");
+  });
+  test("结论卡片的「模糊判断 · 接下来几周」悬停：依据在做推演（不再说更多推演）", () => {
+    const tip = conclusionCard(r, nv.close, { pos: "flat", cost: "" }).match(/class="concl-lean"[^>]*data-tip="([^"]+)"/)![1];
+    expect(tip).toContain("依据在下面「做推演」");
+    expect(tip).not.toContain("更多推演");
   });
 });
