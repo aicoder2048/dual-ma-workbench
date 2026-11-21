@@ -235,6 +235,31 @@ def test_open_risk_counts_the_capped_shares():
     assert [(t.ticker, t.shares) for t in res.trades] == [("AAA", 2500), ("BBB", 1000)]
 
 
+def test_fixed_risk_amount_sizes_by_money_not_equity():
+    # 每笔固定亏 500：单位亏损 1 → 500 股，和净值多少无关
+    (t,) = run({"AAA": bars(WIN)}, {0: [order()]}, cfg=ps.Config(cost=0.0, equity0=100_000, risk_amount=500)).trades
+    assert t.shares == 500
+
+
+def test_stop_floor_widens_a_stop_closer_than_k_atr():
+    o = order(stop=9.9, atr=0.5)
+    assert ps.floor_stop(o, 1.0).stop == pytest.approx(9.5)          # 0.1 < 1 × 0.5 → 放宽到 10 − 0.5
+    assert ps.floor_stop(o, 0.5).stop == pytest.approx(9.75)
+    assert ps.floor_stop(order(stop=9.0, atr=0.5), 1.0).stop == 9.0   # 已经离 1 个 ATR 以上：不动
+    assert ps.floor_stop(order(stop=9.9), 1.0).stop == 9.9            # 没有 ATR：不动
+    assert ps.floor_stop(o, None) is o
+
+
+def test_widened_stop_drives_shares_the_close_stop_and_r():
+    # 止损 9.9 放宽到 9.5：股数 1000 ÷ 0.5 = 2000；第 2 根收盘 9.6 没破 9.5（原来的 9.9 会破），第 3 根到目标 13
+    rows = [WIN[0], WIN[1], (10.0, 10.1, 9.55, 9.6), (11.0, 13.5, 10.8, 13.2)]
+    cfg = ps.Config(cost=0.0, equity0=100_000, stop_floor_atr=1.0)
+    (t,) = run({"AAA": bars(rows)}, {0: [order(stop=9.9, atr=0.5)]}, cfg=cfg).trades
+    assert (t.shares, t.stop, t.reason) == (2000, 9.5, "目标") and t.r == pytest.approx(3 / 0.5)
+    (u,) = run({"AAA": bars(rows)}, {0: [order(stop=9.9, atr=0.5)]}, cfg=ps.Config(cost=0.0, equity0=100_000, max_position=1.0)).trades
+    assert u.reason == "止损"
+
+
 def test_equal_notional_ignores_the_stop_distance():
     (t,) = run({"AAA": bars(WIN)}, {0: [order(stop=9.9)]}, cfg=ps.Config(cost=0.0, equity0=100_000, notional_pct=0.2)).trades
     assert t.shares == 2000 and t.notional == pytest.approx(0.2)
