@@ -1,10 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync, readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { advisorContext, analystContext } from "../src/agents/prompts.ts";
 import { analysisForModel } from "../src/agents/tools.ts";
-import { Analyzer, pythonRunner } from "../src/analyze.ts";
+import { Analyzer, pythonRunner, type AnalyzeResult } from "../src/analyze.ts";
 import { buildFacts } from "../src/citations.ts";
 import { playKey } from "../src/plan.ts";
 import { createHandler } from "../src/http.ts";
@@ -58,7 +58,45 @@ function leaks(text: string): string[] {
   return out;
 }
 
+/** 一眼看得出是假的着色规则：按日期单双上色。 */
+const FAKE_TONE_PLUGIN = `
+import pandas as pd
+
+NAME = "假规则：按日期单双"
+LEGEND = ["绿：日期是双数", "黑：日期是单数"]
+
+
+def tones(df):
+    return pd.Series(["bull" if d % 2 == 0 else "bear" for d in df.index.day], index=df.index)
+`;
+
 describe("练习的接口", () => {
+  test("练习不读本机的着色插件：配了插件，题目的 K 线颜色和没配时一样", async () => {
+    const id = "sess-tones-0001";
+    const open = async () => {
+      const { json, dir } = setup();
+      return { chart: (await json("/api/practice", { id, seed: 3 })).chart, csv: join(dir, "practice", `${id}.csv`) };
+    };
+    const plain = await open();
+    expect(plain.chart.tone_source.key).toBe("builtin");
+    expect(new Set(plain.chart.candles.map((c: { tone?: string }) => c.tone)).size).toBeGreaterThan(1);
+
+    const plugin = join(mkdtempSync(join(tmpdir(), "dma-tone-")), "fake_tones.py");
+    writeFileSync(plugin, FAKE_TONE_PLUGIN);
+    const before = process.env.DMA_TONE_PLUGIN;
+    process.env.DMA_TONE_PLUGIN = plugin;
+    try {
+      const withPlugin = await open();
+      expect(withPlugin.chart).toEqual(plain.chart);
+      // 同一个环境里不带 --builtin-tones 直接跑脚本，颜色是插件的：上面相等不是因为插件没生效
+      const last = parseCsv(readFileSync(withPlugin.csv, "utf8"), "练习数据").at(-1)!.date;
+      const direct: AnalyzeResult = JSON.parse(await pythonRunner(["--csv", withPlugin.csv, "--asof", last, "--json"]));
+      expect(direct.chart.tone_source).toMatchObject({ key: "plugin", name: "假规则：按日期单双", warning: null });
+    } finally {
+      if (before === undefined) delete process.env.DMA_TONE_PLUGIN; else process.env.DMA_TONE_PLUGIN = before;
+    }
+  }, 120_000);
+
   test("财报日不进练习：就算脚本给了，页面、长风、鸿雁都拿不到（真实日期会泄露是哪只票）", async () => {
     const real = REAL.at(-1)!.date;
     const withEarnings = async (args: string[]) => {

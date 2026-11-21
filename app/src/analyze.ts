@@ -13,8 +13,16 @@ import { PROJECT_ROOT } from "./sources.ts";
 const pexec = promisify(execFile);
 export const SCRIPT = resolve(PROJECT_ROOT, ".agents/skills/dual-moving-averages/scripts/dma_analyze.py");
 
-/** 破线拐头着色：bull 收盘站上 MA20 且高于 20 日抵扣价，bear 两样都不满足，mixed 只满足一样。 */
+/** K 线的颜色，Python 算好（skill 的 tones.py）。什么情况给哪种颜色由 ChartData.tone_source 说明。 */
 export type Tone = "bull" | "bear" | "mixed";
+
+/** 颜色是谁算的：自带规则（builtin）或本机的着色插件（plugin）。warning：插件出错、退回自带规则的原因。 */
+export interface ToneSource {
+  key: "builtin" | "plugin";
+  name: string;
+  legend: string[];
+  warning: string | null;
+}
 
 export interface ChartData {
   candles: { time: string; open: number; high: number; low: number; close: number; tone?: Tone }[];
@@ -22,6 +30,8 @@ export interface ChartData {
   volume: { time: string; value: number; spike: boolean; ratio?: number }[];
   lines: Record<string, { time: string; value: number }[]>;
   drops: { time: string; period: number }[];
+  /** 旧的分析 JSON、测试替身没有。 */
+  tone_source?: ToneSource;
   /** 周线图（dma_analyze 的 weekly_chart）：周 K 线、周线均线和抵扣价；partial 是最新一周还没走完。练习、揭晓的图没有。 */
   weekly?: Omit<ChartData, "weekly"> & { partial: boolean };
 }
