@@ -123,6 +123,13 @@ export interface StructureOut {
   available: boolean; top?: Construct | null; bottom?: Construct | null; pivots?: Pivot[]; patterns?: Pattern[];
 }
 
+/** 筹码山（volprofile.py）：foot 山脚（价格下沿）、top 山顶（上沿），share 占统计区间总量的比例。 */
+export interface Mountain { foot: number; top: number; volume: number; share: number }
+/** 筹码分布（skill 的 volprofile.py，JSON 的 profile）：规则和交易计划用的那份，统计最近 days 个自然日。 */
+export type ProfileOut = Unavailable | {
+  available: true; days: number; start: string; end: string; bars: number; edges: number[]; volumes: number[]; mountains: Mountain[];
+};
+
 export interface FrameLine { period: number; ma: number; ema: number }
 export type Unavailable = { available: false; reason: string };
 /** 周线（大一级）：同一套均线和排列。 */
@@ -213,6 +220,8 @@ export interface Analysis {
   structure: StructureOut;
   /** 没补的向下缺口（tradeplan.unfilled_gaps，和找目标位同一个定义）：top 是跳空前一根的最低价，bottom 是没补的那段的底。旧数据没有。 */
   gaps?: { date: string; top: number; bottom: number }[];
+  /** 筹码分布。旧数据没有。 */
+  profile?: ProfileOut;
   weekly: Weekly;
   hourly: Hourly;
   ma200: Ma200;
@@ -309,6 +318,7 @@ export function buildFacts(a: Analysis): Facts {
   put("结论.空仓", "空仓的做法、触发价、进场后止损", planLine(plans.flat, a.close, true));
   put("结论.持仓", "持仓的做法、加减仓价位、止损", planLine(plans.holding, a.close, false));
   for (const [k, label, value] of planFacts(a.trade_plan, a.close)) put(k, label, value);
+  for (const [k, label, value] of profileFacts(a)) put(k, label, value);
   const fc = buildForecast(a, plans);
   put("推演.保持", `类型线 MA60、MA120 未来 ${fc.days} 天能保持多久、守在哪`, fc.hold);
   put("推演.最早", "这套打法的条件最早哪天能齐", fc.earliest);
@@ -329,6 +339,30 @@ export function buildFacts(a: Analysis): Facts {
     if (e.available && e.past.length) put("财报.上次", "上一次财报", e.past.at(-1)!);
   }
   return facts;
+}
+
+/**
+ * 筹码分布给模型看的数据字段（[[D:筹码.上方]] 这样引用）：只当价位和目标参考，不是买卖信号（docs/adr/0015.md）。
+ * 统计区间是最近 1 年，和工作台图上按可见范围算的那份不一定是同一段。
+ */
+export function profileFacts(a: Pick<Analysis, "profile" | "close" | "trade_plan">): [string, string, string][] {
+  const p = a.profile;
+  if (!p) return [];
+  if (!p.available) return [["筹码.区间", "筹码分布的统计区间", p.reason]];
+  const band = (m: Mountain) => `${f2(m.foot)}–${f2(m.top)}（占 ${Math.round(m.share * 100)}%）`;
+  const above = p.mountains.find((m) => m.foot > a.close);
+  const below = p.mountains.filter((m) => m.top < a.close).at(-1);
+  const inside = p.mountains.find((m) => m.foot <= a.close && a.close <= m.top);
+  const target = [...a.trade_plan.flat.targets, ...a.trade_plan.holding.targets].find((t) => t.top != null);
+  const note = "只当价位和目标参考，不是买卖信号";
+  return [
+    ["筹码.区间", "筹码分布的统计区间（规则、交易计划用的那份，和图默认的 1 年视图同一段）", `${p.start} ~ ${p.end}，${p.bars} 根`],
+    ["筹码.山", `筹码山的山脚到山顶，从低到高（J46；${note}）`, p.mountains.map(band).join("、") || "没有"],
+    ["筹码.上方", `收盘上方最近的整座筹码山：反弹的目标区间（J47；${note}）`, above ? band(above) : "上方没有整座的筹码山"],
+    ["筹码.下方", "收盘下方最近的整座筹码山", below ? band(below) : "下方没有整座的筹码山"],
+    ["筹码.所在", "收盘所在的筹码山（在山里照 P25 看中长线，P39）", inside ? band(inside) : "不在哪座山里"],
+    ["筹码.目标带", "交易计划拿筹码山当目标位时的那条带（P38）", target ? `${f2(target.price)}–${f2(target.top!)}` : "交易计划的目标里没有筹码山"],
+  ];
 }
 
 /** 求解的引用键：去掉括号里的说明和空格，例如 "理顺向上.10天"。 */

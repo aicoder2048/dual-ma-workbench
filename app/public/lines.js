@@ -29,17 +29,17 @@ export function alpha(color, a) {
 
 /**
  * 一条线的样式。colors：token → 颜色（当前主题）；focus：聚焦的线组（20 / 60 / 120）或 null。
- * 右端价格轴上写 MA 的名字和值（图表库自己会错开重叠的标签）；EMA 只在聚焦它那组时写，免得 6 个标签挤在一起。
+ * 右端价格轴上用线的颜色写 MA 的值（图表库自己会错开重叠的标签）；EMA 只在聚焦它那组时写，免得 6 个标签挤在一起。
+ * 不写 MA20 这类名字：名字画在绘图区右边，会压在筹码分布上；哪个颜色是哪条线看图例。
  */
 export function lineStyle(spec, colors, focus) {
   const faded = focus != null && spec.group !== focus;
-  const labeled = !faded && (spec.kind === "MA" || spec.group === focus);
   return {
     color: faded ? alpha(colors[spec.token], FADED_ALPHA) : colors[spec.token],
     lineWidth: WIDTH[spec.key] ?? WIDTH[spec.kind],
     lineStyle: 0,
-    lastValueVisible: labeled,
-    title: labeled ? spec.key : "",
+    lastValueVisible: !faded && (spec.kind === "MA" || spec.group === focus),
+    title: "",
   };
 }
 

@@ -40,8 +40,8 @@ describe("均线样式", () => {
     }
   });
 
-  test("右端价格轴：MA 写名字和值，EMA 不写（6 个标签挤在一起反而难读）", () => {
-    expect(lineStyle(spec("MA60"), THEMES.light)).toMatchObject({ lastValueVisible: true, title: "MA60" });
+  test("右端价格轴：MA 用线的颜色写值，EMA 不写；都不在绘图区写名字（会压在筹码分布上）", () => {
+    expect(lineStyle(spec("MA60"), THEMES.light)).toMatchObject({ lastValueVisible: true, title: "" });
     expect(lineStyle(spec("EMA60"), THEMES.light)).toMatchObject({ lastValueVisible: false, title: "" });
   });
 
@@ -58,10 +58,10 @@ describe("均线样式", () => {
 });
 
 describe("聚焦一组", () => {
-  test("聚焦 60：60 组照常、写出 EMA60 的标签；20、120 组和 MA200 淡下去，不写标签", () => {
+  test("聚焦 60：60 组照常、写出 EMA60 的值；20、120 组和 MA200 淡下去，不写标签", () => {
     const t = THEMES.light;
-    expect(lineStyle(spec("EMA60"), t, 60)).toMatchObject({ color: t["--ema60"], lastValueVisible: true, title: "EMA60" });
-    expect(lineStyle(spec("MA60"), t, 60)).toMatchObject({ color: t["--ma60"], title: "MA60" });
+    expect(lineStyle(spec("EMA60"), t, 60)).toMatchObject({ color: t["--ema60"], lastValueVisible: true, title: "" });
+    expect(lineStyle(spec("MA60"), t, 60)).toMatchObject({ color: t["--ma60"], title: "" });
     for (const key of ["MA20", "EMA20", "MA120", "EMA120", "MA200"]) {
       expect(lineStyle(spec(key), t, 60)).toMatchObject({ color: alpha(t[spec(key).token], FADED_ALPHA), lastValueVisible: false, title: "" });
     }
