@@ -10,6 +10,8 @@
  * 给题时先等概率挑答案类别、再挑题（drillstats.balancedPick），题库偏了，看到的也是配平的。
  *
  * 页面只拿到题目那一根及以前的图、题干和选项；答案、依据在交卷后才给。答过的题从题库删掉。
+ * 每段行情在候选之后再多取 REVEAL_BARS 根（scan.py --chart-end 画进图表），推演揭晓题交卷后才从这里放出
+ * 题目那一根之后的真实 K 线和均线；给题时一根都不给。
  */
 import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
@@ -22,9 +24,10 @@ import type { ChartData, Runner } from "../analyze.ts";
 import type { Analysis } from "../citations.ts";
 import { PROJECT_ROOT } from "../sources.ts";
 import { labeler, rebase, relabel, toCsv } from "./blind.ts";
-import { GENERATORS, KIND_LABEL, KINDS, shuffle, type Draft, type Kind } from "./drillkinds.ts";
+import { GENERATORS, gradeClicks, KIND_LABEL, KINDS, shuffle, stepMeaning, type Draft, type Kind } from "./drillkinds.ts";
 import { balancedPick, drillStats, kindWeights, weighted, type Answer, type DrillStats } from "./drillstats.ts";
 import { pickStart, pickTicker, POOL, windowStart, type PoolEntry } from "./pool.ts";
+import { CROSS_DAYS, crossMarks, horizonOf, revealOf, type RevealResult } from "./reveal.ts";
 import type { PriceSource } from "./service.ts";
 import { PracticeError } from "./session.ts";
 
@@ -41,6 +44,8 @@ export const scanRunner: Runner = async (args) => {
 
 /** 一段行情里连着多少根当候选题目。 */
 export const REGION = 60;
+/** 候选之后再取几根：推演揭晓题最多对照 30 天的真实走势。 */
+export const REVEAL_BARS = CROSS_DAYS;
 export const PER_CLASS = 3;
 export const TARGET = 9;
 /** 一种题型少于这么多道就在后台补。 */
@@ -50,20 +55,40 @@ export const MAX_WINDOWS = 8;
 const LINE_KEYS = ["MA20", "EMA20", "MA60", "EMA60", "MA120", "EMA120"];
 
 const Strict = { additionalProperties: false } as const;
-const KindT = Type.Union([Type.Literal("chart"), Type.Literal("signal"), Type.Literal("dropoff"), Type.Literal("construct"), Type.Literal("play")]);
-const DrillT = Type.Object({
-  id: Type.String(), kind: KindT, cls: Type.String(),
+const KindT = Type.Union(KINDS.map((k) => Type.Literal(k)));
+const ChoiceKindT = Type.Union([Type.Literal("chart"), Type.Literal("signal"), Type.Literal("dropoff"), Type.Literal("construct"), Type.Literal("play")]);
+const Base = {
+  id: Type.String(), cls: Type.String(),
   /** 出自哪一段行情（windows/<window>.json），题目那一根在这段图表里的位置。 */
   window: Type.String({ pattern: "^[a-f0-9-]{36}$" }), index: Type.Integer({ minimum: 0 }), createdAt: Type.String(),
   view: Type.Object({ bars: Type.Integer({ minimum: 1 }), lines: Type.Boolean(), drops: Type.Boolean() }, Strict),
   marks: Type.Array(Type.Object({ t: Type.Integer({ maximum: 0 }), text: Type.String() }, Strict)),
   context: Type.Union([Type.String(), Type.Null()]),
-  parts: Type.Array(Type.Object({ prompt: Type.String(), choices: Type.Array(Type.String(), { minItems: 2 }), answer: Type.Integer({ minimum: 0 }) }, Strict), { minItems: 1 }),
   evidence: Type.Array(Type.String()),
   rules: Type.Array(Type.Object({ id: Type.String(), name: Type.String() }, Strict)),
   hint: Type.Union([Type.String(), Type.Null()]),
-}, Strict);
-export type Drill = Static<typeof DrillT>;
+};
+const PartsT = Type.Array(Type.Object({ prompt: Type.String(), choices: Type.Array(Type.String(), { minItems: 2 }), answer: Type.Integer({ minimum: 0 }) }, Strict), { minItems: 1 });
+const RevealPartT = Type.Union([
+  Type.Object({ q: Type.Literal("dir"), n: Type.Integer({ minimum: 1 }) }, Strict),
+  Type.Object({ q: Type.Literal("cross"), way: Type.Union([Type.Literal("金叉"), Type.Literal("死叉")]) }, Strict),
+  Type.Object({ q: Type.Literal("turn"), period: Type.Union([Type.Literal(20), Type.Literal(60)]), way: Type.Union([Type.Literal("上"), Type.Literal("下")]), days: Type.Integer({ minimum: 1 }), level: Type.Number() }, Strict),
+]);
+const StepNameT = Type.Union(["破线", "EMA 拐头", "MA 拐头", "第一个交叉", "双交叉"].map((s) => Type.Literal(s)));
+/** 三种题：选择题、推演揭晓（选择题 + 交卷后对照真实走势）、五步点图（在图上点 K 线）。 */
+const DrillT = Type.Union([
+  Type.Object({ ...Base, kind: ChoiceKindT, parts: PartsT }, Strict),
+  Type.Object({ ...Base, kind: Type.Literal("project"), parts: PartsT, reveal: Type.Object({ close: Type.Number(), parts: Type.Array(RevealPartT, { minItems: 1 }) }, Strict) }, Strict),
+  Type.Object({
+    ...Base, kind: Type.Literal("steps"),
+    click: Type.Object({
+      prompt: Type.String(), fast: Type.Integer(), slow: Type.Integer(), direction: Type.Union([Type.Literal("向上"), Type.Literal("向下")]),
+      steps: Type.Array(Type.Object({ step: StepNameT, t: Type.Integer({ maximum: 0 }) }, Strict), { minItems: 1, maxItems: 5 }),
+      tolerance: Type.Integer({ minimum: 0 }),
+    }, Strict),
+  }, Strict),
+]);
+export type Drill = Draft & { id: string; window: string; index: number; createdAt: string };
 const BankFile = Type.Object({ version: Type.Literal(1), drills: Type.Array(DrillT) }, Strict);
 const AnswerT = Type.Object({
   drill: Type.String(), kind: KindT, cls: Type.String(), picks: Type.Array(Type.Integer()), answers: Type.Array(Type.Integer()),
@@ -78,7 +103,11 @@ const ChartT = Type.Object({
   drops: Type.Array(Type.Object({ time: Type.String(), period: Type.Integer() })),
 });
 const MAX_MS = 10 * 60_000;
-const AnswerInput = Type.Object({ picks: Type.Array(Type.Integer({ minimum: 0, maximum: 20 }), { minItems: 1, maxItems: 4 }), ms: Type.Number({ minimum: 0 }) }, Strict);
+/** 选择题交每一问选的位置；点图题交依次点的 K 线（图表的时间键）。 */
+const AnswerInput = Type.Union([
+  Type.Object({ picks: Type.Array(Type.Integer({ minimum: 0, maximum: 20 }), { minItems: 1, maxItems: 4 }), ms: Type.Number({ minimum: 0 }) }, Strict),
+  Type.Object({ clicks: Type.Array(Type.String({ maxLength: 10 }), { minItems: 1, maxItems: 5 }), ms: Type.Number({ minimum: 0 }) }, Strict),
+]);
 const NextInput = Type.Union([KindT, Type.Null()]);
 
 function parse<S extends TSchema>(schema: S, v: unknown, what: string, status: 400 | 500): Static<S> {
@@ -126,15 +155,33 @@ export function admit<T extends { kind: Kind; cls: string }>(bank: T[], drafts: 
   return out;
 }
 
-/** 给页面的一题：没有答案。t0 是题目那一根在图表里的时间键，页面据此把时间写成 T+n。 */
+/**
+ * 给页面的一题：没有答案。t0 是题目那一根在图表里的时间键，页面据此把时间写成 T+n。
+ * 点图题 parts 是空的，click 给要依次点的步骤名（不给日期）。
+ */
 export interface DrillView {
   id: string; kind: Kind; label: string; context: string | null;
   parts: { prompt: string; choices: string[] }[];
+  click: { prompt: string; steps: string[]; tolerance: number } | null;
   chart: ChartData; t0: string; marks: { time: string; text: string }[];
+}
+/** 点图题每一步：答案那根、点的那根（时间键），差 tolerance 根以内算对；meaning、rule 是这一步的定义和规则编号。 */
+export interface StepResult { step: string; answer: string; pick: string; ok: boolean; meaning: string; rule: string }
+/**
+ * 推演揭晓：T0 之后 horizon 根真实 K 线和均线（只有交卷后给），level 是收平假设的价位；
+ * marks 是真实发生的 20/60 交叉；parts 逐问写推演（评分用）和真实走势的对照。
+ */
+export interface RevealView {
+  horizon: number; level: number;
+  chart: Pick<ChartData, "candles" | "lines">;
+  marks: { time: string; text: string }[];
+  parts: RevealResult[];
 }
 export interface Feedback {
   correct: boolean;
   parts: { prompt: string; choices: string[]; pick: number; answer: number }[];
+  steps: StepResult[] | null;
+  reveal: RevealView | null;
   evidence: string[]; rules: Drill["rules"]; hint: string | null; ms: number;
   stats: DrillStats;
 }
@@ -174,7 +221,7 @@ export class DrillBank {
   private get answersFile() { return resolve(this.dir, "answers.json"); }
   private windowFile = (id: string, ext: "json" | "csv") => resolve(this.dir, "windows", `${id}.${ext}`);
 
-  drills(): Drill[] { return readJson(this.bankFile, BankFile, { version: 1, drills: [] }).drills; }
+  drills(): Drill[] { return readJson(this.bankFile, BankFile, { version: 1, drills: [] }).drills as Drill[]; }
   answers(): Answer[] { return readJson(this.answersFile, AnswersFile, { version: 1, answers: [] }).answers; }
 
   /** 改文件的操作一个接一个做（补题在后台跑，交卷随时会来）。 */
@@ -232,23 +279,26 @@ export class DrillBank {
     if (!picked) throw new PracticeError("抽了 5 只票都没有够长的历史（之前 5 年、之后半年），检查行情数据", 500);
     const { bars, q0 } = picked;
     const w0 = windowStart(bars, q0);
-    const r = rebase(bars.slice(w0, q0 + REGION), q0 - w0);
+    const r = rebase(bars.slice(w0, q0 + REGION + REVEAL_BARS), q0 - w0);
     const id = randomUUID();
     const csv = this.windowFile(id, "csv");
     mkdirSync(dirname(csv), { recursive: true });
     writeFileSync(csv, toCsv(r.bars));
-    const days = r.bars.slice(q0 - w0).map((b) => b.date);
+    const days = r.bars.slice(q0 - w0, q0 - w0 + REGION).map((b) => b.date);
     try {
-      return { id, drafts: shuffle(await this.draftsOf(id, csv, days), rand) };
+      return { id, drafts: shuffle(await this.draftsOf(id, csv, days, r.bars.at(-1)!.date), rand) };
     } catch (err) {
       this.dropWindow(id);
       throw err;
     }
   }
 
-  /** 逐根分析这段行情，存下整段图表，每根交给每个出题函数；草稿里的日期换成 T+n。 */
-  private async draftsOf(id: string, csv: string, days: string[]): Promise<Drill[]> {
-    const out: { chart: ChartData; analyses: Analysis[] } = JSON.parse(await this.scan(["--csv", csv, "--dates", days.join(",")]));
+  /**
+   * 逐根分析这段行情，存下整段图表（画到 chartEnd，比候选多 REVEAL_BARS 根），每根交给每个出题函数；
+   * 草稿里的日期换成 T+n。推演揭晓题之后不够它要对照的根数就不收。
+   */
+  private async draftsOf(id: string, csv: string, days: string[], chartEnd: string): Promise<Drill[]> {
+    const out: { chart: ChartData; analyses: Analysis[] } = JSON.parse(await this.scan(["--csv", csv, "--dates", days.join(","), "--chart-end", chartEnd]));
     const chart = { ...out.chart, lines: Object.fromEntries(LINE_KEYS.map((k) => [k, out.chart.lines[k] ?? []])) };
     writeAtomic(this.windowFile(id, "json"), chart);
     const times = chart.candles.map((c) => c.time);
@@ -260,6 +310,7 @@ export class DrillBank {
       const label = labeler(times, index, index);
       for (const kind of KINDS) {
         for (const d of GENERATORS[kind]({ a, dates: times.slice(0, index + 1), rand: this.random })) {
+          if (d.kind === "project" && index + horizonOf(d.reveal) > times.length - 1) continue;
           drafts.push({ ...blind(d, label), id: randomUUID(), window: id, index, createdAt });
         }
       }
@@ -289,8 +340,12 @@ export class DrillBank {
     });
   }
 
+  private chartOf(d: Drill): ChartData {
+    return parse(ChartT, JSON.parse(readFileSync(this.windowFile(d.window, "json"), "utf8")), "题目的图表", 500) as ChartData;
+  }
+
   private viewOf(d: Drill): DrillView {
-    const full = parse(ChartT, JSON.parse(readFileSync(this.windowFile(d.window, "json"), "utf8")), "题目的图表", 500) as ChartData;
+    const full = this.chartOf(d);
     const from = Math.max(0, d.index - d.view.bars + 1);
     const candles = full.candles.slice(from, d.index + 1);
     const lo = candles[0].time, hi = candles.at(-1)!.time;
@@ -298,7 +353,8 @@ export class DrillBank {
     const at = (t: number) => full.candles[d.index + t]?.time;
     return {
       id: d.id, kind: d.kind, label: KIND_LABEL[d.kind], context: d.context,
-      parts: d.parts.map(({ prompt, choices }) => ({ prompt, choices })),
+      parts: d.kind === "steps" ? [] : d.parts.map(({ prompt, choices }) => ({ prompt, choices })),
+      click: d.kind === "steps" ? { prompt: d.click.prompt, steps: d.click.steps.map((s) => s.step), tolerance: d.click.tolerance } : null,
       t0: hi,
       marks: d.marks.flatMap((m) => (at(m.t) ? [{ time: at(m.t)!, text: m.text }] : [])),
       chart: {
@@ -310,18 +366,20 @@ export class DrillBank {
     };
   }
 
-  /** 交卷：每一问都对才算对。答过的题从题库删掉；同一题交两次第二次拒绝。 */
+  /**
+   * 交卷：选择题每一问都对才算对；点图题每一步都在容差以内才算对。推演揭晓题这时才放出题目那一根之后的真实走势。
+   * 答过的题从题库删掉；同一题交两次第二次拒绝。
+   */
   async answer(id: string, input: unknown): Promise<Feedback> {
-    const { picks, ms: rawMs } = parse(AnswerInput, input, "答案", 400);
+    const body = parse(AnswerInput, input, "答案", 400);
     return this.serial(() => {
       const bank = this.drills();
       const d = bank.find((x) => x.id === id);
       const answers = this.answers();
       if (!d) throw new PracticeError(answers.some((x) => x.drill === id) ? "这一题已经答过了" : `没有这一题：${id}`, answers.some((x) => x.drill === id) ? 409 : 404);
-      if (picks.length !== d.parts.length) throw new PracticeError(`这一题有 ${d.parts.length} 问，交了 ${picks.length} 个答案`, 400);
-      picks.forEach((p, i) => { if (p >= d.parts[i].choices.length) throw new PracticeError(`第 ${i + 1} 问没有第 ${p + 1} 个选项`, 400); });
-      const ms = Math.min(rawMs, MAX_MS);
-      const record: Answer = { drill: id, kind: d.kind, cls: d.cls, picks, answers: d.parts.map((p) => p.answer), correct: d.parts.every((p, i) => p.answer === picks[i]), ms, at: this.now() };
+      const ms = Math.min(body.ms, MAX_MS);
+      const g = d.kind === "steps" ? this.gradeSteps(d, body) : this.gradeChoices(d, body);
+      const record: Answer = { drill: id, kind: d.kind, cls: d.cls, picks: g.picks, answers: g.answers, correct: g.correct, ms, at: this.now() };
       const all = [...answers, record];
       writeAtomic(this.answersFile, { version: 1, answers: all });
       const rest = bank.filter((x) => x.id !== id);
@@ -329,11 +387,69 @@ export class DrillBank {
       if (!rest.some((x) => x.window === d.window)) this.dropWindow(d.window);
       if (this.o.autoFill) void this.topUp();
       return {
-        correct: record.correct, ms,
-        parts: d.parts.map((p, i) => ({ prompt: p.prompt, choices: p.choices, pick: picks[i], answer: p.answer })),
+        correct: record.correct, ms, parts: g.parts, steps: g.steps, reveal: d.kind === "project" ? this.revealOf(d) : null,
         evidence: d.evidence, rules: d.rules, hint: d.hint, stats: drillStats(all),
       };
     });
+  }
+
+  private gradeChoices(d: Exclude<Drill, { kind: "steps" }>, body: Static<typeof AnswerInput>) {
+    if (!("picks" in body)) throw new PracticeError("选择题要交每一问选的选项（picks）", 400);
+    const { picks } = body;
+    if (picks.length !== d.parts.length) throw new PracticeError(`这一题有 ${d.parts.length} 问，交了 ${picks.length} 个答案`, 400);
+    picks.forEach((p, i) => { if (p >= d.parts[i].choices.length) throw new PracticeError(`第 ${i + 1} 问没有第 ${p + 1} 个选项`, 400); });
+    return {
+      picks, answers: d.parts.map((p) => p.answer), correct: d.parts.every((p, i) => p.answer === picks[i]), steps: null,
+      parts: d.parts.map((p, i) => ({ prompt: p.prompt, choices: p.choices, pick: picks[i], answer: p.answer })),
+    };
+  }
+
+  /** 点的 K 线换成相对题目那一根的位置；只认题目给出的那段图里的。 */
+  private gradeSteps(d: Extract<Drill, { kind: "steps" }>, body: Static<typeof AnswerInput>) {
+    if (!("clicks" in body)) throw new PracticeError("点图题要交依次点的 K 线（clicks）", 400);
+    const { clicks } = body, { click } = d;
+    if (clicks.length !== click.steps.length) throw new PracticeError(`这一题要点 ${click.steps.length} 步，交了 ${clicks.length} 步`, 400);
+    const times = this.chartOf(d).candles.map((c) => c.time);
+    const from = Math.max(0, d.index - d.view.bars + 1);
+    const picks = clicks.map((time) => {
+      const i = times.indexOf(time);
+      if (i < from || i > d.index) throw new PracticeError(`题目的图上没有这一根：${time}`, 400);
+      return i - d.index;
+    });
+    const oks = gradeClicks(click, picks);
+    const steps: StepResult[] = click.steps.map((s, i) => {
+      const m = stepMeaning(s.step, click.fast, click.slow);
+      return { step: s.step, answer: times[d.index + s.t], pick: clicks[i], ok: oks[i], meaning: m.text, rule: m.rule };
+    });
+    return { picks, answers: click.steps.map((s) => s.t), correct: oks.every(Boolean), steps, parts: [] };
+  }
+
+  /** 推演揭晓：T0 及之后 horizon 根的真实收盘和均线，逐问对照；图上画之后的 K 线、均线和真实的交叉。 */
+  private revealOf(d: Extract<Drill, { kind: "project" }>): RevealView {
+    const full = this.chartOf(d);
+    const horizon = horizonOf(d.reveal);
+    const range = full.candles.slice(d.index, d.index + horizon + 1);
+    if (range.length !== horizon + 1) throw new PracticeError(`这一题之后只有 ${range.length - 1} 根，揭晓要 ${horizon} 根`, 500);
+    const times = range.map((c) => c.time);
+    const values = (key: string) => {
+      const m = new Map((full.lines[key] ?? []).map((p) => [p.time, p.value]));
+      return times.map((t) => {
+        const v = m.get(t);
+        if (v === undefined) throw new PracticeError(`题目的图表在 ${t} 没有 ${key}`, 500);
+        return v;
+      });
+    };
+    const series = { close: range.map((c) => c.close), ma20: values("MA20"), ema20: values("EMA20"), ma60: values("MA60"), ema60: values("EMA60") };
+    const after = new Set(times.slice(1));
+    return {
+      horizon, level: d.reveal.close,
+      chart: {
+        candles: range.slice(1).map(({ time, open, high, low, close }) => ({ time, open, high, low, close })),
+        lines: Object.fromEntries(Object.entries(full.lines).map(([k, xs]) => [k, xs.filter((p) => after.has(p.time))])),
+      },
+      marks: crossMarks(series).map((m) => ({ time: times[m.k], text: m.text })),
+      parts: revealOf(d.reveal, d.parts.map((p) => p.choices[p.answer]), series),
+    };
   }
 }
 

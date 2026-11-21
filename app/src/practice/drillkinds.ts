@@ -5,13 +5,16 @@
  * 答案直接从分析的字段来，所以练的是系统的规则，不是谁的看法。一份分析可以出 0 到几道题（草稿），
  * 题库（drills.ts）按答案类别配额挑。草稿里的日期还是挪过的日期，入库时换成 T+n。
  */
-import { ACCEL_WHERE, type Analysis, type Construct, type StepName } from "../citations.ts";
+import { ACCEL_WHERE, type Analysis, type Construct, type PairProgress, type StepName, type Turn } from "../citations.ts";
 import { buildPlans, playKey } from "../plan.ts";
 import { entryStateOf } from "./discipline.ts";
+import { bucketOf, CROSS_CHOICES, type RevealPart, type RevealSpec } from "./reveal.ts";
 
-export const KINDS = ["chart", "signal", "dropoff", "construct", "play"] as const;
+export const KINDS = ["chart", "signal", "dropoff", "construct", "play", "project", "steps"] as const;
 export type Kind = (typeof KINDS)[number];
-export const KIND_LABEL: Record<Kind, string> = { chart: "看图", signal: "看信号", dropoff: "看抵扣价", construct: "看构造和 2B", play: "看打法" };
+export const KIND_LABEL: Record<Kind, string> = {
+  chart: "看图", signal: "看信号", dropoff: "看抵扣价", construct: "看构造和 2B", play: "看打法", project: "推演揭晓", steps: "五步点图",
+};
 
 /** 一问：几个选项，answer 是对的那个的位置。 */
 export interface Part { prompt: string; choices: string[]; answer: number }
@@ -22,20 +25,25 @@ export interface Mark { t: number; text: string }
 export interface Rule { id: string; name: string }
 
 /**
+ * 点图题要点的：一对线组（fast/slow）往 direction 的转折，steps 按五步的顺序，t 是相对题目那一根的位置。
+ * 点的那根和答案差 tolerance 根以内算对。
+ */
+export interface ClickTask {
+  prompt: string; fast: number; slow: number; direction: Turn["direction"];
+  steps: { step: StepName; t: number }[]; tolerance: number;
+}
+
+/**
  * 一道题的草稿。cls：答案类别，抽题时按它配平（例如看信号的「都不是」不能占八成）。
  * evidence：答完给看的依据，每条都是分析里的数字；rules：依据的规则编号。
+ * 选择题有 parts；推演揭晓题另有 reveal（交卷后拿真实走势对照什么）；五步点图题没有选项，答案在 click。
  */
-export interface Draft {
-  kind: Kind;
-  cls: string;
-  view: View;
-  marks: Mark[];
-  context: string | null;
-  parts: Part[];
-  evidence: string[];
-  rules: Rule[];
-  hint: string | null;
-}
+interface DraftBase { cls: string; view: View; marks: Mark[]; context: string | null; evidence: string[]; rules: Rule[]; hint: string | null }
+export type ChoiceKind = Exclude<Kind, "project" | "steps">;
+export type Draft =
+  | (DraftBase & { kind: ChoiceKind; parts: Part[] })
+  | (DraftBase & { kind: "project"; parts: Part[]; reveal: RevealSpec })
+  | (DraftBase & { kind: "steps"; click: ClickTask });
 
 /** dates：图上到题目那一根为止的日期（挪过的），用来把日期换成相对位置。 */
 export interface Ctx { a: Analysis; dates: string[]; rand: () => number }
@@ -130,13 +138,16 @@ export const SIGNAL_CHOICES = ["破线", "EMA 拐头", "MA 拐头", "第一个�
 const SIGNAL_CLASS: Record<(typeof SIGNAL_CHOICES)[number], string> = {
   破线: "破线", "EMA 拐头": "拐头", "MA 拐头": "拐头", 第一个交叉: "交叉", 双交叉: "双交叉", 都不是: "都不是",
 };
-const STEP_MEANING: Record<StepName, string> = {
-  破线: "收盘穿过 MA20、EMA20 两条线",
-  "EMA 拐头": "EMA20 当天朝反方向走（收盘越过 EMA20 本身）",
-  "MA 拐头": "MA20 当天朝反方向走（收盘越过 20 日抵扣价）",
-  第一个交叉: "MA20 或 EMA20 有一条穿过 60 那条",
-  双交叉: "MA20 穿过 MA60、EMA20 穿过 EMA60，两组都交叉",
-};
+/** 五个进度点的定义（rules.md J15、J16；拐头的条件是 A1、A3），rule 是出处的编号。 */
+export function stepMeaning(step: StepName, fast: number, slow: number): { text: string; rule: string } {
+  switch (step) {
+    case "破线": return { text: `收盘穿过 MA${fast}、EMA${fast} 两条线`, rule: "J15" };
+    case "EMA 拐头": return { text: `EMA${fast} 当天朝反方向走（收盘越过 EMA${fast} 本身）`, rule: "A3" };
+    case "MA 拐头": return { text: `MA${fast} 当天朝反方向走（收盘越过 ${fast} 日抵扣价）`, rule: "A1" };
+    case "第一个交叉": return { text: `MA${fast} 或 EMA${fast} 有一条穿过 ${slow} 那条`, rule: "J15" };
+    case "双交叉": return { text: `MA${fast} 穿过 MA${slow}、EMA${fast} 穿过 EMA${slow}，两组都交叉`, rule: "J16" };
+  }
+}
 
 /** 题目那一根新走到的进度点，按五步的顺序取最靠后的；一步都没有是「都不是」。没站到一边返回 null。 */
 export function signalAnswer(a: Analysis): (typeof SIGNAL_CHOICES)[number] | null {
@@ -159,7 +170,7 @@ const signal: Generator = (c) => {
     parts: [{ prompt: "标出的最后一根，20/60 新走到了哪一个进度点？（同一根走到好几步，选最靠后的一步）", choices: [...SIGNAL_CHOICES], answer: SIGNAL_CHOICES.indexOf(ans) }],
     evidence: [
       `这次转折的进度点：${cur.steps.map((s) => `${s.step} ${s.date ?? "还没有"}`).join("；")}`,
-      ans === "都不是" ? "这一根没有新走到的进度点" : `${ans}：${STEP_MEANING[ans]}`,
+      ans === "都不是" ? "这一根没有新走到的进度点" : `${ans}：${stepMeaning(ans, 20, 60).text}`,
       `这根收盘 ${f2(a.close)}；MA20 ${f2(line(20).ma)}、EMA20 ${f2(line(20).ema)}；MA60 ${f2(line(60).ma)}、EMA60 ${f2(line(60).ema)}`,
     ],
     rules: rulesOf(a, ids), hint: null,
@@ -322,5 +333,136 @@ const play: Generator = (c) => {
   }];
 };
 
+// ---------- 推演揭晓：收平推演 N 天，交卷后放出真实走势对照 ----------
+
+/**
+ * 问第几天的方向：5、10、15 天里随机挑一个。不问第 20 天：MA20 第 20 天扣掉的正是 T0 自己，收平时 MA20 一定走平。
+ */
+export const PROJECT_DAYS = [5, 10, 15] as const;
+/** 问拐头的价位：推演求解的 10 天、20 天里挑一个。 */
+const TURN_DAYS = [10, 20] as const;
+const pick = <T>(xs: readonly T[], rand: () => number) => xs[Math.floor(rand() * xs.length)];
+export const PROJECT_CONTEXT = "推演照系统的假设：之后每天收盘都和 T0 一样（收平）。评分按推演；交卷后放出之后的真实走势，只作对照、不算分。推演不是预测。";
+
+/** 收平时 days 天内会不会出现 event：从推演的求解（持平价位的临界值）读。求解里没有、或临界价位就卡在收盘上，返回 null。 */
+function occursAtClose(a: Analysis, event: string, happen: boolean, days: number): boolean | null {
+  const s = a.projection.solves.find((x) => x.event === event && x.happen === happen && x.days === days);
+  if (!s) return null;
+  let goal: boolean;
+  if (s.status === "任何价位都成立") goal = true;
+  else if (s.status === "任何价位都不成立") goal = false;
+  else if (Math.abs(s.level! / a.close - 1) < 1e-4) return null;
+  else goal = s.side === "以上" ? a.close > s.level! : a.close < s.level!;
+  return happen ? goal : !goal;
+}
+
+const project: Generator = (c) => {
+  const { a, rand } = c;
+  const line = (n: number) => a.lines.find((l) => l.period === n)!;
+  const hurdle = (n: number) => a.projection.hurdles.find((h) => h.period === n)!;
+  const parts: Part[] = [], reveal: RevealPart[] = [], evidence: string[] = [], ids = new Set<string>();
+  const close = f2(a.close);
+
+  // 1. 第 n 天 MA20、MA60 往哪走：那天扣掉的收盘和收平价比（A1、A2）
+  const n = pick(PROJECT_DAYS, rand);
+  const dropped = (p: number) => hurdle(p).prices[n - 1];
+  const p20 = dropped(20), p60 = dropped(60);
+  if (p20 === undefined || p60 === undefined || p20 === a.close || p60 === a.close) return [];
+  const w = (x: number) => (a.close > x ? "上" : "下");
+  const dirAns = `MA20 ${w(p20)}、MA60 ${w(p60)}`;
+  parts.push({ prompt: `之后每天都收在 T0 的 ${close}（收平），第 ${n} 天（T+${n}）当天 MA20、MA60 各往哪走？`, choices: [...DROPOFF_CHOICES], answer: DROPOFF_CHOICES.indexOf(dirAns as never) });
+  reveal.push({ q: "dir", n });
+  for (const [p, x] of [[20, p20], [60, p60]] as const) {
+    evidence.push(`第 ${n} 天 MA${p} 扣掉 ${hurdle(p).dates[n - 1]} 那根（收盘 ${f2(x)}），收平 ${close} ${a.close > x ? "高于" : "低于"}它，MA${p} 向${w(x)}`);
+  }
+  ids.add("A1").add("A2");
+
+  // 2. 30 天内 20/60 会不会双交叉、最早哪段：两组现在在同一边才问（J16），从推演求解读 10、20、30 天
+  let cls = `方向:${dirAns}`;
+  const sMa = Math.sign(line(20).ma - line(60).ma), sEma = Math.sign(line(20).ema - line(60).ema);
+  if (sMa !== 0 && sMa === sEma) {
+    const way = sMa > 0 ? "死叉" : "金叉";
+    const [event, happen] = sMa > 0 ? ["20 线组双双跌破 60 线组", false] : ["20 线组双双站上 60 线组", true];
+    const hits = ([10, 20, 30] as const).map((k) => occursAtClose(a, event as string, happen as boolean, k));
+    if (hits.every((x) => x !== null)) {
+      const first = hits.indexOf(true);
+      const ans = bucketOf(first < 0 ? null : [10, 20, 30][first]);
+      parts.push({ prompt: `20/60 两组现在都是快线在${sMa > 0 ? "上" : "下"}。一直收平，30 天内会不会出现双交叉（${way}）、最早在哪段时间？`, choices: [...CROSS_CHOICES], answer: CROSS_CHOICES.indexOf(ans) });
+      reveal.push({ q: "cross", way });
+      const sc = a.projection.scenarios[0];
+      const day = (kind: "MA" | "EMA") => sc.crosses.find((x) => x.kind === kind && x.pair === "20/60")?.cross_day ?? null;
+      const at = (k: number | null) => (k === null ? "30 天内不交叉" : `第 ${k} 天交叉`);
+      evidence.push(`收平 30 天的推演：MA20/MA60 ${at(day("MA"))}，EMA20/EMA60 ${at(day("EMA"))}；两组都到了另一边才是双交叉，答案「${ans}」`);
+      cls = `交叉:${ans}`;
+      ids.add("J16").add("A1").add("A3");
+    }
+  }
+
+  // 3. 要让 MA20（或 MA60）几天内拐头，收盘持平在哪：推演求解的临界价位，就是门槛路径前几天的最高（最低）价（A2）
+  const p = pick([20, 60] as const, rand), days = pick(TURN_DAYS, rand);
+  const s = a.projection.solves.find((x) => x.event.startsWith(`MA${p} 拐头向`) && x.happen && x.days === days);
+  if (s?.status === "有临界价位") {
+    const way = s.event.endsWith("向下") ? "下" : "上";
+    const h = hurdle(p), path = h.prices.slice(0, days);
+    const edge = way === "下" ? Math.max(...path) : Math.min(...path);
+    const other = a.projection.solves.find((x) => x.event === s.event && x.happen && x.days !== days && x.level !== null)?.level ?? NaN;
+    const price = priceChoices(s.level!, [other, way === "下" ? h.min_price : h.max_price, a.close, line(p).ma, line(p === 20 ? 60 : 20).ma]);
+    if (price) {
+      parts.push({ prompt: `要在 ${days} 天内让 MA${p} 拐头向${way}，收盘持平在哪个价位${s.side}？`, ...price });
+      reveal.push({ q: "turn", period: p, way, days, level: s.level! });
+      evidence.push(`MA${p} 未来 ${days} 天要扣的收盘里${way === "下" ? "最高" : "最低"}是 ${f2(edge)}（${h.dates[path.indexOf(edge)]} 那根）：持平在它${s.side}，扣到那一根 MA${p} 就拐头向${way}；推演求解的临界价位 ${f2(s.level!)}`);
+      ids.add("A1").add("A2");
+    }
+  }
+  if (parts.length < 2) return [];
+  return [{
+    kind: "project", cls, view: { bars: 140, lines: true, drops: true }, marks: [], context: PROJECT_CONTEXT,
+    parts, evidence, rules: rulesOf(a, [...ids]), hint: null, reveal: { close: a.close, parts: reveal },
+  }];
+};
+
+// ---------- 五步点图：在图上依次点出一轮转折的进度点 ----------
+
+/** 点的和答案差几根以内算对。脚本自定：相邻两根常常一根是这一步、一根是下一步，差 1 根留给看图点偏的手。 */
+export const STEP_TOLERANCE = 1;
+const STEPS_MIN_BARS = 40;
+const STEPS_MAX_BARS = 80;
+/** 第一步之前多给几根，看得出转折前站在哪边。 */
+const STEPS_PAD = 12;
+
+/** 一轮转折出一道：走了几步就点几步。只出前 k 步都有日期的（中间跳了一步的不出），而且都在 80 根以内。 */
+function stepsDraft(c: Ctx, p: PairProgress, turn: Turn | null): Draft | null {
+  if (!turn || turn.progress === 0) return null;
+  const k = turn.progress, done = turn.steps.slice(0, k);
+  if (done.some((s) => !s.date)) return null;
+  const ts = done.map((s) => tOf(c, s.date!));
+  if (ts.some((t) => t === null)) return null;
+  const bars = Math.max(STEPS_MIN_BARS, 1 - Math.min(...(ts as number[])) + STEPS_PAD);
+  if (bars > STEPS_MAX_BARS) return null;
+  const [fast, slow] = p.pair.split("/").map(Number);
+  const up = turn.direction === "向上";
+  const from = up ? "空头" : "多头";
+  return {
+    kind: "steps", cls: `${p.pair}·${turn.direction}·${k}步`, view: { bars, lines: true, drops: false }, marks: [],
+    context: `${p.pair} 原来${from}排列。从最近一次完整站在${from}一边之后算起（两组都是 ${fast} 在 ${slow} ${up ? "下方" : "上方"}、收盘在两条 ${fast} 线${up ? "下方" : "上方"}、两条 ${fast} 线都朝${up ? "下" : "上"}走），每一步点它第一次出现的那根；几步落在同一根，就在那根点几次。差 ${STEP_TOLERANCE} 根以内算对。`,
+    evidence: [
+      `这一轮${turn.direction}转折的进度点：${done.map((s) => `${s.step} ${s.date}`).join("；")}${k < 5 ? `；${turn.steps.slice(k).map((s) => s.step).join("、")}还没有` : ""}`,
+      "每个进度点记这一轮里第一次出现的那根；回到原来那边的完整状态，这一轮作废、重新记",
+    ],
+    rules: rulesOf(c.a, ["J15", "J16", "A1", "A3"]), hint: null,
+    click: {
+      prompt: `依次在图上点出 ${p.pair} 这一轮${turn.direction}转折的 ${done.map((s) => s.step).join(" → ")}（${k === 5 ? "五步都走完了" : `这一段走到第 ${k} 步`}，点 ${k} 下）。`,
+      fast, slow, direction: turn.direction, steps: done.map((s, i) => ({ step: s.step, t: ts[i]! })), tolerance: STEP_TOLERANCE,
+    },
+  };
+}
+
+/** 点图题判分：第 i 步点的那根（相对题目那一根）和答案差 tolerance 根以内算对。全对才算这题对。 */
+export function gradeClicks(task: Pick<ClickTask, "steps" | "tolerance">, picks: number[]): boolean[] {
+  return task.steps.map((s, i) => picks[i] !== undefined && Math.abs(picks[i] - s.t) <= task.tolerance);
+}
+
+const steps: Generator = (c) => c.a.steps.flatMap((p) => [p.completed, p.current].map((t) => stepsDraft(c, p, t)).filter((d): d is Draft => d !== null));
+
 /** 每种题一个出题函数。加题型：在 KINDS 加一个键，在这里登记。 */
-export const GENERATORS: Record<Kind, Generator> = { chart, signal, dropoff, construct, play };
+export const GENERATORS: Record<Kind, Generator> = { chart, signal, dropoff, construct, play, project, steps };

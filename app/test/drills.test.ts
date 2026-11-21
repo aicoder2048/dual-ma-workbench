@@ -7,10 +7,11 @@ import { buildPlans } from "../src/plan.ts";
 import { entryStateOf } from "../src/practice/discipline.ts";
 import { parseCsv, rebase, toCsv } from "../src/practice/blind.ts";
 import {
-  DROPOFF_CHOICES, GENERATORS, KINDS, PLAY_CHOICES, playClass, REGIME_NAMES, SIGNAL_CHOICES, STOP_CHOICES, TWO_B_CHOICES,
-  type Draft, type Kind,
+  DROPOFF_CHOICES, GENERATORS, gradeClicks, KINDS, PLAY_CHOICES, playClass, REGIME_NAMES, SIGNAL_CHOICES, STEP_TOLERANCE, stepMeaning, STOP_CHOICES,
+  TWO_B_CHOICES, type Draft, type Kind,
 } from "../src/practice/drillkinds.ts";
-import { admit, DrillBank, scanRunner, type DrillView } from "../src/practice/drills.ts";
+import { bucketOf } from "../src/practice/reveal.ts";
+import { admit, DrillBank, scanRunner, type Drill, type DrillView } from "../src/practice/drills.ts";
 import { seeded } from "../src/practice/pool.ts";
 import { Analyzer } from "../src/analyze.ts";
 import { createHandler } from "../src/http.ts";
@@ -45,7 +46,8 @@ beforeAll(async () => {
 }, 60_000);
 
 const draftsOf = (kind: Kind) => cases.flatMap(({ a, dates }) => GENERATORS[kind]({ a, dates, rand: seeded(1) }).map((d) => ({ a, d })));
-const picked = (d: Draft, part = 0) => d.parts[part].choices[d.parts[part].answer];
+const partsOf = (d: Draft) => (d.kind === "steps" ? [] : d.parts);
+const picked = (d: Draft, part = 0) => partsOf(d)[part].choices[partsOf(d)[part].answer];
 
 describe("出题函数：答案就是分析里的字段", () => {
   test("每种题都出得来，每道题的答案在选项里、选项不重复", () => {
@@ -54,7 +56,7 @@ describe("出题函数：答案就是分析里的字段", () => {
       expect({ kind, some: ds.length > 0 }).toEqual({ kind, some: true });
       for (const { d } of ds) {
         expect(d.kind).toBe(kind);
-        for (const p of d.parts) {
+        for (const p of partsOf(d)) {
           expect(p.answer).toBeGreaterThanOrEqual(0);
           expect(p.answer).toBeLessThan(p.choices.length);
           expect(new Set(p.choices).size).toBe(p.choices.length);
@@ -69,8 +71,8 @@ describe("出题函数：答案就是分析里的字段", () => {
   test("看图：答案 = regime.name，六个选项都在类型 × 阶段的词表里", () => {
     for (const { a, d } of draftsOf("chart")) {
       expect(picked(d)).toBe(a.regime.name);
-      expect(d.parts[0].choices.length).toBe(6);
-      expect(d.parts[0].choices.every((c) => (REGIME_NAMES as readonly string[]).includes(c))).toBe(true);
+      expect(partsOf(d)[0].choices.length).toBe(6);
+      expect(partsOf(d)[0].choices.every((c) => (REGIME_NAMES as readonly string[]).includes(c))).toBe(true);
       expect(d.hint).toContain(a.regime.clock60.hour);
     }
   });
@@ -81,7 +83,7 @@ describe("出题函数：答案就是分析里的字段", () => {
     for (const { a, d } of ds) {
       const today = a.steps[0].current!.steps.filter((s) => s.date === a.date).map((s) => order.indexOf(s.step));
       expect(picked(d)).toBe(today.length ? order[Math.max(...today)] : "都不是");
-      expect(d.parts[0].choices).toEqual([...SIGNAL_CHOICES]);
+      expect(partsOf(d)[0].choices).toEqual([...SIGNAL_CHOICES]);
       expect(d.marks).toEqual([{ t: 0, text: "这根" }]);
     }
     expect(ds.some(({ d }) => d.cls !== "都不是")).toBe(true);
@@ -91,8 +93,8 @@ describe("出题函数：答案就是分析里的字段", () => {
     for (const { a, d } of draftsOf("dropoff")) {
       const dir = (n: number) => a.drops.find((x) => x.period === n)!.direction;
       expect(picked(d)).toBe(`MA20 ${dir(20)}、MA60 ${dir(60)}`);
-      expect(d.parts[0].choices).toEqual([...DROPOFF_CHOICES]);
-      if (d.parts[1]) expect(picked(d, 1)).toBe(a.projection.hurdles.find((h) => h.period === 20)!.max_price.toFixed(2));
+      expect(partsOf(d)[0].choices).toEqual([...DROPOFF_CHOICES]);
+      if (partsOf(d)[1]) expect(picked(d, 1)).toBe(a.projection.hurdles.find((h) => h.period === 20)!.max_price.toFixed(2));
     }
   });
 
@@ -101,15 +103,15 @@ describe("出题函数：答案就是分析里的字段", () => {
     for (const { a, d } of ds) {
       const s = a.structure;
       if (d.cls.startsWith("状态:")) {
-        const k = d.parts[0].prompt.includes("顶部构造") ? s.top! : s.bottom!;
+        const k = partsOf(d)[0].prompt.includes("顶部构造") ? s.top! : s.bottom!;
         expect(picked(d)).toBe(k.state);
       } else if (d.cls === "下一根") {
-        const k = d.parts[0].prompt.startsWith("顶部构造") ? s.top! : s.bottom!;
+        const k = partsOf(d)[0].prompt.startsWith("顶部构造") ? s.top! : s.bottom!;
         expect(picked(d)).toBe(k.complete_at!.toFixed(2));
       } else {
         const j = a.rules.find((r) => r.id === "J26")!;
         expect(picked(d)).toBe(j.status === "满足" ? j.basis.slice(0, 4) : "没有");
-        expect(d.parts[0].choices).toEqual([...TWO_B_CHOICES]);
+        expect(partsOf(d)[0].choices).toEqual([...TWO_B_CHOICES]);
       }
       expect(d.view.lines).toBe(false); // 只看 K 线
     }
@@ -120,7 +122,7 @@ describe("出题函数：答案就是分析里的字段", () => {
     for (const { a, d } of draftsOf("play")) {
       expect(picked(d)).toBe(playClass(a)!);
       expect(picked(d)).not.toBe("反弹卖");
-      expect(d.parts[0].choices).toEqual([...PLAY_CHOICES]);
+      expect(partsOf(d)[0].choices).toEqual([...PLAY_CHOICES]);
       const stop = buildPlans(a).flat.stop;
       const buys = entryStateOf(a).entries !== null;
       // 蒙眼：交易计划是换算后那段行情算的（不带账户，没有股数），价位和题目里的收盘同一个量级
@@ -129,6 +131,79 @@ describe("出题函数：答案就是分析里的字段", () => {
       for (const x of prices) if (x != null) expect(x / a.close).toBeGreaterThan(0.2), expect(x / a.close).toBeLessThan(5);
       expect(picked(d, 1)).toBe(stop && buys ? STOP_CHOICES.find((c) => stop.label.startsWith(c.slice(0, 5)))! : "不设（这时不进场）");
     }
+  });
+});
+
+describe("推演揭晓、五步点图：答案也从分析的字段来", () => {
+  test("推演揭晓：方向 = 第 n 天扣掉的收盘和收平价比；双交叉 = 持平情景两组都交叉的那天；拐头价位 = 门槛路径前几天的最高（最低）价", () => {
+    const ds = draftsOf("project");
+    expect(ds.length).toBeGreaterThan(0);
+    for (const { a, d } of ds) {
+      if (d.kind !== "project") throw new Error("kind");
+      expect(d.parts.length).toBeGreaterThanOrEqual(2);
+      expect(d.reveal.parts.length).toBe(d.parts.length);
+      expect(d.reveal.close).toBe(a.close);
+      expect(d.context).toContain("收平");
+      expect(d.context).toContain("不算分");
+      d.reveal.parts.forEach((r, i) => {
+        const h = (n: number) => a.projection.hurdles.find((x) => x.period === n)!;
+        if (r.q === "dir") {
+          const w = (n: number) => (a.close > h(n).prices[r.n - 1] ? "上" : "下");
+          expect(picked(d, i)).toBe(`MA20 ${w(20)}、MA60 ${w(60)}`);
+          expect(r.n).not.toBe(20); // MA20 第 20 天扣的是 T0 自己，收平一定走平
+        } else if (r.q === "cross") {
+          const day = (kind: string) => a.projection.scenarios[0].crosses.find((x) => x.kind === kind && x.pair === "20/60")!.cross_day;
+          const both = day("MA") !== null && day("EMA") !== null ? Math.max(day("MA")!, day("EMA")!) : null;
+          expect(picked(d, i)).toBe(bucketOf(both));
+          const ma = (n: number) => a.lines.find((l) => l.period === n)!.ma;
+          expect(r.way).toBe(ma(20) > ma(60) ? "死叉" : "金叉");
+        } else {
+          const path = h(r.period).prices.slice(0, r.days);
+          expect(picked(d, i)).toBe((r.way === "下" ? Math.max(...path) : Math.min(...path)).toFixed(2));
+          expect(picked(d, i)).toBe(r.level.toFixed(2));
+        }
+      });
+    }
+    const classes = new Set(ds.map(({ d }) => d.cls));
+    expect([...classes].some((c) => c.startsWith("交叉:"))).toBe(true);
+    expect(classes.size).toBeGreaterThanOrEqual(3);
+  });
+
+  test("五步点图：要点的 = 这一轮转折前 k 步，位置换回去就是分析里的日期；图在 40–80 根、盖得住第一步", () => {
+    const ds = draftsOf("steps");
+    expect(ds.length).toBeGreaterThan(0);
+    const order = ["破线", "EMA 拐头", "MA 拐头", "第一个交叉", "双交叉"];
+    for (const { a, d } of ds) {
+      if (d.kind !== "steps") throw new Error("kind");
+      const { click } = d;
+      const pair = a.steps.find((p) => p.pair === `${click.fast}/${click.slow}`)!;
+      const turn = [pair.completed, pair.current].find((t) => t?.direction === click.direction && t.progress === click.steps.length)!;
+      expect(click.steps.map((s) => s.step)).toEqual(order.slice(0, click.steps.length) as never);
+      const dates = cases.find((x) => x.a === a)!.dates;
+      expect(click.steps.map((s) => dates[dates.length - 1 + s.t])).toEqual(turn.steps.slice(0, click.steps.length).map((s) => s.date!));
+      expect(d.view.bars).toBeGreaterThanOrEqual(40);
+      expect(d.view.bars).toBeLessThanOrEqual(80);
+      expect(-Math.min(...click.steps.map((s) => s.t))).toBeLessThan(d.view.bars);
+      expect(click.tolerance).toBe(STEP_TOLERANCE);
+      expect(d.cls).toBe(`${click.fast}/${click.slow}·${click.direction}·${click.steps.length}步`);
+      expect(d.rules.map((r) => r.id)).toEqual(expect.arrayContaining(["J15", "J16"]));
+    }
+    const classes = new Set(ds.map(({ d }) => d.cls));
+    for (const want of ["20/60", "60/120", "向上", "向下"]) expect({ want, some: [...classes].some((c) => c.includes(want)) }).toEqual({ want, some: true });
+    expect(new Set([...classes].map((c) => c.split("·")[2])).size).toBeGreaterThanOrEqual(3);
+  });
+
+  test("点图判分：差 tolerance 根以内算对，多一根就错；少点一步那步算错", () => {
+    const task = { steps: [{ step: "破线" as const, t: -20 }, { step: "EMA 拐头" as const, t: -18 }], tolerance: 1 };
+    expect(gradeClicks(task, [-20, -18])).toEqual([true, true]);
+    expect(gradeClicks(task, [-21, -17])).toEqual([true, true]);
+    expect(gradeClicks(task, [-22, -18])).toEqual([false, true]);
+    expect(gradeClicks(task, [-20])).toEqual([true, false]);
+  });
+
+  test("看信号的「步骤」说明和点图题共用一份定义：20/60 的写法没变", () => {
+    expect(stepMeaning("MA 拐头", 20, 60)).toEqual({ text: "MA20 当天朝反方向走（收盘越过 20 日抵扣价）", rule: "A1" });
+    expect(stepMeaning("双交叉", 60, 120)).toEqual({ text: "MA60 穿过 MA120、EMA60 穿过 EMA120，两组都交叉", rule: "J16" });
   });
 });
 
@@ -146,6 +221,17 @@ describe("入库配平", () => {
 
 function bank(dir = mkdtempSync(join(tmpdir(), "dma-drills-"))) {
   return { dir, b: new DrillBank({ prices, dir, pool: [{ ticker: REAL_TICKER }], random: seeded(5), now: () => NOW }) };
+}
+
+/** 这段行情图表的时间键（题目那一根是 times[d.index]）。 */
+const windowTimes = (dir: string, d: Drill): string[] =>
+  JSON.parse(readFileSync(join(dir, "windows", `${d.window}.json`), "utf8")).candles.map((c: { time: string }) => c.time);
+
+/** 对的答案：选择题选对的选项；点图题点答案那几根，shift 是故意点偏几根。 */
+function rightInput(dir: string, d: Drill, shift = 0) {
+  if (d.kind !== "steps") return { picks: d.parts.map((p) => p.answer), ms: 1 };
+  const times = windowTimes(dir, d);
+  return { clicks: d.click.steps.map((s) => times[d.index + s.t - shift]), ms: 1 };
 }
 
 /** 一段 JSON 里有没有真实代码、这段真实行情里的日期、真实价位（3000 ~ 6000）。 */
@@ -203,7 +289,7 @@ describe("题库", () => {
     const { b } = shared;
     const { drill } = await b.next("dropoff");
     const stored = b.drills().find((x) => x.id === drill!.id)!;
-    const right = stored.parts.map((p) => p.answer);
+    const right = partsOf(stored).map((p) => p.answer);
     const fb = await b.answer(drill!.id, { picks: right, ms: 2400 });
     expect(fb.correct).toBe(true);
     expect(fb.evidence).toEqual(stored.evidence);
@@ -216,19 +302,77 @@ describe("题库", () => {
     const next = (await b.next("chart")).drill!;
     await expect(b.answer(next.id, { picks: [0, 0], ms: 1 })).rejects.toMatchObject({ status: 400 });
     await expect(b.answer(next.id, { picks: [9], ms: 1 })).rejects.toMatchObject({ status: 400 });
-    const wrong = (b.drills().find((x) => x.id === next.id)!.parts[0].answer + 1) % 6;
+    const wrong = (partsOf(b.drills().find((x) => x.id === next.id)!)[0].answer + 1) % 6;
     const fb2 = await b.answer(next.id, { picks: [wrong], ms: 999_999_999 });
     expect(fb2.correct).toBe(false);
     expect(fb2.ms).toBe(600_000); // 走开了：按 10 分钟算
     expect(fb2.stats.total).toEqual({ n: 2, correct: 1, accuracy: 0.5 });
   });
 
+  test("推演揭晓：给题时 T0 之后一根都不给；交卷后才放出之后的真实 K 线，评分按推演", async () => {
+    const { b, dir } = shared;
+    const { drill } = await b.next("project");
+    expect(drill).not.toBeNull();
+    expect(JSON.stringify(drill)).not.toContain("reveal");
+    const stored = b.drills().find((x) => x.id === drill!.id)!;
+    if (stored.kind !== "project") throw new Error("kind");
+    const csv = parseCsv(readFileSync(join(dir, "windows", `${stored.window}.csv`), "utf8"), "window");
+    const i = csv.findIndex((x) => x.date === drill!.t0);
+    expect(drill!.chart.candles.some((c) => c.time > drill!.t0)).toBe(false);
+
+    const fb = await b.answer(drill!.id, rightInput(dir, stored));
+    expect(fb.correct).toBe(true); // 选推演的答案就算对，不管真实走势
+    const r = fb.reveal!;
+    const horizon = Math.max(...stored.reveal.parts.map((p) => (p.q === "dir" ? p.n : p.q === "cross" ? 30 : p.days)));
+    expect(r.horizon).toBe(horizon);
+    expect(r.level).toBe(stored.reveal.close);
+    expect(r.chart.candles.map((c) => [c.time, c.close])).toEqual(csv.slice(i + 1, i + 1 + horizon).map((x) => [x.date, x.close]));
+    for (const xs of Object.values(r.chart.lines)) expect(xs.every((p) => p.time > drill!.t0 && p.time <= r.chart.candles.at(-1)!.time)).toBe(true);
+    expect(r.parts.length).toBe(stored.parts.length);
+    stored.reveal.parts.forEach((p, k) => {
+      if (p.q !== "turn") expect(r.parts[k].system).toBe(stored.parts[k].choices[stored.parts[k].answer]);
+      expect(r.parts[k].why === null).toBe(r.parts[k].agree);
+      if (!r.parts[k].agree) expect(r.parts[k].why).toContain("价格没有收平");
+    });
+    expect(leaks(fb)).toEqual([]);
+  });
+
+  test("五步点图：给题不给答案位置；点偏 1 根算对、2 根算错；交错格式或点到图外 400", async () => {
+    const { b, dir } = shared;
+    const { drill } = await b.next("steps");
+    expect(drill!.parts).toEqual([]);
+    expect(drill!.click!.steps.length).toBeGreaterThan(0);
+    expect(JSON.stringify(drill)).not.toContain('"t":');
+    const stored = b.drills().find((x) => x.id === drill!.id)!;
+    if (stored.kind !== "steps") throw new Error("kind");
+    expect(drill!.click!.steps).toEqual(stored.click.steps.map((s) => s.step));
+    const times = windowTimes(dir, stored);
+    await expect(b.answer(drill!.id, { picks: [0], ms: 1 })).rejects.toMatchObject({ status: 400 });
+    await expect(b.answer(drill!.id, { clicks: [drill!.t0, drill!.t0, drill!.t0, drill!.t0, drill!.t0, drill!.t0], ms: 1 })).rejects.toMatchObject({ status: 400 });
+    const outside = stored.click.steps.map(() => times[stored.index + 1] ?? "2999-01-01");
+    await expect(b.answer(drill!.id, { clicks: outside, ms: 1 })).rejects.toMatchObject({ status: 400 });
+
+    const fb = await b.answer(drill!.id, rightInput(dir, stored, 1));
+    expect(fb.correct).toBe(true);
+    expect(fb.steps!.map((s) => s.step)).toEqual(stored.click.steps.map((s) => s.step));
+    expect(fb.steps!.map((s) => s.answer)).toEqual(stored.click.steps.map((s) => times[stored.index + s.t]));
+    expect(fb.steps!.every((s) => s.ok && s.meaning && /^[AJ]\d+$/.test(s.rule))).toBe(true);
+    expect(b.answers().at(-1)).toMatchObject({ kind: "steps", correct: true, answers: stored.click.steps.map((s) => s.t) });
+
+    const { b: b2, dir: dir2 } = bank();
+    await b2.fill(1);
+    const other = b2.drills().find((x) => x.kind === "steps")!;
+    const fb2 = await b2.answer(other.id, rightInput(dir2, other, 2));
+    expect(fb2.correct).toBe(false);
+    expect(fb2.steps!.every((s) => !s.ok)).toBe(true);
+  }, 30_000);
+
   test("答完一段行情的最后一题，这段的文件删掉", async () => {
     const { b, dir } = bank();
     await b.fill(1);
     const windows = () => readdirSync(join(dir, "windows")).length;
     expect(windows()).toBe(2); // csv + json
-    for (const d of b.drills()) await b.answer(d.id, { picks: d.parts.map((p) => p.answer), ms: 1 });
+    for (const d of b.drills()) await b.answer(d.id, rightInput(dir, d));
     expect(windows()).toBe(0);
   }, 30_000);
 
@@ -269,7 +413,7 @@ describe("接口", () => {
     const n = await call("/api/drills/next?kind=construct");
     expect(n.data.drill.kind).toBe("construct");
     const stored = b.drills().find((x) => x.id === n.data.drill.id)!;
-    const a = await call(`/api/drills/${n.data.drill.id}/answer`, { picks: stored.parts.map((p) => p.answer), ms: 1500 });
+    const a = await call(`/api/drills/${n.data.drill.id}/answer`, { picks: partsOf(stored).map((p) => p.answer), ms: 1500 });
     expect(a.status).toBe(200);
     expect(a.data.correct).toBe(true);
     expect((await call(`/api/drills/${n.data.drill.id}/answer`, { picks: [0], ms: 1 })).status).toBe(409);
