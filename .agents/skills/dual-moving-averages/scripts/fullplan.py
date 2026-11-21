@@ -211,12 +211,14 @@ class Variant:
     equal_notional: bool = False    # 不按风险算股数：每笔同样金额
     skip_hourly: bool = False       # 还要看小时线的进场不做（小时线当不满足）
     waypoint: bool = False          # P11 的回撤价也当限价单买
+    intraday_stop: bool = False     # 止损看盘中最低价（PR #42 的口径），不按收盘
 
 
 FULL = Variant("完整计划")
 ABLATIONS = (Variant("关盈亏比过滤", rr_filter=False), Variant("关目标（拿到止损或失效）", targets=False),
              Variant("关仓位（每笔等金额）", equal_notional=True))
-EXTRA = (Variant("要看小时线的不进", skip_hourly=True), Variant("回撤到 60 线组就买（P11）", waypoint=True))
+EXTRA = (Variant("要看小时线的不进", skip_hourly=True), Variant("回撤到 60 线组就买（P11）", waypoint=True),
+         Variant("止损看盘中最低价", intraday_stop=True))
 VARIANTS = (FULL, *ABLATIONS, *EXTRA)
 
 
@@ -359,18 +361,19 @@ def run_group(job: tuple) -> tuple[str, dict]:
     start = min(pos[rs[0]["d"]] for rs in recs.values())
     runs, trades = {}, {}
 
-    def go(v: Variant, cfg: ps.Config, orders=None) -> None:
-        res = ps.simulate(len(cal), bars, orders or orders_for(recs, pos, bars, v), inval, start, cfg)
+    def go(v: Variant, notional_pct: float | None = None) -> None:
+        cfg = ps.Config(cost=cost, notional_pct=notional_pct, stop_on_close=not v.intraday_stop)
+        res = ps.simulate(len(cal), bars, orders_for(recs, pos, bars, v), inval, start, cfg)
         runs[v.name], trades[v.name] = summarize(res, cal, bc), res.trades
 
     for v in VARIANTS:
         if not v.equal_notional:
-            go(v, ps.Config(cost=cost))
+            go(v)
     full = trades[FULL.name]
     notional = float(np.mean([t.notional for t in full])) if full else 0.1
     for v in VARIANTS:
         if v.equal_notional:
-            go(v, ps.Config(cost=cost, notional_pct=notional))
+            go(v, notional)
     rng = np.random.default_rng(RANDOM_SEED)
     rand = [summarize(ps.simulate(len(cal), bars, random_orders(full, recs, pos, bars, rng), inval, start, ps.Config(cost=cost)),
                       cal, bc) for _ in range(RANDOM_REPS)] if full else []
@@ -486,9 +489,9 @@ LIMITS = [
     "**幸存者偏差**：B、C 组按 2026-11-20 的市值挑，是事后的赢家；A 组（ETF）没有这个问题，结论以 A 组和合并为准，D 组（曾经的巨头）量这个偏差。退市股取不到。",
     "**样本不独立**：同一天几十只票一起动。平均 R 的区间用 60 个交易日一块的日期区块自助法（按进场日分块），已算进这种相关，但区块之间仍不完全独立。",
     "**这不是没看过的数据**：这些品种都在 2026-11-20 的评估里（开发集或旧验证集），已经看过；不调任何参数（第 3 步做敏感度，第 4 步用新验证集）。",
-    "**止损按最低价、目标按最高价**：计划原文的止损多是\"收盘跌回\"（P23），这里按盘中价执行（方案第 2 节的口径），比收盘止损更早出场、亏损更可控，"
-    "但会被盘中假跌破扫掉。收盘口径的失效条件另外按次日开盘执行。",
-    "**同一根里止损和目标都碰到算先止损、进场那一根不算目标**：保守，低估一部分赢的交易。",
+    "**止损按收盘、第二天开盘走**：照计划原文。真实下单时有人会在收盘前几分钟看到要跌破就走，比这里早一点、亏得少一点；"
+    "跳空低开的亏损全部算进去。P22（突破买入的起涨 K 线最低价）原文没写收盘，按\"收盘跌破小平台就是破线\"同样用收盘；这次回测里没有这类交易。",
+    "**进场那一根不算目标**：保守，低估一部分赢的交易。",
     "**小时线**：回放没有小时线（Polygon 只回到 2021 年底），吃回撤的计划常写\"只差小时线多头排列（看小时图）\"。"
     "完整计划当作满足，\"要看小时线的不进\"当作不满足；真实使用时用户会看小时图，结果在两行之间。",
     "**目标只用第一个**：tradeplan 给了第二目标（20/60/120 全部汇聚处），但没说分几批走；这里到第一目标全部离场，不另造分批规则。",
@@ -521,9 +524,11 @@ def render(groups: dict[str, dict], meta: dict, checks: list[dict]) -> str:
             "当作小时线满足；\"要看小时线的不进\"一行当作不满足。",
             "- **股数**：每笔可承受亏损 = 前一天收盘净值的 1%，股数 = 向下取整(可承受亏损 ÷ (计划进场价 − 止损))（A6）。"
             "所有持仓的初始风险加起来不超过净值的 6%（超了这笔不做）；现金不够就按现金能买的股数，不加杠杆。同一天几笔按票代码排序。",
-            "- **离场**（先到先走）：止损看盘中最低价，目标（第一目标）看盘中最高价，开盘已经越过就按开盘价；同一根里两个都碰到算先止损；进场那一根只看止损。"
-            "打法的失效条件收盘成立，第二天开盘走（横盘：P3、P5；稳定上涨：60 线组拐头向下；多头结构回撤中：EMA20 止损、J16 双死叉；加速下跌：EMA20 止损）。",
-            "- **R 倍数** = 这笔盈亏 ÷ 初始风险（股数 × (成交价 − 止损)），扣两边 0.05% 成本、含分红。跳空跌破止损的 R 会小于 −1。",
+            "- **离场**（先到先走）：止损按收盘，收盘低于止损价就第二天开盘走（计划写的都是\"收盘跌回 / 收盘低于 / 收盘跌破\"，P23 什么原则进就什么原则出）；"
+            "目标（第一目标）是挂着的卖单，看盘中最高价，开盘已经越过就按开盘价；进场那一根不算目标。"
+            "打法的失效条件收盘成立，第二天开盘走（横盘：P3、P5；稳定上涨：60 线组拐头向下；多头结构回撤中：EMA20 止损、J16 双死叉；加速下跌：EMA20 止损）。"
+            "\"止损看盘中最低价\"一行是 PR #42 的口径：盘中碰到止损价就按止损价走，开盘已经跌穿按开盘价，同一根里止损和目标都碰到算先止损。",
+            "- **R 倍数** = 这笔盈亏 ÷ 初始风险（股数 × (成交价 − 止损)），扣两边 0.05% 成本、含分红。收盘跌破之后第二天开盘才走，亏损常超过 1R，照实记，不截断。",
             "- **账户**：每组品种一个账户，起始 100 万，空仓的钱收益算 0。年化、回撤、MAR 都是这个账户的净值曲线。",
             "- **对照**：买入持有、MA200、MA60 朴素规则（每只票分一样多的钱，在场就满仓，不按仓位）；随机进场（同样的仓位规则、同样的止损和目标距离，"
             f"最多拿真实那笔的根数，{RANDOM_REPS} 次取中位数，括号里是 5% ~ 95%），它和完整计划的差就是\"进场选择值多少\"。", ""]

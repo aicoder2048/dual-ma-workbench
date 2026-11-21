@@ -5,9 +5,11 @@
 - 进场价等于收盘（"按收盘进"）：次日开盘成交。
 - 进场价低于收盘（回落到才买，限价单）：开盘 ≤ 进场价按开盘成交，否则最低价 ≤ 进场价按进场价成交，否则不成交。
 - 成交价不在止损上方（开盘就跌穿止损）：不进。
-- 止损看最低价、目标看最高价：开盘已经越过就按开盘成交，否则按价位成交。同一根里止损和目标都碰到，算先止损（保守）。
-  进场那一根只看止损：盘中成交之后先碰哪个不知道，保守地不算目标。
-- 失效条件（打法的离场条件，收盘判断）成立：次日开盘离场。
+- 止损按收盘（计划写的是"收盘跌回 / 收盘低于 / 收盘跌破"，P23）：收盘低于止损价，次日开盘离场，跳空的亏损照算，R 可以小于 −1。
+  目标是挂着的卖单，看最高价：开盘已经越过按开盘成交，否则按目标价成交。进场那一根不算目标（盘中成交之后先碰哪个不知道）。
+- stop_on_close=False 是盘中口径（对照用）：止损看最低价，开盘已经越过按开盘成交；同一根里止损和目标都碰到算先止损，
+  进场那一根只看止损。
+- 失效条件（打法的离场条件，收盘判断）成立：次日开盘离场。同一根收盘止损和失效都成立，记作止损。
 - 每边 COST。股数按计划进场价算：可承受亏损 = 前一天收盘的账户净值 × risk_pct，股数 = 向下取整(可承受亏损 ÷ (进场 − 止损))。
   所有持仓的初始风险加起来不超过净值的 cap_pct，超了这笔不做；现金不够按现金能买的股数（不加杠杆）。
 - 分红：持仓市值和离场所得乘以复权因子之比（含分红的总收益），和 evaluate.py 一样。
@@ -45,15 +47,16 @@ def fill_entry(kind: Kind, entry: float, o: float, h: float, lo: float) -> float
     return o if o <= entry else (entry if lo <= entry else None)
 
 
-def bar_exit(stop: float, target: float | None, o: float, h: float, lo: float, entry_bar: bool) -> tuple[float, str] | None:
-    """这一根有没有碰到止损或目标：(成交价, 原因)。进场那一根只看止损（开盘已经在止损下方的单根本不会进）。"""
+def bar_exit(stop: float | None, target: float | None, o: float, h: float, lo: float, entry_bar: bool) -> tuple[float, str] | None:
+    """这一根盘中有没有碰到止损或目标：(成交价, 原因)。stop 为 None：止损按收盘，盘中只看目标。
+    进场那一根只看止损（开盘已经在止损下方的单根本不会进）。"""
     if entry_bar:
-        return (stop, "止损") if lo <= stop else None
-    if o <= stop:
+        return (stop, "止损") if stop is not None and lo <= stop else None
+    if stop is not None and o <= stop:
         return o, "止损"
     if target is not None and o >= target:
         return o, "目标"
-    if lo <= stop:
+    if stop is not None and lo <= stop:
         return stop, "止损"          # 和目标同在一根里也算先止损
     if target is not None and h >= target:
         return target, "目标"
@@ -81,6 +84,7 @@ class Config:
     risk_pct: float = 1.0
     cap_pct: float = 6.0
     notional_pct: float | None = None   # 给了就不按风险算：每笔买净值的这么多（不设风险上限）
+    stop_on_close: bool = True          # False：止损看盘中最低价（对照）
     cost: float = COST
     equity0: float = 1_000_000.0
 
@@ -103,7 +107,7 @@ class _Pos:
     shares: int
     risk0: float
     k: float                          # 1 / 进场日复权因子
-    pending: str | None = None        # 收盘时成立的失效条件：次日开盘走
+    pending: str | None = None        # 收盘时成立的离场原因（止损、失效）：次日开盘走
 
 
 @dataclass(frozen=True)
@@ -158,6 +162,9 @@ def simulate(cal_len: int, bars: dict[str, Bars], orders: dict[int, list[Order]]
     equity, invested = [cfg.equity0], [0.0]
     last_c = {t: np.nan for t in bars}
 
+    def intraday(o: Order) -> float | None:
+        return None if cfg.stop_on_close else o.stop
+
     def close(t: str, p: _Pos, j: int, px: float, reason: str) -> None:
         nonlocal cash
         b = bars[t]
@@ -177,12 +184,12 @@ def simulate(cal_len: int, bars: dict[str, Bars], orders: dict[int, list[Order]]
             if np.isnan(b.o[j]):
                 continue
             if p.pending:
-                close(t, p, j, b.o[j], f"失效：{p.pending}")
+                close(t, p, j, b.o[j], p.pending)
                 continue
             if p.order.max_bars is not None and j - p.e >= p.order.max_bars:
                 close(t, p, j, b.o[j], "到期")
                 continue
-            hit = bar_exit(p.order.stop, p.order.target, b.o[j], b.h[j], b.lo[j], False)
+            hit = bar_exit(intraday(p.order), p.order.target, b.o[j], b.h[j], b.lo[j], False)
             if hit:
                 close(t, p, j, *hit)
         open_risk = sum(p.shares * (p.order.entry - p.order.stop) for p in held.values())
@@ -211,7 +218,7 @@ def simulate(cal_len: int, bars: dict[str, Bars], orders: dict[int, list[Order]]
             p = _Pos(o, j, float(fill), n, n * (fill - o.stop), 1 / b.f[j])
             held[o.ticker] = p
             open_risk += n * (o.entry - o.stop)
-            hit = bar_exit(o.stop, o.target, b.o[j], b.h[j], b.lo[j], True)
+            hit = bar_exit(intraday(o), o.target, b.o[j], b.h[j], b.lo[j], True)
             if hit:
                 close(o.ticker, p, j, *hit)
         value = 0.0
@@ -220,9 +227,12 @@ def simulate(cal_len: int, bars: dict[str, Bars], orders: dict[int, list[Order]]
                 last_c[t] = b.c[j] * b.f[j]
         for t, p in held.items():
             value += p.shares * last_c[t] * p.k
-            if p.order.exits:
-                now = [x for x in p.order.exits if x in inval[t][j]]
-                p.pending = now[0] if now else None
+            if np.isnan(bars[t].c[j]):
+                continue
+            now = [f"失效：{x}" for x in p.order.exits if x in inval[t][j]]
+            if cfg.stop_on_close and bars[t].c[j] < p.order.stop:
+                now.insert(0, "止损")
+            p.pending = now[0] if now else None
         eq_prev = cash + value
         equity.append(eq_prev)
         invested.append(value / eq_prev if eq_prev > 0 else 0.0)
