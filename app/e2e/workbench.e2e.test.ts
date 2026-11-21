@@ -668,6 +668,124 @@ describe("自己画水平线", () => {
 });
 
 
+describe("测量工具和交互模式", () => {
+  const api = <T,>(page: Page, fn: string) => page.evaluate(async (fn) => (await import("/app.js")).getChart()[fn](), fn) as Promise<T>;
+  /** 第 i 根 K 线、图高 frac 处的屏幕坐标（先把图放到滚动区顶部，坐标才稳）。 */
+  async function at(page: Page, i: number, frac: number) {
+    await page.evaluate(() => document.getElementById("chart")!.scrollIntoView({ block: "start" }));
+    const x = await page.evaluate(async (t) => (await import("/app.js")).getChart().chart.timeScale().timeToCoordinate(t), CHART.candles[i].time);
+    const box = (await page.locator("#chart").boundingBox())!;
+    return { x: box.x + x!, y: box.y + box.height * frac };
+  }
+  async function drag(page: Page, from: { x: number; y: number }, to: { x: number; y: number }) {
+    await page.mouse.move(from.x, from.y);
+    await page.mouse.down();
+    await page.mouse.move((from.x + to.x) / 2, (from.y + to.y) / 2, { steps: 4 });
+    await page.mouse.move(to.x, to.y, { steps: 4 });
+    await page.mouse.up();
+  }
+  const range = (page: Page) => page.evaluate(async () => (await import("/app.js")).getChart().chart.timeScale().getVisibleLogicalRange());
+
+  test("点「测量」再按住拖动：框里写涨跌、涨跌幅、根数、天数、几个 ATR；图不跟着平移；Esc 清掉", async () => {
+    const { page, errors } = await open();
+    await page.waitForSelector("#chart canvas");
+    await scrollIntoCenter(page, ".chart-card"); // 图在结论下面：像用户一样滚到图
+    expect(await notCovered(page, ".measure-toggle")).toBe(true);
+    await page.click(".measure-toggle");
+    expect(await page.getAttribute(".measure-toggle", "aria-pressed")).toBe("true");
+    const askLabel = () => page.evaluate(() => document.getElementById("ask-advisor")!.textContent);
+    const ask = await askLabel();
+    const before = await range(page);
+    await drag(page, await at(page, 230, 0.6), await at(page, 260, 0.3));
+    const m = (await api<any>(page, "measured"))!;
+    expect([m.a.index, m.b.index, m.bars]).toEqual([230, 260, 30]);
+    expect(m.days).toBe(Math.round((Date.parse(CHART.candles[260].time) - Date.parse(CHART.candles[230].time)) / 864e5));
+    expect(m.change).toBeGreaterThan(0); // 从下往上拉
+    const label = (await page.textContent(".measure-label"))!;
+    expect(label).toContain(`+${m.change.toFixed(2)}（+${m.pct.toFixed(2)}%）`);
+    expect(label).toContain(`30 根 · ${m.days} 天`);
+    expect(label).toContain(`${m.atrUnits.toFixed(1)} ATR（ATR ${m.atr.toFixed(2)}）`);
+    expect(await page.isVisible(".measure-label")).toBe(true);
+    expect(await range(page)).toEqual(before); // 按住拖动是量，不是平移
+    expect(await askLabel()).toBe(ask); // 测量时点图不问鸿雁
+    await page.keyboard.press("Escape");
+    expect(await page.isVisible(".measure-layer")).toBe(false);
+    expect(await api(page, "tool")).toBe("none");
+    expect(await page.getAttribute(".measure-toggle", "aria-pressed")).toBe("false");
+    // 退出测量后按住拖动照常平移
+    const p = await at(page, 250, 0.5);
+    await drag(page, p, { x: p.x + 120, y: p.y });
+    expect((await range(page))!.to).not.toBe(before!.to);
+    expect(errors).toEqual([]);
+    await page.close();
+  }, 30_000);
+
+  test("四种模式互斥：画线、测量、选回放起点一次只有一个；再点一次或 Esc 回到无", async () => {
+    const { page, errors } = await open();
+    await page.waitForSelector("#chart canvas");
+    await scrollIntoCenter(page, ".chart-card");
+    const state = async () => ({
+      tool: await api(page, "tool"),
+      draw: await page.getAttribute(".draw-toggle", "aria-pressed"),
+      measure: await page.getAttribute(".measure-toggle", "aria-pressed"),
+      replay: await page.textContent(".replay-toggle"),
+      bar: await page.isVisible(".replay-bar"),
+    });
+    const none = { tool: "none", draw: "false", measure: "false", replay: "回放", bar: false };
+    expect(await state()).toEqual(none);
+    await page.click(".draw-toggle");
+    expect(await state()).toEqual({ ...none, tool: "draw", draw: "true" });
+    await page.click(".measure-toggle");
+    expect(await state()).toEqual({ ...none, tool: "measure", measure: "true" });
+    await drag(page, await at(page, 240, 0.6), await at(page, 270, 0.4));
+    expect(await page.isVisible(".measure-layer")).toBe(true);
+    await page.click(".replay-toggle");
+    expect(await state()).toEqual({ ...none, tool: "pick-start", replay: "取消选起点", bar: true });
+    expect(await page.isVisible(".measure-layer")).toBe(false); // 换模式清掉量的框
+    await page.click(".draw-toggle");
+    expect(await state()).toEqual({ ...none, tool: "draw", draw: "true" });
+    await page.click(".draw-toggle");
+    expect(await state()).toEqual(none);
+    await page.click(".measure-toggle");
+    await page.click(".measure-toggle");
+    expect(await state()).toEqual(none);
+    await page.click(".draw-toggle");
+    await page.keyboard.press("Escape");
+    expect(await state()).toEqual(none);
+    expect(await api(page, "drawn")).toEqual([]); // 切来切去没画出线
+    expect(errors).toEqual([]);
+    await page.close();
+  }, 30_000);
+
+  test("回放中也能测量：只量到回放那天，往后放一根框还在；退回到量的那根之前就清掉", async () => {
+    const { page, errors } = await open(undefined, "MEAS");
+    await page.waitForSelector("#chart canvas");
+    await scrollIntoCenter(page, ".chart-card");
+    await page.click(".replay-toggle");
+    await page.selectOption(".replay-speed", "0.1");
+    const p = await at(page, 200, 0.4);
+    await page.mouse.click(p.x, p.y);
+    await page.waitForFunction(async () => (await import("/app.js")).getChart().replay().mode === "replay");
+    await page.click(".replay-play"); // 暂停
+    await page.click(".measure-toggle");
+    expect(await notCovered(page, ".measure-toggle")).toBe(true);
+    await drag(page, await at(page, 170, 0.5), await at(page, 200, 0.7));
+    const m = (await api<any>(page, "measured"))!;
+    expect([m.a.index, m.b.index]).toEqual([170, 200]);
+    expect(m.change).toBeLessThan(0);
+    expect(await page.getAttribute(".measure-layer", "class")).toContain("down");
+    await page.click(".replay-forward");
+    expect((await api<any>(page, "replay")).index).toBe(201);
+    expect(await page.isVisible(".measure-layer")).toBe(true);
+    expect(await api(page, "tool")).toBe("measure");
+    await page.click(".replay-back");
+    await page.click(".replay-back");
+    expect(await page.isVisible(".measure-layer")).toBe(false); // 第 200 根已经不在图上
+    expect(errors).toEqual([]);
+    await page.close();
+  }, 30_000);
+});
+
 /** 元素在当前视图里看得见、没被别的东西挡住（elementFromPoint 落在它自己身上）。 */
 const notCovered = (page: Page, sel: string) => page.evaluate((sel) => {
   const el = document.querySelector<HTMLElement>(sel)!;

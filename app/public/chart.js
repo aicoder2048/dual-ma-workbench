@@ -1,6 +1,7 @@
 // K 线 + 6 条均线 + 抵扣价小黄点 + 成交量（TradingView lightweight-charts 4.2.0）。
 import { baseCandleStyle, candleBar as styledBar } from "./candles.js";
 import { earningsMarks, logicalOf } from "./earnings.js";
+import { measure, measureLines } from "./measure.js";
 import { volumeCell } from "./readout.js";
 import { DEFAULT_SPEED, OFF, SPEEDS, appendDelta, earliestIndex, indexOnOrBefore, randomIndex, sliceAt, speedMs, step } from "./replay.js";
 
@@ -136,6 +137,7 @@ export function createChart(box, legendEl) {
   tools.innerHTML = RANGES.map(([k, label]) => `<button type="button" class="range-btn" data-range="${k}">${label}</button>`).join("")
     + `<button type="button" class="range-btn" data-range="reset" title="回到当前范围的默认视图">复位</button>`
     + `<button type="button" class="replay-toggle" aria-pressed="false" title="从过去某一天开始，一根一根往后放 K 线">回放</button>`
+    + `<button type="button" class="measure-toggle" aria-pressed="false" title="点这里，再在图上按住从一点拖到另一点：量涨跌多少、隔几根 K 线、几个 ATR（看止损离得远不远）。Esc 清掉">测量</button>`
     + `<button type="button" class="draw-toggle" aria-pressed="false" title="点这里，再点图上任意一处，就在那个价位画一条横线">画线</button>`
     + `<button type="button" class="draw-clear" title="删掉这只股票上自己画的线">清除</button>`
     + `<button type="button" class="tone-toggle" title="${TONE_TITLE}">`
@@ -218,6 +220,8 @@ export function createChart(box, legendEl) {
       图上的<b>虚线价位线</b>是自动画的：绿色是结论里的触发价（不买的打法是"先看"），红色是止损，黄色是推翻判断的价位。</p>
     <p><b>着色</b>：绿 = 收盘在 MA20 上方且高于 20 日抵扣价（MA20 向上）；黑 = 两样都不满足（MA20 向下）；灰 = 只满足一样。
       第一根黑柱就是 20 线破线拐头；连续黑柱、收不回去，才说明拐头确认了。点工具栏里的「着色」可以关掉。</p>
+    <p><b>测量</b>：点「测量」，在图上按住从一点拖到另一点，框里写涨跌多少、涨跌幅、隔几根 K 线（几个自然日），和这段距离是几个 ATR(14)。
+      用来看止损离进场几个 ATR：不到 1 个 ATR 的止损，平常的波动就可能扫到。回放时一样能用；Esc 或再点一次「测量」清掉。</p>
     <p><b>财报 E</b>：时间轴上方的小 E 是财报日，实心的是下一次。财报后常常跳空开盘，止损单按开盘价成交，可能比止损价差很多；
       下一次财报在 10 个交易日内时，结论卡片会提醒。只是提醒，不改打法。</p>
     <p><b>看量</b>：底部的量柱，黄色是超过 50 日均量 2 倍的大量。看两种情况：横盘末期突然放量，是要变盘的信号；
@@ -297,6 +301,7 @@ export function createChart(box, legendEl) {
       time: d.time, position: "belowBar", color: drop, shape: "circle", text: `${d.period}扣`,
     })));
     paintEarnings();
+    paintRuler();
   }
 
   // ---------- 财报日：时间轴上方的小 E（照 TradingView）；之后的第一次在右边留白里也标 ----------
@@ -318,8 +323,8 @@ export function createChart(box, legendEl) {
       return `<span class="e-mark${next ? " next" : ""}" style="left:${x}px" data-date="${date}" title="${what}">E</span>`;
     }).join("");
   }
-  chart.timeScale().subscribeVisibleLogicalRangeChange(() => paintEarnings());
-  chart.timeScale().subscribeSizeChange(() => paintEarnings());
+  chart.timeScale().subscribeVisibleLogicalRangeChange(() => { paintEarnings(); paintRuler(); });
+  chart.timeScale().subscribeSizeChange(() => { paintEarnings(); paintRuler(); });
   /** 把一份图表数据（完整的，或回放截到某天的）画到图上。 */
   function show(v) {
     view = v;
@@ -540,8 +545,75 @@ export function createChart(box, legendEl) {
     drawBtn.setAttribute("aria-pressed", String(tool === "draw"));
     drawBtn.textContent = tool === "draw" ? "点图上的价位…" : "画线";
     box.classList.toggle("drawing", tool === "draw");
+    measureBtn.setAttribute("aria-pressed", String(tool === "measure"));
+    box.classList.toggle("measuring", tool === "measure");
+    chart.applyOptions({ handleScroll: { pressedMouseMove: tool !== "measure" } }); // 测量时按住拖动是量，不是平移
+    if (tool !== "measure") { ruler = null; dragging = false; paintRuler(); }
     syncReplay();
   }
+
+  // ---------- 测量：按住从 A 拖到 B，量涨跌、根数、自然日、几个 ATR（照 TradingView 的标尺）；回放时一样能用 ----------
+  const measureBtn = tools.querySelector(".measure-toggle");
+  measureBtn.addEventListener("click", () => setTool(tool === "measure" ? "none" : "measure"));
+  const mLayer = document.createElement("div");
+  mLayer.className = "measure-layer";
+  mLayer.hidden = true;
+  mLayer.innerHTML = '<div class="measure-rect"></div><div class="measure-label"></div>';
+  box.append(mLayer);
+  const [mRect, mLabel] = mLayer.children;
+  let ruler = null; // { a, b }：两点都落在 K 线上，{ index（图上第几根）, price }
+  let dragging = false;
+
+  /** 鼠标位置 → 落在第几根 K 线、什么价位；不在绘图区（时间轴、价格轴上）返回 null。 */
+  function pointAt(e) {
+    if (!view?.candles.length) return null;
+    const r = box.getBoundingClientRect();
+    const x = e.clientX - r.left, y = e.clientY - r.top;
+    const ts = chart.timeScale();
+    if (x < 0 || x > ts.width() || y < 0 || y > r.height - ts.height()) return null;
+    const logical = ts.coordinateToLogical(x);
+    const price = candles.coordinateToPrice(y);
+    if (logical === null || price === null) return null;
+    return { index: Math.min(Math.max(Math.round(logical), 0), view.candles.length - 1), price };
+  }
+
+  function paintRuler() {
+    // 回放退回到量的那几根之前：那两点已经不在图上，清掉
+    if (ruler && view && Math.max(ruler.a.index, ruler.b.index) >= view.candles.length) ruler = null;
+    const ts = chart.timeScale();
+    const xs = ruler ? [ts.logicalToCoordinate(ruler.a.index), ts.logicalToCoordinate(ruler.b.index)] : [];
+    const ys = ruler ? [candles.priceToCoordinate(ruler.a.price), candles.priceToCoordinate(ruler.b.price)] : [];
+    mLayer.hidden = !ruler || [...xs, ...ys].some((v) => v === null);
+    if (mLayer.hidden) return;
+    const m = measure(ruler.a, ruler.b, view.candles);
+    const [left, top] = [Math.min(...xs), Math.min(...ys)];
+    mLayer.classList.toggle("down", m.change < 0);
+    Object.assign(mRect.style, { left: `${left}px`, top: `${top}px`, width: `${Math.max(...xs) - left}px`, height: `${Math.max(...ys) - top}px` });
+    mLabel.innerHTML = measureLines(m).map((t) => `<div>${t}</div>`).join("");
+    // 标签放在终点那头（往上量在框上方，往下量在框下方），水平居中；靠边时收回图里
+    const paneH = box.clientHeight - ts.height();
+    const w = mLabel.offsetWidth, h = mLabel.offsetHeight;
+    const y = m.change >= 0 ? top - h - 6 : Math.max(...ys) + 6;
+    mLabel.style.left = `${Math.min(Math.max((xs[0] + xs[1]) / 2 - w / 2, 0), ts.width() - w)}px`;
+    mLabel.style.top = `${Math.min(Math.max(y, 0), paneH - h)}px`;
+  }
+
+  box.addEventListener("mousedown", (e) => {
+    if (tool !== "measure" || e.button !== 0) return;
+    const p = pointAt(e);
+    if (!p) return;
+    e.preventDefault();
+    ruler = { a: p, b: p };
+    dragging = true;
+    paintRuler();
+  }, true);
+  document.addEventListener("mousemove", (e) => {
+    const p = dragging ? pointAt(e) : null;
+    if (!p) return;
+    ruler = { ...ruler, b: p };
+    paintRuler();
+  });
+  document.addEventListener("mouseup", () => { dragging = false; });
 
   // 快捷键：Shift+↓ 播放 / 暂停，Shift+→ 前进一根；Esc 退出画线、测量、选起点。焦点在输入框里时不管。
   document.addEventListener("keydown", (e) => {
@@ -570,6 +642,7 @@ export function createChart(box, legendEl) {
       const index = at ? indexOnOrBefore(d.candles, at) : -1;
       rs = index >= 0 ? { mode: "replay", index, playing: false } : OFF;
       if (tool === "pick-start") tool = "none"; // 换了数据：选到一半的起点作废
+      ruler = null; // 量的两点属于旧数据
       arm();
       if (!sameTicker) { drawKey = key; loadDrawn(); }
       paintDrawn();
@@ -628,6 +701,8 @@ export function createChart(box, legendEl) {
     /** 回放状态（测试用）：mode / index / playing，加上速度、回放到的日期、图上几根 K 线。 */
     /** 图上的交互模式（测试用）：none | draw | measure | pick-start。 */
     tool: () => tool,
+    /** 测量的结果（测试用）：没有在量时为 null。 */
+    measured: () => (ruler && !mLayer.hidden ? { a: { ...ruler.a }, b: { ...ruler.b }, ...measure(ruler.a, ruler.b, view.candles) } : null),
     replay: () => ({ ...rs, speed, date: rs.mode === "replay" ? data.candles[rs.index].time : null, bars: view?.candles.length ?? 0 }),
     /** 回放里点「按这一天分析」时回调那天的日期。 */
     onAnalyzeDate(cb) { analyzeDate = cb; },
