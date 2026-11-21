@@ -2,6 +2,8 @@
 import { existsSync } from "node:fs";
 import { extname, resolve } from "node:path";
 import { explainError, type Analyzer } from "./analyze.ts";
+import { BacktestError } from "./backtest/plan.ts";
+import type { Backtests } from "./backtest/service.ts";
 import { buildFacts } from "./citations.ts";
 import { captureSnapshot, Journal, JournalError, journalView, parseAction, parseCreate } from "./journal.ts";
 import type { DrillBank } from "./practice/drills.ts";
@@ -29,6 +31,8 @@ export interface Deps {
   practice?: Practice;
   /** 识别题库；不传就没有识别题的接口。 */
   drills?: DrillBank;
+  /** 回测页；不传就没有回测的接口。 */
+  backtests?: Backtests;
 }
 
 const json = (data: unknown, status = 200) =>
@@ -42,7 +46,7 @@ const MIME: Record<string, string> = {
 };
 
 export function createHandler(deps: Deps) {
-  const { analyzer, watchlist, journal, library, publicDir, settings, practice, drills } = deps;
+  const { analyzer, watchlist, journal, library, publicDir, settings, practice, drills, backtests } = deps;
   const journalPage = () => journalView(journal.list(), practice ? (e) => practice.displayEntry(e) : undefined);
   const tts = deps.tts ?? new Speaker();
   const catalog = deps.catalog ?? piCatalog();
@@ -112,6 +116,7 @@ export function createHandler(deps: Deps) {
     if (drills && p === "/api/drills/next" && req.method === "GET") return json(await drills.next(q.get("kind") || null));
     const drillId = drills && req.method === "POST" && p.match(/^\/api\/drills\/([^/]+)\/answer$/)?.[1];
     if (drills && drillId) return json(await drills.answer(decodeURIComponent(drillId), await req.json().catch(() => null)));
+    if (backtests && p.startsWith("/api/backtest/")) return backtestApi(backtests, req, p.slice("/api/backtest/".length));
     if (p === "/api/settings") {
       if (req.method === "GET") return json(await settingsView());
       if (req.method === "PUT") {
@@ -166,8 +171,40 @@ export function createHandler(deps: Deps) {
     try {
       return await api(req, url);
     } catch (err) {
-      if (err instanceof JournalError || err instanceof PracticeError) return fail(err.message, err.status);
+      if (err instanceof JournalError || err instanceof PracticeError || err instanceof BacktestError) return fail(err.message, err.status);
       return fail(explainError(err), err instanceof Error && /不合法|格式|最多|清单/.test(err.message) ? 400 : 500);
     }
   };
+}
+
+/** /api/backtest/...：方案（plans）、估计（estimate）、运行（runs）。 */
+async function backtestApi(bt: Backtests, req: Request, path: string): Promise<Response> {
+  const body = () => req.json().catch(() => null) as Promise<any>;
+  const [what, rawName, action] = path.split("/");
+  const name = rawName === undefined ? undefined : decodeURIComponent(rawName);
+  const m = req.method;
+  if (what === "template" && m === "GET") return json(await bt.template());
+  if (what === "estimate" && m === "POST") return json(await bt.estimate((await body())?.plan));
+  if (what === "plans") {
+    if (name === undefined && m === "GET") return json(bt.listPlans());
+    if (name === undefined && m === "POST") return json(bt.savePlan((await body())?.plan));
+    if (name === "import" && m === "POST") return json(bt.importPlan((await body())?.text));
+    if (name !== undefined && action === undefined && m === "GET") return json(bt.getPlan(name));
+    if (name !== undefined && action === undefined && m === "DELETE") { bt.deletePlan(name); return json(bt.listPlans()); }
+    if (name !== undefined && action === "duplicate" && m === "POST") return json(bt.duplicate(name));
+    if (name !== undefined && action === "export" && m === "GET") {
+      return new Response(bt.exportPlan(name), { headers: {
+        "content-type": "application/toml; charset=utf-8",
+        "content-disposition": `attachment; filename*=UTF-8''${encodeURIComponent(name)}.toml`,
+      } });
+    }
+  }
+  if (what === "runs") {
+    if (name === undefined && m === "GET") return json(bt.listRuns());
+    if (name === undefined && m === "POST") return json(bt.start((await body())?.plan));
+    if (name === "import" && m === "POST") return json(bt.importResult(await body()));
+    if (name !== undefined && action === undefined && m === "GET") return json(bt.getRun(name));
+    if (name !== undefined && action === "cancel" && m === "POST") return json(bt.cancel(name));
+  }
+  return fail("没有这个接口", 404);
 }
