@@ -81,9 +81,10 @@ export function randomIndex(d, rand = Math.random) {
   return lo + Math.floor(rand() * (hi - lo + 1));
 }
 
-/** 盲测练习往后一根：服务端发来新的一根（K 线、量、6 条线的点、新的抵扣价），接到图表数据后面。 */
+/** 盲测练习往后一根：服务端发来新的一根（K 线、量、6 条线的点、新的抵扣价），接到图表数据后面。颜色的来源说明不变。 */
 export function appendDelta(d, delta) {
   return {
+    tone_source: d.tone_source,
     candles: [...d.candles, delta.candle],
     volume: [...d.volume, ...delta.volume],
     lines: Object.fromEntries(Object.entries(d.lines).map(([k, pts]) => [k, [...pts, ...(delta.lines[k] ?? [])]])),

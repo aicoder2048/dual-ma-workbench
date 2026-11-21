@@ -551,6 +551,13 @@ body.offline .status-pill .dot { background: var(--bad); }
 .layers-menu .layer-item[aria-pressed="true"] .li-check::after { content: ""; position: absolute; left: 3.5px; top: 1px; width: 3px; height: 6px;
   border: solid var(--on-accent); border-width: 0 1.5px 1.5px 0; transform: rotate(45deg); }
 .layers-menu .li-hint { font-size: 11.5px; line-height: 1.4; color: var(--muted); }
+/* 「着色」写颜色是谁算的：单独一行，不变灰 */
+.layers-menu .li-lead { display: block; color: var(--fg); }
+.layers-menu .li-lead:empty { display: none; }
+/* 一行下面的提醒（着色插件没用上的原因）：和那一行的小字左对齐；原因里有文件路径，长了就折行 */
+.layers-menu .layer-note { margin: 0 6px 4px 27px; padding: 3px 7px; border-radius: 6px; font-size: 11.5px; line-height: 1.45; overflow-wrap: anywhere;
+  background: var(--warn-bg); color: var(--warn-fg); }
+.layers-menu .layer-note[hidden] { display: none; }
 .layers-menu .layer-item:disabled { opacity: 1; }
 .layers-menu .layer-item:disabled .li-label { color: var(--faint); }
 .layers-menu .layer-item:disabled .li-check { border-style: dashed; }
@@ -564,10 +571,15 @@ body.offline .status-pill .dot { background: var(--bad); }
 .chart-readout i.ema { border-top-width: 1.5px; }
 .chart-readout .ro-ohlc span > b { margin-left: 2px; }  /* 开152.00：标签和数紧挨着（照 TradingView 的 O152.00），省出地方放量 */
 .chart-readout .ro-ratio { margin-left: 4px; }
+.chart-readout .ro-turn { font-weight: 600; }
+.chart-readout .ro-turn.bull { color: var(--bar-bull); }
+.chart-readout .ro-turn.bear { color: var(--bar-bear); }
 .chart-readout .ro-ohlc.tight .ro-abs { display: none; }
+.chart-readout .ro-ohlc.tighter .ro-unit { display: none; }
 .chart-readout .ro-ratio.spike { color: var(--fg); background: color-mix(in srgb, var(--drop) 35%, transparent); border-radius: 4px; padding: 0 4px; }
 .chart-help { font-size: 13px; line-height: 1.7; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 4px 14px; margin-bottom: 8px; }
 .chart-help p { margin: 8px 0; }
+.chart-help .help-warn { background: var(--warn-bg); color: var(--warn-fg); border-radius: 4px; padding: 0 5px; overflow-wrap: anywhere; }
 .chart.drawing { cursor: crosshair; outline: 2px dashed var(--accent); outline-offset: 2px; }
 
 /* K 线回放：选起点的覆盖层、「回放」按钮下方的控制条（菜单向下展开，盖在图上）、标题旁的「回放中」 */

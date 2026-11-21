@@ -1,11 +1,15 @@
 // 把 overlays.js 换算好的结构标注画到 K 线图上：线和色带画在图表的画布里（series primitive，跟着缩放、平移、坐标轴走），
-// 标记是盖在图上的小按钮（点开看规则原文，和正文里的规则编号同一个弹窗）。
+// 标记是盖在图上的小按钮（点开看规则原文，和正文里的规则编号同一个弹窗）。变色提示的小三角也画在这块画布里。
 import { layoutLabels } from "./labels.js";
 
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
-/** 标记离 K 线最高（最低）价多远、叠放时每层多高（像素）。 */
-const MARK_GAP = 8;
+/** 变色提示的小三角：都画在 K 线上方，离最高价 TURN_GAP，高 TURN_H，半宽 TURN_HALF（像素）。 */
+const TURN_GAP = 2;
+const TURN_H = 5;
+const TURN_HALF = 3.5;
+/** 标记离 K 线最高（最低）价多远、叠放时每层多高（像素）。贴着 K 线的那一条留给小三角，标记从它外面起，两样在同一根上也不叠。 */
+const MARK_GAP = TURN_GAP + TURN_H + 1;
 const MARK_STEP = 18;
 /** 波段连线：1px 的浅线、端点一个小点。它是背景里的参照，不能比均线和 K 线抢眼（ADR 0019）。 */
 const SWING_ALPHA = 0.6;
@@ -26,6 +30,8 @@ export function createOverlay(chart, series, box) {
   let ribbon = { points: [], color: "" };
   let guides = []; // 价位线（触发、止损、自己画的线……）的价格：小字不压在上面
   let laidOut = []; // 上一次画的小字摆在哪（测试用）
+  let turns = { list: [], colors: {} };
+  let drawnTurns = []; // 上一次画的小三角（测试用）
   let request = null;
 
   const layer = document.createElement("div");
@@ -129,11 +135,30 @@ export function createOverlay(chart, series, box) {
     drawLabels(g, labels);
   };
 
+  /** 变色提示：转绿是尖朝上的 ▲，转黑是尖朝下的 ▼，颜色和那根 K 线一样。 */
+  const drawTurns = (g) => {
+    drawnTurns = [];
+    for (const t of turns.list) {
+      const px = x(t.i), py = y(t.high);
+      if (!ok(px, py)) continue;
+      const near = py - TURN_GAP, far = near - TURN_H;
+      const [flat, tip] = t.to === "bull" ? [near, far] : [far, near];
+      g.fillStyle = turns.colors[t.to];
+      g.beginPath();
+      g.moveTo(px - TURN_HALF, flat);
+      g.lineTo(px + TURN_HALF, flat);
+      g.lineTo(px, tip);
+      g.closePath();
+      g.fill();
+      drawnTurns.push({ time: t.time, to: t.to, left: px - TURN_HALF, top: far, width: TURN_HALF * 2, height: TURN_H });
+    }
+  };
+
   const view = (draw, zOrder) => ({
     zOrder: () => zOrder,
     renderer: () => ({ draw: (target) => target.useMediaCoordinateSpace(({ context }) => draw(context)) }),
   });
-  const views = [view(drawBands, "bottom"), view(drawLines, "top")];
+  const views = [view(drawBands, "bottom"), view(drawTurns, "top"), view(drawLines, "top")]; // 小字最后画：压在三角上也看得清
 
   /** 标记跟着图走：每次重画之前算一遍位置（缩放、平移、价格轴拖动都会重画）。 */
   function placeMarks() {
@@ -185,6 +210,13 @@ export function createOverlay(chart, series, box) {
       ribbon = { points, color };
       request?.();
     },
+    /** 变色提示：list 是 [{ i, time, high, to: "bull" | "bear" }]（tones.js 的 toneTurns 加上那根的最高价），空数组不画；colors 是 to → 颜色。 */
+    setTurns(list, toColors) {
+      turns = { list, colors: toColors };
+      request?.();
+    },
+    /** 上一次画的小三角（测试用）：[{ time, to, left, top, width, height }]。 */
+    turns: () => drawnTurns,
     /** 现在画着的东西（测试和问鸿雁用）。 */
     scene: () => scene,
     ribbon: () => ribbon,

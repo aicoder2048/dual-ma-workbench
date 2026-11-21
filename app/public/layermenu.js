@@ -13,18 +13,38 @@ export function createLayerMenu(wrap, { onPreset, onToggle }) {
     + PRESETS.map((p) => `<button type="button" data-preset="${p.key}" aria-pressed="false" title="${p.title}">${p.label}</button>`).join("")
     + `<span class="layers-custom" title="手动改过，和三个预设都不一样；点一个预设就换回去" hidden>自定</span></div>`
     + LAYERS.map((l) => `<button type="button" class="layer-item" data-layer="${l.key}" aria-pressed="false">`
-      + `<span class="li-check" aria-hidden="true"></span><span class="li-label">${l.label}</span><span class="li-hint"></span></button>`).join("")
+      + `<span class="li-check" aria-hidden="true"></span><span class="li-label">${l.label}</span>`
+      + `<span class="li-hint"><span class="li-lead"></span><span class="li-text"></span></span></button>`
+      + `<p class="layer-note" data-note="${l.key}" hidden></p>`).join("")
     + `</div>`;
   const btn = wrap.querySelector(".layers-toggle");
   const menu = wrap.querySelector(".layers-menu");
   const custom = wrap.querySelector(".layers-custom");
 
-  const setOpen = (open) => {
+  /** 菜单所在的那个能滚的栏（中栏）。 */
+  const scroller = () => {
+    for (let el = wrap.parentElement; el; el = el.parentElement) if (/auto|scroll/.test(getComputedStyle(el).overflowY)) return el;
+    return null;
+  };
+  let moved = null; // 打开时为了露出整个菜单把栏滚了多少：{ el, from, to }
+  /**
+   * back：关上时把打开时滚走的那一段滚回去（用户自己又滚过就不动）。Esc、再点一次「图层」关的滚回去，
+   * 图上面的东西（练习的按钮）不会留在视野外面；点菜单外面关的不滚，鼠标正按着别的东西，页面一动就点偏了。
+   */
+  const setOpen = (open, back = false) => {
     menu.hidden = !open;
     btn.setAttribute("aria-expanded", String(open));
-    if (open) menu.scrollIntoView({ block: "nearest" }); // 按钮贴着中栏底边时，菜单也整个露出来
+    if (open) {
+      const el = scroller();
+      const from = el?.scrollTop;
+      menu.scrollIntoView({ block: "nearest" }); // 按钮贴着中栏底边时，菜单也整个露出来
+      moved = el && el.scrollTop !== from ? { el, from, to: el.scrollTop } : null;
+    } else {
+      if (back && moved && moved.el.scrollTop === moved.to) moved.el.scrollTop = moved.from;
+      moved = null;
+    }
   };
-  btn.addEventListener("click", () => setOpen(menu.hidden));
+  btn.addEventListener("click", () => setOpen(menu.hidden, true));
   menu.addEventListener("click", (e) => {
     const preset = e.target.closest("[data-preset]");
     const layer = e.target.closest("[data-layer]");
@@ -36,7 +56,7 @@ export function createLayerMenu(wrap, { onPreset, onToggle }) {
     if (menu.hidden) return;
     if (e.key === "Escape") {
       e.stopPropagation();
-      setOpen(false);
+      setOpen(false, true);
       btn.focus();
     } else if ((e.key === "ArrowDown" || e.key === "ArrowUp") && wrap.contains(document.activeElement)) {
       e.preventDefault();
@@ -56,7 +76,11 @@ export function createLayerMenu(wrap, { onPreset, onToggle }) {
         item.classList.toggle("sub", r.sub);
         item.setAttribute("aria-pressed", String(r.shown));
         item.title = r.why ?? r.title;
-        item.querySelector(".li-hint").textContent = r.why ?? r.hint; // 不能用时这一行直接写原因
+        item.querySelector(".li-lead").textContent = r.why ? "" : r.lead ?? "";
+        item.querySelector(".li-text").textContent = r.why ?? r.hint; // 不能用时这一行直接写原因
+        const note = menu.querySelector(`[data-note="${r.key}"]`);
+        note.hidden = !r.note;
+        note.textContent = r.note ?? "";
       }
       for (const b of menu.querySelectorAll("[data-preset]")) b.setAttribute("aria-pressed", String(b.dataset.preset === preset));
       custom.hidden = preset !== null;

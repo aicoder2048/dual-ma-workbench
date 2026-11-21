@@ -32,7 +32,7 @@ const CHART = (() => {
   }
   const close = days.map((_, i) => 200 + 30 * Math.sin(i / 25) - i * 0.1);
   const line = (k: number) => days.map((time, i) => ({ time, value: close[i] + k }));
-  // tone：破线拐头着色的信号（脚本算好的），「着色」图层开着才用
+  // tone：每根 K 线的颜色（脚本算好的），「着色」图层开着才用。这份没有 tone_source，像旧的分析结果
   const candles = days.map((time, i) => ({ time, open: close[i] - 1, high: close[i] + 2, low: close[i] - 2, close: close[i], tone: ["bull", "mixed", "bear"][i % 3] }));
   // 周线：按周五结束的自然周合并，时间是那一周最后一个交易日（和 skill 的 weekly.to_weekly 一样）；最后一周没走完
   const friday = (t: string) => { const d = new Date(`${t}T00:00:00Z`); d.setUTCDate(d.getUTCDate() + 5 - d.getUTCDay()); return d.toISOString().slice(0, 10); };
@@ -89,6 +89,26 @@ const GAPS = [150, 270].map((i) => ({ date: CHART.candles[i].time, top: CHART.ca
 /** 挤的替身（像 NVDA）：8 个没补的缺口挤在 200 ~ 220，和结论的价位线（触发 212.21、判断失效 206.26……）叠在一起；最远那个是目标位。 */
 const CROWD_GAPS = [60, 90, 110, 130, 160, 180, 200, 230].map((i, k) => ({ date: CHART.candles[i].time, bottom: 200 + k * 2.5, top: 202 + k * 2.5 }));
 
+/**
+ * 带颜色来源的替身（像本机配了着色插件）：日线、周线各有各的 tone_source，名字和说明一眼看得出是假的。
+ * 日线的颜色十根一轮：绿 4 根、灰 1 根、黑 3 根、灰 2 根，最前面 5 根没有颜色（像均线还没算出来的那段）。
+ * 所以第 10、20 … 290 根转绿，第 15、25 … 295 根转黑；第 5 根是黑的，但上一根没有颜色，不算变色。
+ * 第 240、250 根（转绿）正好是 STRUCTURE 的顶部构造和 M 顶标记所在的那根。
+ * 周线两绿两黑一轮：第 4、8 … 根转绿，第 2、6 … 根转黑。
+ */
+const TONE_DAY = { key: "plugin", name: "假规则：按日期单双", legend: ["单号绿、双号黑（测试用，不是真规则）", "第二行：灰色是凑数的"], warning: null };
+const TONE_WEEK = { key: "plugin", name: "假规则：周线版", legend: ["周线的假说明（测试用）"], warning: null };
+const TONE_WARNING = "着色插件 /tmp/fake_tones.py 没用上，退回自带规则：文件不存在";
+const TONE_CHART = {
+  ...CHART,
+  candles: CHART.candles.map((c, i) => ({ ...c, tone: i < 5 ? undefined : ["bull", "bull", "bull", "bull", "mixed", "bear", "bear", "bear", "mixed", "mixed"][i % 10] })),
+  tone_source: TONE_DAY,
+  weekly: { ...CHART.weekly, candles: CHART.weekly.candles.map((c, k) => ({ ...c, tone: ["bull", "bull", "bear", "bear"][k % 4] })), tone_source: TONE_WEEK },
+};
+/** 夹具里日线变色的那几根：照上面的说明写出来，不用页面里的规则算。upTo：只数到第几根（回放）。 */
+const dayTurns = (upTo = 299) => CHART.candles.flatMap((c, i) => (i > upTo ? [] : i >= 10 && i % 10 === 0 ? [[c.time, "bull"]] : i >= 15 && i % 10 === 5 ? [[c.time, "bear"]] : []));
+const weekTurns = () => CHART.weekly.candles.flatMap((c, k) => (k >= 4 && k % 4 === 0 ? [[c.time, "bull"]] : k % 4 === 2 ? [[c.time, "bear"]] : []));
+
 /** 计划记下的上方筹码山替身（P38，只作参考）：山脚 175、山顶 185，落在 CHART 的价格范围里。 */
 const PROFILE_REF = { foot: 175, top: 185, date: `${CHART.candles[48].time}~${CHART.candles[299].time}` };
 
@@ -144,6 +164,13 @@ beforeAll(async () => {
         const far = CROWD_GAPS.at(-1)!;
         const flat = { ...n.trade_plan.flat, targets: [{ price: far.bottom, kind: "缺口", rule: "P25", source: "视频" as const, date: far.date }] };
         return JSON.stringify({ analysis: { ...n, label: "CROWD", structure: STRUCTURE, gaps: CROWD_GAPS, trade_plan: { ...n.trade_plan, flat } }, chart: CHART });
+      }
+      if (args[0] === "TONE") { // 颜色是着色插件算的；带结构标注，看小三角和构造、形态的标记在同一根上怎么放
+        return JSON.stringify({ analysis: { ...(nvda as Analysis), label: "TONE", structure: STRUCTURE }, chart: TONE_CHART });
+      }
+      if (args[0] === "TONEWARN") { // 着色插件没用上：退回自带规则，tone_source 里带着原因
+        return JSON.stringify({ analysis: { ...(nvda as Analysis), label: "TONEWARN" },
+          chart: { ...TONE_CHART, tone_source: { key: "builtin", name: "假的自带规则", legend: ["自带规则的假说明（测试用）"], warning: TONE_WARNING } } });
       }
       if (args[0] === "EARN") { // 3 天后财报：图上标 E，结论卡片提醒跳空
         const n = nvda as Analysis;
@@ -874,8 +901,8 @@ const notCovered = (page: Page, sel: string) => page.evaluate((sel) => {
  * 等页面里的条件成立（每 50ms 读一次）。读图表状态要 await import("/app.js")，而 page.waitForFunction 遇到 async 函数会立刻返回
  * （它拿到的是 Promise，本身就是真值），等于没等；所以在测试这边轮询。
  */
-async function until(page: Page, what: string, cond: () => Promise<boolean>, timeout = 5000) {
-  for (const end = Date.now() + timeout; !(await page.evaluate(cond));) {
+async function until<T = undefined>(page: Page, what: string, cond: (arg: T) => Promise<boolean>, timeout = 5000, arg?: T) {
+  for (const end = Date.now() + timeout; !(await page.evaluate(cond as (arg: unknown) => Promise<boolean>, arg));) {
     if (Date.now() > end) throw new Error(`等了 ${timeout}ms：${what}`);
     await page.waitForTimeout(50);
   }
@@ -2254,7 +2281,8 @@ describe("盲测练习", () => {
   test("出题 → 记计划 → 往后放到进场、止损 → 揭晓；控件都在默认视图里，揭晓前看不到真实信息", async () => {
     // 平时聚焦着 20 线组：练习时图例收起了，没法取消，所以不聚焦
     // 平时开着筹码分布：练习里照样算，但只用已经发到页面的 K 线，日期写 T+n，没有计划的参考带
-    const { page, errors } = await open((p) => p.addInitScript(() => { localStorage.setItem("dma-focus", "20"); localStorage.setItem("dma-layers", JSON.stringify({ profile: true })); }));
+    // 平时开着着色和变色提示：练习里着色照常，变色提示不标
+    const { page, errors } = await open((p) => p.addInitScript(() => { localStorage.setItem("dma-focus", "20"); localStorage.setItem("dma-layers", JSON.stringify({ profile: true, tone: true, toneTurns: true })); }));
     expect(await usable(page, "#practice-btn")).toBe(true);
     await page.click("#practice-btn");
     await page.click("#pp-tab-combo");
@@ -2281,6 +2309,15 @@ describe("盲测练习", () => {
       expect(item.text).toContain("练习里不画，免得提前看到答案");
       expect({ key, ok: await notCovered(page, layerBtn(key)) }).toEqual({ key, ok: true });
     }
+    // 着色照常能用（练习只用自带规则），来源的名字写在那一行；变色提示在练习里不能开：认变色是题目要自己做的事，标出来等于给答案
+    const practiceTone = (await (await fetch(`${base}/api/practice/${await page.evaluate(() => location.hash.slice("#practice:".length))}`)).json()).chart.tone_source;
+    expect(await page.textContent(`${layerBtn("tone")} .li-lead`)).toBe(practiceTone.name);
+    expect(await layerItem(page, "tone")).toMatchObject({ disabled: false, pressed: "true" });
+    const turnsItem = await layerItem(page, "toneTurns");
+    expect({ disabled: turnsItem.disabled, pressed: turnsItem.pressed }).toEqual({ disabled: true, pressed: "false" });
+    expect(turnsItem.text).toContain("练习里不标：这是题目要你自己看的");
+    expect(await notCovered(page, layerBtn("toneTurns"))).toBe(true);
+    expect(await page.evaluate(async () => { const c = (await import("/app.js")).getChart(); return { toned: c.toned() > 0, turns: c.turns() }; })).toEqual({ toned: true, turns: [] });
     await page.keyboard.press("Escape");
     // 周线不能切（练习的图只到现在那根，周线会用到之后的 K 线）
     expect(await page.isDisabled('[data-frame="week"]')).toBe(true);
@@ -2321,6 +2358,14 @@ describe("盲测练习", () => {
     expect(await page.textContent("#chart-readout")).toContain("T+1");
     const p1 = await profile();
     expect(p1.to > p0.to && p1.to === await lastBar()).toBe(true); // 往后一根：筹码多算这一根
+    // 往后一根，再开关一次着色（菜单重写一遍）：来源还写着，变色提示还是不标
+    await openLayers(page);
+    await page.click(layerBtn("tone"));
+    await page.click(layerBtn("tone"));
+    expect(await page.textContent(`${layerBtn("tone")} .li-lead`)).toBe(practiceTone.name);
+    await page.keyboard.press("Escape");
+    expect(await page.evaluate(async () => (await import("/app.js")).getChart().turns())).toEqual([]);
+    expect(await page.isDisabled(layerBtn("toneTurns"))).toBe(true);
     await shot(page, "3-filled");
     // 一根一根往后，直到止损卖出（控件一直在默认视图里）
     for (let i = 0; i < 41; i++) {
@@ -2594,12 +2639,12 @@ describe("图层菜单", () => {
     const box = (await page.locator(".layers-menu").boundingBox())!;
     const vp = page.viewportSize()!;
     expect(box.x >= 0 && box.y >= 0 && box.x + box.width <= vp.width && box.y + box.height <= vp.height).toBe(true);
-    const keys = ["ma", "levels", "drops", "tone", "constructs", "patterns", "swings", "gaps", "gapsAll", "profile"];
+    const keys = ["ma", "levels", "drops", "tone", "toneTurns", "constructs", "patterns", "swings", "gaps", "gapsAll", "profile"];
     for (const sel of [...["simple", "structure", "all"].map((k) => `.layers-menu [data-preset="${k}"]`), ...keys.map(layerBtn)]) {
       expect({ sel, ok: await notCovered(page, sel) }).toEqual({ sel, ok: true });
     }
     expect(await page.$$eval(".layers-menu .li-label", (els) => els.map((e) => e.textContent)))
-      .toEqual(["均线", "价位线", "抵扣价", "着色", "顶底构造", "形态", "波段", "缺口", "全部", "筹码"]);
+      .toEqual(["均线", "价位线", "抵扣价", "着色", "变色提示", "顶底构造", "形态", "波段", "缺口", "全部", "筹码"]);
     expect(await page.textContent(layerBtn("patterns"))).toBe("形态M 顶、W 底、2B 和颈线");
     expect(await presets(page)).toEqual([["简洁", "true"], ["结构", "false"], ["全部", "false"]]);
     expect(await page.isVisible(".layers-custom")).toBe(false);
@@ -2608,7 +2653,7 @@ describe("图层菜单", () => {
     expect(await drawn(page)).toEqual(STRUCT);
     expect(await presets(page)).toEqual([["简洁", "false"], ["结构", "true"], ["全部", "false"]]);
     for (const key of ["constructs", "patterns", "swings", "gaps"]) expect({ key, on: await page.getAttribute(layerBtn(key), "aria-pressed") }).toEqual({ key, on: "true" });
-    for (const key of ["tone", "gapsAll", "profile"]) expect({ key, on: await page.getAttribute(layerBtn(key), "aria-pressed") }).toEqual({ key, on: "false" });
+    for (const key of ["tone", "toneTurns", "gapsAll", "profile"]) expect({ key, on: await page.getAttribute(layerBtn(key), "aria-pressed") }).toEqual({ key, on: "false" });
 
     await page.click('.layers-menu [data-preset="all"]');
     expect(await drawn(page)).toEqual(ALL);
@@ -2625,10 +2670,25 @@ describe("图层菜单", () => {
       s.scrollTop += document.querySelector(".chart-tools")!.getBoundingClientRect().bottom - s.getBoundingClientRect().bottom + 4;
       await new Promise((ok) => requestAnimationFrame(() => requestAnimationFrame(ok)));
     });
+    const scrolled = () => page.evaluate(() => document.getElementById("center-scroll")!.scrollTop);
+    const before = await scrolled();
     await page.click(".layers-toggle");
     expect(await notCovered(page, layerBtn("profile"))).toBe(true);
     await page.click(layerBtn("profile"));
     expect((await drawn(page)).profile).toBe(true);
+    // 为了露出菜单滚走的那一段：按 Esc、再点一次「图层」关上就滚回原处；点菜单外面关的不动（鼠标正按着别的东西，页面一动就点偏了）
+    const opened = await scrolled();
+    expect(opened).toBeGreaterThan(before);
+    await page.keyboard.press("Escape");
+    expect(await scrolled()).toBe(before);
+    await page.click(".layers-toggle");
+    expect(await scrolled()).toBe(opened);
+    await page.click(".layers-toggle");
+    expect(await scrolled()).toBe(before);
+    await page.click(".layers-toggle");
+    await page.mouse.click(80, 25); // 顶栏的标志：在菜单外面，点它不用滚动
+    expect(await page.isVisible(".layers-menu")).toBe(false);
+    expect(await scrolled()).toBe(opened);
     expect(errors).toEqual([]);
     await page.close();
   }, 30_000);
@@ -2694,7 +2754,9 @@ describe("图层菜单", () => {
     expect(await api<number>(page, "toned")).toBeGreaterThan(0);
     expect(await page.getAttribute(layerBtn("tone"), "aria-pressed")).toBe("true");
     expect(await focused()).toBe("tone"); // 勾完焦点还在这一项上，可以接着走
-    // 缺口关着，「全部」不能用：从「缺口」往下直接到「筹码」
+    // 着色开了，「变色提示」能走到；缺口关着，「全部」不能用：从「缺口」往下直接到「筹码」
+    await page.keyboard.press("ArrowDown");
+    expect(await focused()).toBe("toneTurns");
     for (let n = 0; n < 5; n++) await page.keyboard.press("ArrowDown");
     expect(await focused()).toBe("profile");
     await page.keyboard.press("ArrowUp");
@@ -2761,6 +2823,179 @@ describe("图层菜单", () => {
     expect(errors).toEqual([]);
     await page.close();
   }, 30_000);
+
+  /** 「着色」那一行现在写着什么：来源的名字、小字、悬停的说明、下面那句提醒（没显示是 null）。 */
+  const toneRow = async (page: Page) => {
+    await openLayers(page);
+    const note = page.locator('.layers-menu [data-note="tone"]');
+    return {
+      lead: await page.textContent(`${layerBtn("tone")} .li-lead`), leadShown: await page.isVisible(`${layerBtn("tone")} .li-lead`),
+      text: await page.textContent(`${layerBtn("tone")} .li-text`), title: await page.getAttribute(layerBtn("tone"), "title"),
+      note: (await note.isVisible()) ? await note.textContent() : null,
+    };
+  };
+  /** 「?」面板里讲着色的那段（面板没开就点开）。 */
+  const toneHelpText = async (page: Page) => {
+    if (await page.getAttribute(".chart-help-toggle", "aria-expanded") !== "true") await page.click(".chart-help-toggle");
+    return (await page.textContent('.chart-help [data-help="tone"]'))!;
+  };
+
+  test("「着色」那一行照颜色的来源写：名字、说明的第一行，悬停和「?」里是整段；日线、周线各写各的；没有来源的旧数据写一行兜底说明", async () => {
+    const { page, errors } = await start("TONE");
+    const day = await toneRow(page);
+    expect(day).toEqual({ lead: TONE_DAY.name, leadShown: true, text: TONE_DAY.legend[0], title: [TONE_DAY.name, ...TONE_DAY.legend].join("\n"), note: null });
+    expect(await notCovered(page, layerBtn("tone"))).toBe(true);
+    expect(await notCovered(page, `${layerBtn("tone")} .li-lead`)).toBe(true);
+    expect(await page.textContent(`${layerBtn("tone")} .li-label`)).toBe("着色");
+    const dayHelp = await toneHelpText(page);
+    for (const part of [TONE_DAY.name, ...TONE_DAY.legend]) expect(dayHelp).toContain(part);
+    expect(await page.locator(".chart-help .help-warn").count()).toBe(0);
+
+    await page.click('[data-frame="week"]');
+    const week = await toneRow(page);
+    expect(week).toEqual({ lead: TONE_WEEK.name, leadShown: true, text: TONE_WEEK.legend[0], title: [TONE_WEEK.name, ...TONE_WEEK.legend].join("\n"), note: null });
+    const weekHelp = await toneHelpText(page);
+    expect(weekHelp).toContain(TONE_WEEK.legend[0]);
+    expect(weekHelp).not.toContain(TONE_DAY.name);
+    await page.click('[data-frame="day"]');
+    expect((await toneRow(page)).lead).toBe(TONE_DAY.name);
+    expect(errors).toEqual([]);
+    await page.close();
+
+    // 旧的分析结果没有 tone_source：不写名字，小字是一行说明，着色照常能开
+    const old = await start("NVDA");
+    const row = await toneRow(old.page);
+    expect({ lead: row.lead, leadShown: row.leadShown, note: row.note }).toEqual({ lead: "", leadShown: false, note: null });
+    expect(row.text).toContain("重新分析一次就有");
+    expect(row.title).toBe(row.text);
+    expect(await toneHelpText(old.page)).toContain(row.text!);
+    await openLayers(old.page);
+    await old.page.click(layerBtn("tone"));
+    expect(await api<number>(old.page, "toned")).toBeGreaterThan(0);
+    expect(old.errors).toEqual([]);
+    await old.page.close();
+  }, 30_000);
+
+  test("着色插件没用上：原因直接写在「着色」那一行下面，看得见、没被挡、没撑出菜单；「?」里也有", async () => {
+    const { page, errors } = await start("TONEWARN");
+    const row = await toneRow(page);
+    expect(row).toMatchObject({ lead: "假的自带规则", note: TONE_WARNING });
+    expect(await notCovered(page, '.layers-menu [data-note="tone"]')).toBe(true);
+    const [menu, note, vp] = [(await page.locator(".layers-menu").boundingBox())!, (await page.locator('.layers-menu [data-note="tone"]').boundingBox())!, page.viewportSize()!];
+    expect(note.x >= menu.x && note.x + note.width <= menu.x + menu.width).toBe(true);
+    expect(menu.y >= 0 && menu.y + menu.height <= vp.height).toBe(true);
+    // 多了这句话，下面的每一项还点得到
+    for (const key of ["toneTurns", "constructs", "gaps", "profile"]) expect({ key, ok: await notCovered(page, layerBtn(key)) }).toEqual({ key, ok: true });
+    expect(await toneHelpText(page)).toContain(TONE_WARNING);
+    expect(await page.textContent(".chart-help .help-warn")).toBe(TONE_WARNING);
+    expect(errors).toEqual([]);
+    await page.close();
+  }, 30_000);
+
+  test("变色提示：着色关着时是灰的；打开后转绿、转黑的那几根上方各有一个小三角，和构造、形态的标记不叠；悬停读数写「转绿」「转黑」；回放只标放出来的；周线也标；关掉收起", async () => {
+    const { page, errors } = await start("TONE");
+    const turns = () => api<{ time: string; to: string; left: number; top: number; width: number; height: number }[]>(page, "turns");
+    const marked = async () => (await turns()).map((t) => [t.time, t.to]);
+    const count = (n: number) => until(page, `图上有 ${n} 个变色标记`, async (n) => (await import("/app.js")).getChart().turns().length === n, 5000, n);
+
+    let item = await layerItem(page, "toneTurns");
+    expect(item).toEqual({ disabled: true, pressed: "false", text: "变色提示先打开「着色」" });
+    expect(await page.locator(layerBtn("toneTurns")).evaluate((el) => el.classList.contains("sub"))).toBe(true);
+    expect(await notCovered(page, layerBtn("toneTurns"))).toBe(true);
+
+    await page.click(layerBtn("tone"));
+    item = await layerItem(page, "toneTurns");
+    expect(item).toEqual({ disabled: false, pressed: "false", text: "变色提示转绿标 ▲、转黑标 ▼" });
+    expect(await turns()).toEqual([]);
+    expect(await page.locator("#chart-readout .ro-turn").count()).toBe(0);
+
+    await page.click(layerBtn("toneTurns"));
+    await count(58);
+    expect(await marked()).toEqual(dayTurns());
+    expect((await api<any>(page, "layers")).rows.find((r: any) => r.key === "toneTurns")).toEqual({ key: "toneTurns", on: true, shown: true, why: null });
+
+    // 第 240、250 根既转绿、上方又有构造和形态的标记：小三角贴着 K 线的最高价，标记紧挨在它外面，不叠
+    await page.click(layerBtn("constructs"));
+    await page.click(layerBtn("patterns"));
+    await page.keyboard.press("Escape");
+    await page.waitForSelector("#chart .struct-mark");
+    const boxes = await page.evaluate(() => {
+      const origin = document.getElementById("chart")!.getBoundingClientRect();
+      return [...document.querySelectorAll<HTMLElement>("#chart .struct-mark")].filter((e) => !e.hidden).map((e) => {
+        const r = e.getBoundingClientRect();
+        return { text: e.textContent, x: r.x + r.width / 2 - origin.x, top: r.top - origin.y, bottom: r.bottom - origin.y };
+      });
+    });
+    const drawnNow = await turns();
+    for (const [i, text] of [[240, "顶·已完成"], [250, "M顶"]] as const) {
+      const tri = drawnNow.find((t) => t.time === CHART.candles[i].time)!;
+      const mark = boxes.find((b) => b.text === text)!;
+      expect(Math.abs(mark.x - (tri.left + tri.width / 2))).toBeLessThan(1); // 同一根 K 线
+      const gap = tri.top - mark.bottom; // 标记的下沿离最高价 8px，小三角占中间那几像素
+      expect({ text, clear: gap >= 0 && gap <= 3 }).toEqual({ text, clear: true });
+    }
+
+    // 鼠标停在变色的那根上：读数条的日期后面写一句，看得见、没被截掉；旁边没变色的那根不写
+    const pane = (await page.locator("#chart").boundingBox())!;
+    const xOf = (i: number) => { const t = drawnNow.find((d) => d.time === CHART.candles[i].time)!; return t.left + t.width / 2; };
+    const barStep = (xOf(290) - xOf(280)) / 10;
+    /** 鼠标移到第 i 根（off：再往右几根），返回读数条开头的两格。 */
+    const hover = async (i: number, off = 0) => {
+      await page.mouse.move(pane.x + xOf(i) + off * barStep, pane.y + 60);
+      await page.waitForFunction((t) => document.querySelector("#chart-readout .ro-ohlc b")?.textContent === t, CHART.candles[i + off].time);
+      return page.$$eval("#chart-readout .ro-ohlc > *", (els) => els.slice(0, 2).map((e) => [e.className, e.textContent]));
+    };
+    expect(await hover(290)).toEqual([["", CHART.candles[290].time], ["ro-turn bull", "转绿"]]);
+    // 多了这两个字，第一行还是放得下：量和量比的倍数没被截掉（窄栏里收起的是涨跌额和「均量」两个字）
+    const row = await page.evaluate(() => {
+      const el = document.querySelector("#chart-readout .ro-ohlc")!;
+      const shown = (sel: string) => (el.querySelector<HTMLElement>(sel)?.getBoundingClientRect().width ?? 0) > 0;
+      return { fits: el.scrollWidth <= el.clientWidth, turn: shown(".ro-turn"), volume: shown(".ro-vol b"), ratio: shown(".ro-ratio") };
+    });
+    expect(row).toEqual({ fits: true, turn: true, volume: true, ratio: true });
+    expect(await notCovered(page, "#chart-readout .ro-turn")).toBe(true);
+    expect(await hover(295)).toEqual([["", CHART.candles[295].time], ["ro-turn bear", "转黑"]]);
+    expect((await hover(290, 2))[1][0]).not.toContain("ro-turn");
+    await page.mouse.move(pane.x - 30, pane.y - 30);
+
+    // 回放：只标已经放出来的 K 线，往后放到变色的那根才多一个
+    await page.click(".replay-toggle");
+    await page.click(".replay-start");
+    await page.fill(".replay-menu input", CHART.candles[200].time);
+    await until(page, "进入回放", async () => (await import("/app.js")).getChart().replay().mode === "replay");
+    await page.click(".replay-play"); // 暂停
+    const at = (await api<any>(page, "replay")).index as number;
+    await count(dayTurns(at).length);
+    expect(await marked()).toEqual(dayTurns(at));
+    for (let i = at; i < 205; i++) await page.click(".replay-forward");
+    await count(dayTurns(205).length);
+    expect(dayTurns(205).length).toBe(dayTurns(204).length + 1); // 第 205 根转黑
+    expect(await marked()).toEqual(dayTurns(205));
+    expect((await layerItem(page, "toneTurns")).disabled).toBe(false);
+    await page.keyboard.press("Escape");
+    await page.click(".replay-exit");
+    await count(58);
+
+    // 周线：按周线自己的颜色标
+    await page.click('[data-frame="week"]');
+    await count(weekTurns().length);
+    expect(await marked()).toEqual(weekTurns());
+    expect(await layerItem(page, "toneTurns")).toMatchObject({ disabled: false, pressed: "true" });
+    await page.click('[data-frame="day"]');
+    await count(58);
+
+    // 关掉着色：变色提示跟着收起、变灰；只属于「全部」预设
+    await openLayers(page);
+    await page.click(layerBtn("tone"));
+    await count(0);
+    expect(await layerItem(page, "toneTurns")).toMatchObject({ disabled: true, pressed: "false" });
+    await page.click('.layers-menu [data-preset="all"]');
+    await count(58);
+    await page.click('.layers-menu [data-preset="structure"]');
+    await count(0);
+    expect(errors).toEqual([]);
+    await page.close();
+  }, 60_000);
 });
 
 describe("结论卡片上的价位：点一下，图上那条线亮几秒", () => {

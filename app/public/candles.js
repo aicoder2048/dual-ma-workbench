@@ -1,4 +1,4 @@
-// K 线的颜色：不着色时照常涨绿跌红；着色时按破线拐头信号（tone，由 Python 算好）上色。纯函数，单元测试直接用。
+// K 线的颜色：不着色时照常涨绿跌红；着色时按每根的 tone（Python 算好，见 tones.js）上色。纯函数，单元测试直接用。
 
 /** 不着色时整列 K 线的样式：涨绿跌红、实心。colors.up / colors.down 来自主题的 --up / --down。 */
 export function baseCandleStyle(colors) {
