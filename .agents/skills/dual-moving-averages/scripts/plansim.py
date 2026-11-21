@@ -11,7 +11,10 @@
   进场那一根只看止损。
 - 失效条件（打法的离场条件，收盘判断）成立：次日开盘离场。同一根收盘止损和失效都成立，记作止损。
 - 每边 COST。股数按计划进场价算：可承受亏损 = 前一天收盘的账户净值 × risk_pct，股数 = 向下取整(可承受亏损 ÷ (进场 − 止损))。
+  risk_amount 给了就不按比例：可承受亏损是这个固定金额（视频 F：最大亏损用金额）。
   max_position 给了就再限单票：股数 × 进场价不超过净值的这个比例（视频没有，回测自定，见 evaluation.toml 的 fullplan）。
+- stop_floor_atr = k 给了（脚本自定，默认不用）：止损离计划进场价不到 k 个 ATR(14)（信号日的）就放宽到进场价 − k·ATR，
+  股数、收盘止损、R 都按放宽后的止损算。几分钱的止损会让 R 失真、离场太早，这个开关测"给止损留一点日常波动的空间"有没有用。
   所有持仓的初始风险加起来不超过净值的 cap_pct，超了这笔不做；现金不够按现金能买的股数（不加杠杆）。
 - 分红：持仓市值和离场所得乘以复权因子之比（含分红的总收益），和 evaluate.py 一样。
 """
@@ -19,7 +22,7 @@ from __future__ import annotations
 
 import math
 from collections import Counter
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from enum import Enum
 
 import numpy as np
@@ -75,6 +78,7 @@ class Order:
     target: float | None
     exits: tuple[str, ...]           # 失效条件（收盘成立就次日开盘走）
     max_bars: int | None = None      # 随机进场用：拿满这么多根就在开盘走
+    atr: float | None = None         # 信号日的 ATR(14)：止损下限（Config.stop_floor_atr）用
     key: str = ""
     rule: str = ""
     rr: float | None = None
@@ -87,6 +91,8 @@ class Config:
     notional_pct: float | None = None   # 给了就不按风险算：每笔买净值的这么多（不设风险上限）
     stop_on_close: bool = True          # False：止损看盘中最低价（对照）
     max_position: float | None = None   # 单票持仓金额上限，占净值的比例；None 不限
+    risk_amount: float | None = None    # 给了就按固定金额算每笔可承受亏损，不按 risk_pct
+    stop_floor_atr: float | None = None # 止损离进场不到这么多个 ATR 就放宽到这么远；None 不放宽
     cost: float = COST
     equity0: float = 1_000_000.0
 
@@ -142,12 +148,20 @@ class Result:
     skipped: dict[str, int] = field(default_factory=dict)
 
 
+def floor_stop(o: Order, k: float | None) -> Order:
+    """止损离计划进场价不到 k 个 ATR 就放宽到进场价 − k·ATR；k 或 ATR 没有就原样。"""
+    if not k or o.atr is None or not o.atr > 0 or o.entry - o.stop >= k * o.atr:
+        return o
+    return replace(o, stop=o.entry - k * o.atr)
+
+
 def _shares(o: Order, eq: float, open_risk: float, cash: float, cfg: Config) -> tuple[int, str | None]:
     unit = o.entry - o.stop
     if cfg.notional_pct is not None:
         n = math.floor(eq * cfg.notional_pct / o.entry + 1e-9)
     else:
-        n = math.floor(eq * cfg.risk_pct / 100 / unit + 1e-9)
+        budget = cfg.risk_amount if cfg.risk_amount is not None else eq * cfg.risk_pct / 100
+        n = math.floor(budget / unit + 1e-9)
         if cfg.max_position is not None:
             n = min(n, math.floor(eq * cfg.max_position / o.entry + 1e-9))
         if open_risk + n * unit > eq * cfg.cap_pct / 100 + 1e-9:
@@ -199,6 +213,7 @@ def simulate(cal_len: int, bars: dict[str, Bars], orders: dict[int, list[Order]]
         open_risk = sum(p.shares * (p.order.entry - p.order.stop) for p in held.values())
         budget = cash
         for o in sorted(orders.get(j - 1, ()), key=lambda x: x.ticker):
+            o = floor_stop(o, cfg.stop_floor_atr)
             b = bars[o.ticker]
             if o.ticker in had or np.isnan(b.o[j]):
                 continue

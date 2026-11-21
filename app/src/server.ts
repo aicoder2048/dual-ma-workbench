@@ -5,6 +5,7 @@
  */
 import { resolve } from "node:path";
 import { Analyzer, pythonRunner } from "./analyze.ts";
+import { Backtests } from "./backtest/service.ts";
 import { codeFingerprint } from "./build.ts";
 import { createHandler } from "./http.ts";
 import { Journal } from "./journal.ts";
@@ -35,12 +36,14 @@ void drills.topUp();
 analyzer.mount(practice);
 const library = SourceLibrary.load();
 const workbench = new Workbench(analyzer, library, { settings });
+const watchlist = new Watchlist();
 const handler = createHandler({
   analyzer,
-  watchlist: new Watchlist(),
+  watchlist,
   journal,
   practice,
   drills,
+  backtests: new Backtests({ watchlist: () => watchlist.list() }),
   library,
   publicDir: resolve(import.meta.dir, "../public"),
   settings,

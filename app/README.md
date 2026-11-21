@@ -1,6 +1,6 @@
 # 归雁 · 双均线工作台
 
-dual-moving-averages skill 的网页版：左「自选股 / 交易日志」、中「分析师·长风」、右「解语花·鸿雁」，顶栏「练习」打开练习页。分析师·长风负责判断，取李白"长风破浪会有时"，顺势而行，和归雁、鸿雁成一组；解语花·鸿雁负责解惑，解语花取"懂你的话、替你解答"之意。
+dual-moving-averages skill 的网页版：左「自选股 / 交易日志」、中「分析师·长风」、右「解语花·鸿雁」，顶栏「回测」「练习」各打开一页。分析师·长风负责判断，取李白"长风破浪会有时"，顺势而行，和归雁、鸿雁成一组；解语花·鸿雁负责解惑，解语花取"懂你的话、替你解答"之意。
 
 **定位**：把双均线交易系统用到真实股票交易上的工作台；练习是辅助功能，练眼力（一眼看出图形和信号）。**风险提示**：2026-11-20 的评估（86 只票、2013–2026、事先定的标准、验证集）没找到这套方法可验证的交易优势：H1 模糊判断、H2 趋势类型方向相反或没用；H3 照方向持有回撤更浅，但收益/回撤低于 MA60、MA200 和买入持有；H4 推演最接近有用，没到标准；H5、H6 回测不支持。详见根目录 README。页面上推演求解给的提示标"辅助"并附 H4 的结论，`rules.md` 里标了"回测不支持"的规则在规则清单上带小标签，结论卡片的回测那句末尾也照说。
 
@@ -34,6 +34,12 @@ uv run ../.agents/skills/dual-moving-averages/scripts/backtest.py   # 逐笔回�
   - 文件读不了（不是 JSON、结构不对、编号重复）就报错并写明文件，不覆盖；写入先写 `journal.json.tmp` 再改名。
   - 收益按做多算，持有天数是自然日；汇总少于 10 笔标"只当参考"。列表和汇总只有实盘的单，练习的单在练习页「综合题」里看、复盘。长风读不到日志：照没照计划，左栏的汇总已经直接回答；要让长风读，得另改提示词和引用校验（日志里的数字不来自 dma_analyze）。
 
+- **回测页**（`src/backtest/`，页面 `public/backtest.js`）：顶栏「回测」打开，和练习页一样盖在工作台上面；点一笔交易关掉回测，工作台回放到那笔的信号日。所有数字都由 skill 的 `planrun.py` 算，TypeScript 只读写文件、管运行、排版。
+  - 方案（`plan.ts`）：typebox 的 `BacktestPlan`，在边界上从 TOML（`Bun.TOML.parse`）读进来校验，写回固定格式的 TOML；格式和 `planrun.py --template` 一样，Python 那边再严格校验一遍。存 `data/backtests/<名字>.toml`；新方案的默认值取 `planrun.py --template`，TypeScript 里不写默认参数。
+  - 运行（`run.ts`）：排队 → 运行中 → 完成 / 失败 / 取消，一张状态 × 事件的表，表里没有的转移抛 409；每个状态带的字段用联合类型写死。
+  - 服务（`service.ts`）：一次跑一个，其余排队；`planrun.py <plan> --out result.json` 单独一个进程组跑，stdout 每行一个 JSON 进度事件；取消时整组 SIGTERM（5 秒后 SIGKILL）。每次运行一个目录 `data/backtests/runs/<id>/`：`run.json`、`plan.toml`（自选股已经换成当时的代码）、`result.json`。工作台重启时没跑完的记为失败。
+  - 结果（`result.ts`）：校验 `planrun.py` 写的 JSON 里页面要用的字段；测试用 CLI 真跑出来的 `test/fixtures/backtest-nvda-result.json`，单元测试和端到端用 `test/fixtures/fake-planrun.ts` 代替 Python（同样的参数和输出）。
+  - 接口：`/api/backtest/template`、`estimate`、`plans`（列表、存、读、删、`duplicate`、`export`、`import`）、`runs`（列表、开始、读、`cancel`、`import`）。
 - **练习页**（`public/practicepage.js`）：顶栏「练习」打开，`position: fixed` 盖在工作台上面，工作台的 DOM 和状态都不动；关掉或 Esc 回去。两种：识别题、综合题，选哪种记在本机。
 
 - **识别题**（`src/practice/drillkinds.ts`、`drills.ts`、`drillstats.ts`，页面 `public/drills.js`、`drillchart.js`）：
@@ -65,9 +71,10 @@ uv run ../.agents/skills/dual-moving-averages/scripts/backtest.py   # 逐笔回�
                            │   └─ agents/suggest.ts  规则版问法 + 轻量 Pi 会话生成 AI 版
                            ├─ src/http.ts       页面、分析、自选股、交易日志、原文片段
                            ├─ src/journal.ts    交易日志：状态转移、快照、汇总、读写 data/journal.json
+                           ├─ src/backtest/     回测页：方案（TOML ↔ typebox）、运行状态机、后台跑 planrun.py
                            ├─ src/practice/     练习：识别题库（出题函数表、配平、统计），综合题（出题、蒙眼、状态机和成交、揭晓）
                            ├─ src/sources.ts    引用库（切片、检索）
                            ├─ src/citations.ts  引用解析、数据字段、校验
                            └─ src/analyze.ts    调 Python 脚本，带缓存
-public/  app.js 页面状态 · journal.js 交易日志 · practicepage.js 练习页 · drills.js 识别题 · practice.js 综合题 · agents.js 两个面板 · chart.js 图表 · cite.js 引用渲染 · selection.js 划选问鸿雁
+public/  app.js 页面状态 · journal.js 交易日志 · backtest.js 回测页 · practicepage.js 练习页 · drills.js 识别题 · practice.js 综合题 · agents.js 两个面板 · chart.js 图表 · cite.js 引用渲染 · selection.js 划选问鸿雁
 ```

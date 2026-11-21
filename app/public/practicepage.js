@@ -4,6 +4,7 @@
 const $ = (id) => document.getElementById(id);
 const MODES = ["drill", "combo"];
 let onMode = () => {};
+let beforeOpen = () => {};
 let returnFocus = null;
 
 export const isOpen = () => !$("practice-page").hidden;
@@ -21,7 +22,10 @@ function selectMode(name) {
 
 export function openPage(mode) {
   const page = $("practice-page");
-  if (page.hidden) returnFocus = document.activeElement;
+  if (page.hidden) {
+    beforeOpen();
+    returnFocus = document.activeElement;
+  }
   page.hidden = false;
   $("practice-btn").setAttribute("aria-expanded", "true");
   let m = mode;
@@ -37,9 +41,10 @@ export function closePage() {
   returnFocus?.focus?.();
 }
 
-/** opts.onMode(mode)：切到某种练习时调（识别题第一次打开时取题）。 */
+/** opts.onMode(mode)：切到某种练习时调（识别题第一次打开时取题）；opts.beforeOpen()：打开前关掉别的整页（回测）。 */
 export function initPracticePage(opts = {}) {
   onMode = opts.onMode ?? onMode;
+  beforeOpen = opts.beforeOpen ?? beforeOpen;
   $("practice-btn").setAttribute("aria-expanded", "false");
   $("practice-btn").addEventListener("click", () => (isOpen() ? closePage() : openPage()));
   $("practice-close").addEventListener("click", closePage);

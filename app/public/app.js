@@ -10,6 +10,7 @@ import { initJournal, openEntry, refreshJournal } from "./journal.js";
 import { initDrills, onShow as showDrills } from "./drills.js";
 import * as practice from "./practice.js";
 import { closePage, initPracticePage, openPage } from "./practicepage.js";
+import { closePage as closeBacktest, initBacktest } from "./backtest.js";
 import { resolveTicker } from "./names.js";
 import { applyRemoteSettings, initSettings, openSettings } from "./settings.js";
 import { chartLevels, conclusionCard, forecastAnswer, holdingRow, installTips, leanName, planBody, playAnswer, pnlText, stanceOf, stepVisuals, trendAnswer } from "./viz.js";
@@ -494,7 +495,8 @@ async function main() {
     },
   });
   initDrills({ api });
-  initPracticePage({ onMode: (m) => m === "drill" && showDrills() });
+  initPracticePage({ onMode: (m) => m === "drill" && showDrills(), beforeOpen: closeBacktest });
+  initBacktest({ api, beforeOpen: closePage, onTrade: (ticker, date) => loadAnalysis(ticker, date) });
   const journal = initJournal({
     api, current: () => ({ data: state.data, asof: state.asof, pos: loadPosition(state.ticker) }),
     record: () => Boolean(practice.active() && (practice.planDialog(), true)),

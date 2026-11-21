@@ -34,6 +34,7 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import asdict, dataclass
 from datetime import datetime
 from pathlib import Path
+from typing import Callable
 
 import numpy as np
 import pandas as pd
@@ -123,29 +124,42 @@ def run_chunk(job: tuple[str, str, int, int, int]) -> tuple[str, int, list[dict]
     return ticker, lo, [plan_day(px, i, ticker, (i - first) % CHECK_EVERY == 0) for i in range(lo, hi)]
 
 
+# 不影响每天计划的脚本：改了它们缓存照用
+NOT_RULES = ("fullplan.py", "plansim.py", "planrun.py", "evaluate.py", "evalstats.py", "backtest.py", "html_report.py")
+
+
 def fingerprint(csv: Path, cfg: dict) -> str:
     h = hashlib.sha256(f"{VERSION},{cfg['sample']['first_decision']}".encode())
     for p in sorted(SCRIPTS.glob("*.py")):
-        if p.name not in ("fullplan.py", "plansim.py", "evaluate.py", "evalstats.py", "backtest.py", "html_report.py"):
+        if p.name not in NOT_RULES:
             h.update(p.read_bytes())
     h.update(csv.read_bytes())
     return h.hexdigest()
 
 
-def daily(tickers: list[str], data: Path, out: Path, cfg: dict, jobs: int) -> dict[str, list[dict]]:
-    """每只票每个决定点的计划；缓存对得上就读缓存，否则切块并行算。"""
-    cache = out / "fullplan" / "daily"
-    cache.mkdir(parents=True, exist_ok=True)
+def cache_file(out: Path, ticker: str) -> Path:
+    return out / "fullplan" / "daily" / f"{ticker}.jsonl"
+
+
+def is_cached(path: Path, fp: str) -> bool:
+    """缓存的第一行是指纹；只读这一行。"""
+    if not path.exists():
+        return False
+    with path.open() as f:
+        return json.loads(f.readline() or "{}").get("fingerprint") == fp
+
+
+def daily(tickers: list[str], data: Path, out: Path, cfg: dict, jobs: int,
+          progress: Callable[[int, int, str], None] | None = None) -> dict[str, list[dict]]:
+    """每只票每个决定点的计划；缓存对得上就读缓存，否则切块并行算。progress(做完几块, 共几块, 说明) 每做完一块调一次。"""
     got, todo, fps, need = {}, [], {}, defaultdict(int)
     for t in tickers:
         csv = data / f"{t}.csv"
         fps[t] = fingerprint(csv, cfg)
-        path = cache / f"{t}.jsonl"
-        if path.exists():
-            head, *rows = path.read_text().splitlines()
-            if json.loads(head).get("fingerprint") == fps[t]:
-                got[t] = [json.loads(r) for r in rows]
-                continue
+        path = cache_file(out, t)
+        if is_cached(path, fps[t]):
+            got[t] = [json.loads(r) for r in path.read_text().splitlines()[1:]]
+            continue
         px, _ = ev.load_prices(csv)
         first = ev.first_index(px, cfg)
         for lo in range(first, len(px), CHUNK):
@@ -161,12 +175,19 @@ def daily(tickers: list[str], data: Path, out: Path, cfg: dict, jobs: int) -> di
         for n, f in enumerate(as_completed(futs), 1):
             t, lo, rows = f.result()
             parts[t][lo] = rows
+            note = f"{t} 第 {len(parts[t])}/{need[t]} 块"
             if len(parts[t]) == need[t]:
                 recs = [r for k in sorted(parts[t]) for r in parts[t][k]]
-                (cache / f"{t}.jsonl").write_text("\n".join([json.dumps({"fingerprint": fps[t]})]
-                                                            + [json.dumps(r, ensure_ascii=False) for r in recs]) + "\n")
+                path = cache_file(out, t)
+                path.parent.mkdir(parents=True, exist_ok=True)
+                tmp = path.with_suffix(".tmp")       # 先写临时文件再改名：中途被停掉不留半个缓存
+                tmp.write_text("\n".join([json.dumps({"fingerprint": fps[t]})] + [json.dumps(r, ensure_ascii=False) for r in recs]) + "\n")
+                tmp.replace(path)
                 got[t] = recs
-                print(f"  {t} 完成（{len(recs)} 天），{n}/{len(todo)} 块，{time.time() - t0:.0f}s", file=sys.stderr)
+                note = f"{t} 完成（{len(recs)} 天）"
+                print(f"  {note}，{n}/{len(todo)} 块，{time.time() - t0:.0f}s", file=sys.stderr)
+            if progress:
+                progress(n, len(todo), note)
     return got
 
 
@@ -224,7 +245,9 @@ EXTRA = (Variant("要看小时线的不进", skip_hourly=True), Variant("回撤�
 VARIANTS = (FULL, *ABLATIONS, *EXTRA)
 
 
-def orders_for(recs: dict[str, list[dict]], pos: dict[str, int], bars: dict[str, ps.Bars], v: Variant) -> dict[int, list[ps.Order]]:
+def orders_for(recs: dict[str, list[dict]], pos: dict[str, int], bars: dict[str, ps.Bars], v: Variant,
+               atrs: dict[str, np.ndarray] | None = None) -> dict[int, list[ps.Order]]:
+    """atrs[票][全局日历位置]：信号日的 ATR(14)，给了就带在单上（止损下限用）。"""
     out: dict[int, list[ps.Order]] = defaultdict(list)
     for t, rs in recs.items():
         for r in rs:
@@ -238,7 +261,7 @@ def orders_for(recs: dict[str, list[dict]], pos: dict[str, int], bars: dict[str,
             g = pos[r["d"]]
             target = r["t1"] if v.targets and r["t1"] is not None and r["t1"] > entry else None
             out[g].append(ps.Order(t, g, ps.entry_kind(entry, bars[t].c[g]), entry, stop, target, invalidation(r["key"]),
-                                   key=r["key"], rule=r["rule"], rr=r["rr"]))
+                                   key=r["key"], rule=r["rule"], rr=r["rr"], atr=None if atrs is None else float(atrs[t][g])))
     return out
 
 
@@ -303,23 +326,27 @@ def sleeve(sig: pd.DataFrame, f: np.ndarray, rule: int | None, first: str, cal: 
 BASELINES = (("买入持有", None), ("MA200 朴素规则", 200), ("MA60 朴素规则", 60))
 
 
+def basket(tickers: list[str], sigs: dict[str, pd.DataFrame], bars: dict[str, ps.Bars], firsts: dict[str, str],
+           cal: list[str], start: int, cost: float, rule: int | None) -> tuple[np.ndarray, float]:
+    """每只票分一样多的钱，各自照规则满仓进出，不再平衡：(组合净值 = 各只净值的平均, 平均在场比例)。"""
+    pos = {d: k for k, d in enumerate(cal)}
+    curves, exp = [], []
+    for t in tickers:
+        f = bars[t].f[[pos[str(d.date())] for d in sigs[t].index]]
+        cv, e = sleeve(sigs[t], f, rule, firsts[t], cal, start, cost)
+        curves.append(cv)
+        exp.append(e)
+    return np.mean(curves, axis=0), float(np.mean(exp))
+
+
+def curve_stats(eq: np.ndarray, exposure: float) -> dict:
+    mdd = ps.max_drawdown(eq)
+    return {"cagr": ps.cagr(eq), "mdd": mdd, "mar": ps.cagr(eq) / abs(mdd) if mdd < 0 else None, "exposure": exposure}
+
+
 def baselines(tickers: list[str], sigs: dict[str, pd.DataFrame], bars: dict[str, ps.Bars], firsts: dict[str, str],
               cal: list[str], start: int, cost: float) -> dict[str, dict]:
-    """每只票分一样多的钱，各自照规则满仓进出，不再平衡：组合净值 = 各只净值的平均。"""
-    pos = {d: k for k, d in enumerate(cal)}
-    out = {}
-    for name, rule in BASELINES:
-        curves, exp = [], []
-        for t in tickers:
-            f = bars[t].f[[pos[str(d.date())] for d in sigs[t].index]]
-            cv, e = sleeve(sigs[t], f, rule, firsts[t], cal, start, cost)
-            curves.append(cv)
-            exp.append(e)
-        eq = np.mean(curves, axis=0)
-        mdd = ps.max_drawdown(eq)
-        out[name] = {"cagr": ps.cagr(eq), "mdd": mdd, "mar": ps.cagr(eq) / abs(mdd) if mdd < 0 else None,
-                     "exposure": float(np.mean(exp))}
-    return out
+    return {name: curve_stats(*basket(tickers, sigs, bars, firsts, cal, start, cost, rule)) for name, rule in BASELINES}
 
 
 # ---------- 诊断：止损离进场几个 ATR ----------
