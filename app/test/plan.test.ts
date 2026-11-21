@@ -615,14 +615,28 @@ describe("交易计划的盈亏比档位和股数照脚本说（P24、A6）", ()
   });
 });
 
-describe("筹码山当目标位（P38）：说成山脚到山顶的一条带", () => {
-  test("目标一句写出山脚、山顶和规则 P38", () => {
-    const a = structuredClone(spy);
-    const mountain = { price: 510, top: 520, kind: "筹码山", rule: "P38", source: "解读" as const, date: "2023-04-19~2024-04-19" };
-    a.trade_plan = { ...a.trade_plan, flat: { ...a.trade_plan.flat, targets: [mountain] } };
-    const item = buildPlans(a).flat.items.find((i) => i.label === "目标")!;
-    expect(item.text).toContain("目标 1：筹码山 510.00");
-    expect(item.text).toContain("到山顶 520.00 这条带（解读）");
-    expect(item.rules).toEqual(["P25", "P38"]);
+describe("上方的筹码山只作参考（P38，ADR 0018）：不进目标、不算盈亏比", () => {
+  const mountain = { foot: 510, top: 520, date: "2023-04-19~2024-04-19" };
+  const a = structuredClone(spy);
+  a.trade_plan = { ...a.trade_plan, flat: { ...a.trade_plan.flat, mountain }, holding: { ...a.trade_plan.holding, mountain } };
+  const p = buildPlans(a);
+  const plain = buildPlans(spy);
+  const row = (plan: typeof p.flat, label: string) => plan.items.find((i) => i.label === label);
+
+  test("单列一行「参考」：山脚（离现价多远）到山顶这条带，写明只作参考、不算进盈亏比，规则 P38", () => {
+    expect(row(p.flat, "参考")).toEqual({
+      label: "参考", rules: ["P38"],
+      text: "上方最近的筹码山：山脚 510.00（+3.0%）到山顶 520.00 这条带。只作参考，不排进第一目标，不算进盈亏比。",
+    });
+    expect(row(p.holding, "参考")).toEqual(row(p.flat, "参考"));
+  });
+  test("「目标」「盈亏比」两行和没有筹码山时一样，目标的规则只有 P25", () => {
+    expect(row(p.flat, "目标")).toEqual(row(plain.flat, "目标"));
+    expect(row(p.flat, "盈亏比")).toEqual(row(plain.flat, "盈亏比"));
+    expect(row(p.flat, "目标")!).toMatchObject({ rules: ["P25"] });
+  });
+  test("上方没有整座的筹码山：不写这一行", () => {
+    expect(row(plain.flat, "参考")).toBeUndefined();
+    expect(row(plain.holding, "参考")).toBeUndefined();
   });
 });

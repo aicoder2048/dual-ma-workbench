@@ -172,8 +172,9 @@ export interface Play { key: string; text: string; rules: string[] }
 export type PlanSource = "视频" | "解读";
 export interface PlanEntry { price: number | null; condition: string; rule: string }
 export interface PlanStop { price: number | null; reason: string; rule: string; source: PlanSource }
-/** 筹码山（P38）的目标是一条带：price 是山脚，top 是山顶；其他目标没有 top。 */
-export interface PlanTarget { price: number; kind: string; rule: string; source: PlanSource; date: string | null; top?: number | null }
+export interface PlanTarget { price: number; kind: string; rule: string; source: PlanSource; date: string | null }
+/** 上方最近的整座筹码山（P38）：只作参考价位，不是目标（docs/adr/0018.md）。foot 山脚、top 山顶，date 是统计区间"开始~结束"。 */
+export interface PlanMountain { foot: number; top: number; date: string }
 /** shares 为 null 时没填账户，看 per_10k（每 1 万元风险对应多少股）。 */
 export interface PlanSize { shares: number | null; risk_amount: number | null; per_10k: number; unit_risk: number; capped: boolean; basis: string }
 export type RrVerdict = "不做" | "可做" | "理想";
@@ -190,6 +191,8 @@ export interface TradePlan {
   /** 到第一目标怎么办（P25）：中长线完好就继续拿，不完好就在目标位走。没有目标时为 null。 */
   at_target: string | null;
   notes: string[];
+  /** 进场价（持仓是现价）上方最近的筹码山；上方没有时为 null。旧数据没有。 */
+  mountain?: PlanMountain | null;
 }
 /** key：打法键，横盘里埋伏的底线已破时是"横盘破位"。 */
 export interface PlanSet { key: string; flat: TradePlan; holding: TradePlan }
@@ -342,7 +345,8 @@ export function buildFacts(a: Analysis): Facts {
 }
 
 /**
- * 筹码分布给模型看的数据字段（[[D:筹码.上方]] 这样引用）：只当价位和目标参考，不是买卖信号（docs/adr/0015.md）。
+ * 筹码分布给模型看的数据字段（[[D:筹码.上方]] 这样引用）：只当价位和目标参考，不是买卖信号（docs/adr/0015.md）；
+ * 筹码山不排进第一目标、不算盈亏比（docs/adr/0018.md）。
  * 统计区间是最近 1 年，和工作台图上按可见范围算的那份不一定是同一段。
  */
 export function profileFacts(a: Pick<Analysis, "profile" | "close" | "trade_plan">): [string, string, string][] {
@@ -353,7 +357,7 @@ export function profileFacts(a: Pick<Analysis, "profile" | "close" | "trade_plan
   const above = p.mountains.find((m) => m.foot > a.close);
   const below = p.mountains.filter((m) => m.top < a.close).at(-1);
   const inside = p.mountains.find((m) => m.foot <= a.close && a.close <= m.top);
-  const target = [...a.trade_plan.flat.targets, ...a.trade_plan.holding.targets].find((t) => t.top != null);
+  const ref = a.trade_plan.flat.mountain ?? a.trade_plan.holding.mountain;
   const note = "只当价位和目标参考，不是买卖信号";
   return [
     ["筹码.区间", "筹码分布的统计区间（规则、交易计划用的那份，和图默认的 1 年视图同一段）", `${p.start} ~ ${p.end}，${p.bars} 根`],
@@ -361,7 +365,8 @@ export function profileFacts(a: Pick<Analysis, "profile" | "close" | "trade_plan
     ["筹码.上方", `收盘上方最近的整座筹码山：反弹的目标区间（J47；${note}）`, above ? band(above) : "上方没有整座的筹码山"],
     ["筹码.下方", "收盘下方最近的整座筹码山", below ? band(below) : "下方没有整座的筹码山"],
     ["筹码.所在", "收盘所在的筹码山（在山里照 P25 看中长线，P39）", inside ? band(inside) : "不在哪座山里"],
-    ["筹码.目标带", "交易计划拿筹码山当目标位时的那条带（P38）", target ? `${f2(target.price)}–${f2(target.top!)}` : "交易计划的目标里没有筹码山"],
+    ["筹码.参考带", "交易计划记下的上方最近的筹码山（P38）：只作参考，不排进第一目标、不算盈亏比",
+      ref ? `${f2(ref.foot)}–${f2(ref.top)}` : "进场价（持仓是现价）上方没有整座的筹码山"],
   ];
 }
 

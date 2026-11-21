@@ -88,8 +88,8 @@ const GAPS = [150, 270].map((i) => ({ date: CHART.candles[i].time, top: CHART.ca
 /** 挤的替身（像 NVDA）：8 个没补的缺口挤在 200 ~ 220，和结论的价位线（触发 212.21、判断失效 206.26……）叠在一起；最远那个是目标位。 */
 const CROWD_GAPS = [60, 90, 110, 130, 160, 180, 200, 230].map((i, k) => ({ date: CHART.candles[i].time, bottom: 200 + k * 2.5, top: 202 + k * 2.5 }));
 
-/** 筹码山目标位替身（P38）：山脚 175、山顶 185，落在 CHART 的价格范围里。 */
-const PROFILE_TARGET = { price: 175, top: 185, kind: "筹码山", rule: "P38", source: "解读" as const, date: `${CHART.candles[48].time}~${CHART.candles[299].time}` };
+/** 计划记下的上方筹码山替身（P38，只作参考）：山脚 175、山顶 185，落在 CHART 的价格范围里。 */
+const PROFILE_REF = { foot: 175, top: 185, date: `${CHART.candles[48].time}~${CHART.candles[299].time}` };
 
 const MP3 = readFileSync(resolve(import.meta.dir, "../test/fixtures/tts-sample.mp3"));
 const ttsCalls: { text: string; voice: string }[] = [];
@@ -133,9 +133,9 @@ beforeAll(async () => {
         const flat = { ...n.trade_plan.flat, targets: [{ price: GAPS[1].bottom, kind: "缺口", rule: "P25", source: "视频" as const, date: GAPS[1].date }] };
         return JSON.stringify({ analysis: { ...n, label: "STRUCT", structure: STRUCTURE, gaps: GAPS, trade_plan: { ...n.trade_plan, flat } }, chart: CHART });
       }
-      if (args[0] === "PROFILE") { // 交易计划的第一目标是筹码山（P38）：图上画目标带
+      if (args[0] === "PROFILE") { // 交易计划记下了上方的筹码山（P38）：图上画参考带，目标照旧
         const n = nvda as Analysis;
-        const flat = { ...n.trade_plan.flat, targets: [PROFILE_TARGET] };
+        const flat = { ...n.trade_plan.flat, mountain: PROFILE_REF };
         return JSON.stringify({ analysis: { ...n, label: "PROFILE", trade_plan: { ...n.trade_plan, flat } }, chart: CHART });
       }
       if (args[0] === "CROWD") {
@@ -1018,7 +1018,7 @@ describe("筹码分布", () => {
   });
   const overlap = (a: any, b: any) => a.left < b.left + b.width && b.left < a.left + a.width && a.top < b.top + b.height && b.top < a.top + a.height;
 
-  test("「筹码」默认关、看得见没被挡；点开：贴着价格轴画可见范围的筹码，写出日期，标山脚山顶和计划的目标带；缩放后重算；周线不画", async () => {
+  test("「筹码」默认关、看得见没被挡；点开：贴着价格轴画可见范围的筹码，写出日期，标山脚山顶和计划的参考带，找打法里单列一行「参考」；缩放后重算；周线不画", async () => {
     const { page, errors } = await open(undefined, "PROFILE");
     await page.waitForSelector("#chart canvas");
     await scrollIntoCenter(page, ".chart-card");
@@ -1035,7 +1035,7 @@ describe("筹码分布", () => {
     expect(p.bars).toBe(CHART.candles.length - v.first);
     expect(p.mountains.length).toBeGreaterThan(0);
     for (const m of p.mountains) expect(m.top).toBeGreaterThan(m.foot);
-    expect(p.target).toEqual({ foot: 175, top: 185 });
+    expect(p.ref).toEqual({ foot: 175, top: 185 });
     expect(Buffer.compare(off, await shot())).not.toBe(0); // 真的画在图上
     // 只占绘图区右边一条，不伸到价格轴上（价格轴上的标签不被挡）
     const paneW = await page.evaluate(async () => (await import("/app.js")).getChart().chart.timeScale().width());
@@ -1043,13 +1043,32 @@ describe("筹码分布", () => {
     expect(p.drawn.left).toBeGreaterThan(paneW * 0.7);
     const shown = p.drawn.labels.filter((l: any) => !l.hidden);
     expect(shown.map((l: any) => l.text)).toContain(`筹码 ${p.from} ~ ${p.to} · ${p.bars} 根`);
-    expect(shown.map((l: any) => l.text)).toContain("目标带（P38）");
+    expect(shown.map((l: any) => l.text)).toContain("参考带（P38）");
+    expect(shown.some((l: any) => l.text.includes("目标"))).toBe(false); // 筹码山不叫目标
     expect(shown.some((l: any) => /^山(脚|顶) \d/.test(l.text))).toBe(true);
     for (const a of shown) for (const b of shown) if (a !== b) expect({ a: a.text, b: b.text, hit: overlap(a, b) }).toEqual({ a: a.text, b: b.text, hit: false });
     // 工具栏、读数条照样看得见、没被挡
     for (const sel of [".profile-toggle", ".gaps-toggle", ".struct-toggle", ".levels-toggle", "#chart-readout"]) {
       expect({ sel, ok: await notCovered(page, sel) }).toEqual({ sel, ok: true });
     }
+    // 找打法的计划里单列一行「参考」，滚到时看得见、没被挡；「目标」一行还是原来的缺口，图上的目标线也没挪到山脚
+    const planRows = '[data-step="play"] .plan-items li';
+    const refRow = page.locator(planRows, { hasText: "上方最近的筹码山" });
+    expect(await refRow.count()).toBe(1);
+    await scrollIntoCenter(page, '[data-step="play"] .plan-items');
+    expect(await refRow.evaluate((el) => {
+      const r = el.getBoundingClientRect();
+      return r.height > 0 && el.contains(document.elementFromPoint(r.x + 20, r.y + r.height / 2));
+    })).toBe(true);
+    const refText = (await refRow.textContent())!;
+    expect(refText).toContain("参考上方最近的筹码山：山脚 175.00");
+    expect(refText).toContain("到山顶 185.00 这条带。只作参考，不排进第一目标，不算进盈亏比。");
+    expect(refText).toContain("P38");
+    const targetText = (await page.locator(planRows, { hasText: "目标 1" }).textContent())!;
+    expect([targetText.includes("缺口"), targetText.includes("筹码山")]).toEqual([true, false]);
+    const lines = await page.evaluate(async () => (await import("/app.js")).getChart().levels());
+    expect(lines.find((l: any) => l.title === "目标").price).toBe((nvda as Analysis).trade_plan.flat.targets[0].price);
+    await scrollIntoCenter(page, ".chart-card");
     // ⌘ + 滚轮放大：可见范围变短，筹码按新的范围重算
     const box = (await page.locator("#chart").boundingBox())!;
     await page.mouse.move(box.x + box.width / 2, box.y + box.height / 3);
@@ -1071,7 +1090,7 @@ describe("筹码分布", () => {
     await page.close();
   }, 30_000);
 
-  test("回放：只用回放那天及以前的 K 线，往后放一根就多算一根；目标带属于最新一天，回放时收起", async () => {
+  test("回放：只用回放那天及以前的 K 线，往后放一根就多算一根；参考带属于最新一天，回放时收起", async () => {
     const { page, errors } = await open((p) => p.addInitScript(() => localStorage.setItem("dma-profile", "1")), "PROFILE");
     await page.waitForSelector("#chart canvas");
     await scrollIntoCenter(page, ".chart-card");
@@ -1083,14 +1102,14 @@ describe("筹码分布", () => {
     const idx = (await page.evaluate(async () => (await import("/app.js")).getChart().replay())).index;
     let p = await profile(page);
     expect(p.to).toBe(CHART.candles[idx].time);
-    expect(p.target).toBeNull();
-    expect(p.drawn.labels.some((l: any) => l.text.startsWith("目标带"))).toBe(false);
+    expect(p.ref).toBeNull();
+    expect(p.drawn.labels.some((l: any) => l.text.startsWith("参考带"))).toBe(false);
     await page.click(".replay-forward");
     p = await profile(page);
     expect(p.to).toBe(CHART.candles[idx + 1].time);
     await page.click(".replay-exit");
     p = await profile(page);
-    expect([p.to, p.target]).toEqual([CHART.candles.at(-1)!.time, { foot: 175, top: 185 }]);
+    expect([p.to, p.ref]).toEqual([CHART.candles.at(-1)!.time, { foot: 175, top: 185 }]);
     expect(errors).toEqual([]);
     await page.close();
   }, 30_000);
@@ -2179,7 +2198,7 @@ describe("盲测练习", () => {
 
   test("出题 → 记计划 → 往后放到进场、止损 → 揭晓；控件都在默认视图里，揭晓前看不到真实信息", async () => {
     // 平时聚焦着 20 线组：练习时图例收起了，没法取消，所以不聚焦
-    // 平时开着筹码分布：练习里照样算，但只用已经发到页面的 K 线，日期写 T+n，没有计划的目标带
+    // 平时开着筹码分布：练习里照样算，但只用已经发到页面的 K 线，日期写 T+n，没有计划的参考带
     const { page, errors } = await open((p) => p.addInitScript(() => { localStorage.setItem("dma-focus", "20"); localStorage.setItem("dma-profile", "1"); }));
     expect(await usable(page, "#practice-btn")).toBe(true);
     await page.click("#practice-btn");
@@ -2209,7 +2228,7 @@ describe("盲测练习", () => {
     const profile = () => page.evaluate(async () => (await import("/app.js")).getChart().profile());
     const lastBar = () => page.evaluate(async () => (await import("/app.js")).getChart().chart.timeScale().getVisibleRange()?.to);
     const p0 = await profile();
-    expect([p0.on, p0.target, p0.to]).toEqual([true, null, await lastBar()]); // 算到现在那根为止，之后的 K 线页面上本来就没有
+    expect([p0.on, p0.ref, p0.to]).toEqual([true, null, await lastBar()]); // 算到现在那根为止，之后的 K 线页面上本来就没有
     expect(p0.drawn.labels.find((l: any) => l.text.startsWith("筹码 ")).text).toMatch(/^筹码 T-\d+ ~ T0 · \d+ 根$/);
     for (const sel of ['[data-act="plan"]', '[data-act="step"]', '[data-act="play"]', '[data-act="reveal"]']) {
       expect({ sel, ok: await usable(page, `#practice ${sel}`) }).toEqual({ sel, ok: true });

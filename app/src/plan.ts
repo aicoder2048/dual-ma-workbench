@@ -10,7 +10,7 @@
  * - buildChecklist：打法用到的每条规则今天的状态，没满足的写还差什么（价位读规则的 levels）。
  * - buildForecast：做推演只答三问，跨度都是 30 天：类型线还能保持多久、容忍到哪；打法的条件最早哪天能齐；什么价位推翻这个判断。
  */
-import type { Analysis, PlanSet, RuleResult, Solve, TradePlan } from "./citations.ts";
+import type { Analysis, PlanMountain, PlanSet, RuleResult, Solve, TradePlan } from "./citations.ts";
 
 export type Position = "flat" | "holding";
 /** 你的处境：空仓；持仓但没填成本；持仓浮盈；持仓浮亏。页面按"空仓/持仓"和成本价选一个。 */
@@ -386,12 +386,14 @@ export function playKey(a: Analysis): string {
 
 const ratio = (x: number) => `${x.toFixed(1)}:1`;
 
-/** 目标位一句：价位、是什么、离现价多远；筹码山写成山脚到山顶的一条带（J47）；解读的标出来。 */
+/** 目标位一句：价位、是什么、离现价多远；解读的标出来。 */
 function targetsText(t: TradePlan, close: number): string {
-  return t.targets.map((x, i) => {
-    const price = x.top != null ? `${at(x.price, close)} 到山顶 ${x.top.toFixed(2)} 这条带` : at(x.price, close);
-    return `目标 ${i + 1}：${x.kind} ${price}${x.source === "解读" ? "（解读）" : ""}`;
-  }).join("；");
+  return t.targets.map((x, i) => `目标 ${i + 1}：${x.kind} ${at(x.price, close)}${x.source === "解读" ? "（解读）" : ""}`).join("；");
+}
+
+/** 上方最近的筹码山一句（P38）：山脚到山顶这条带，只作参考（docs/adr/0018.md）。 */
+function mountainText(m: PlanMountain, close: number): string {
+  return `上方最近的筹码山：山脚 ${at(m.foot, close)}到山顶 ${f2(m.top)} 这条带。只作参考，不排进第一目标，不算进盈亏比。`;
 }
 
 /** 盈亏比一句：几比几、哪一档；不做时写差多少。 */
@@ -412,16 +414,16 @@ export function sizeText(t: TradePlan): string | null {
   return `${z.shares} 股：${z.basis}。`;
 }
 
-/** 空仓会买时，计划里多四条：目标、到目标怎么办、盈亏比、股数；持仓只多前两条。 */
+/** 空仓会买时，计划里多四条：目标、到目标怎么办、盈亏比、股数；持仓只多前两条。上方有筹码山时两边都再加一条「参考」。 */
 function tradeItems(t: TradePlan, close: number, flat: boolean): PlanItem[] {
   const out: PlanItem[] = [];
-  if (t.targets.length) out.push({ label: "目标", text: targetsText(t, close), rules: t.targets.some((x) => x.top != null) ? ["P25", "P38"] : ["P25"] });
+  if (t.targets.length) out.push({ label: "目标", text: targetsText(t, close), rules: ["P25"] });
   if (t.at_target) out.push({ label: "到目标", text: t.at_target, rules: ["P25"] });
-  if (!flat) return out;
-  const rr = rrText(t);
+  const rr = flat ? rrText(t) : null;
   if (rr) out.push({ label: "盈亏比", text: rr, rules: ["P24"] });
-  const size = sizeText(t);
+  const size = flat ? sizeText(t) : null;
   if (size) out.push({ label: "股数", text: size, rules: ["A6"] });
+  if (t.mountain) out.push({ label: "参考", text: mountainText(t.mountain, close), rules: ["P38"] });
   return out;
 }
 

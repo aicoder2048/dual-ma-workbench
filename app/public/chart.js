@@ -303,11 +303,11 @@ export function createChart(box, legendEl) {
   const profileLayer = createProfileLayer(chart, candles);
   let profileOn = false; // 默认不画，图面干净；点开记在本机
   try { profileOn = localStorage.getItem("dma-profile") === "1"; } catch { /* 隐私模式 */ }
-  let profileTarget = null; // 交易计划的目标带 { foot, top }（筹码山当目标位时，P38）；练习里没有
+  let profileRef = null; // 交易计划记下的上方最近的筹码山 { foot, top }：参考带（P38，只作参考，不是目标）；练习里没有
   let profileNow = null; // 现在画着的那份（测试和问鸿雁用）
   const profileBtn = tools.querySelector(".profile-toggle");
   const PROFILE_TITLE = "筹码分布：按价格统计图上看得见的那段 K 线的成交量，画成贴着价格轴的横向山（视频 O）。"
-    + "描框的是筹码山，标出山脚（下沿）、山顶（上沿）；交易计划拿筹码山当目标位（P38）时，那条带高亮，写着「目标带」。只当价位和目标参考，不是买卖信号";
+    + "描框的是筹码山，标出山脚（下沿）、山顶（上沿）；交易计划记下的上方最近那座高亮，写着「参考带」（P38）：只作参考，不排进第一目标、不算盈亏比。筹码分布只当价位参考，不是买卖信号";
   const profileWhyOff = () => (frame === "week" ? "筹码按日线算：切回日线看"
     : !view?.volume?.length ? "这份数据没有成交量，算不了筹码分布" : null);
   function paintProfile() {
@@ -316,10 +316,10 @@ export function createChart(box, legendEl) {
     profileNow = p && { ...p, fromLabel: showTime(p.from), toLabel: showTime(p.to) };
     profileLayer.set({
       profile: profileNow,
-      target: rs.mode === "replay" ? null : profileTarget, // 目标带属于最新一天的计划：回放时收起
+      ref: rs.mode === "replay" ? null : profileRef, // 参考带属于最新一天的计划：回放时收起
       close: view?.candles.at(-1)?.close ?? null,
       guides: guidePrices(),
-      colors: { bin: css("--muted"), mountain: css("--neutral"), target: css("--accent"), muted: css("--muted"), bg: css("--card"), font: css("--mono") },
+      colors: { bin: css("--muted"), mountain: css("--neutral"), ref: css("--accent"), muted: css("--muted"), bg: css("--card"), font: css("--mono") },
     });
   }
   profileBtn.addEventListener("click", () => {
@@ -357,8 +357,8 @@ export function createChart(box, legendEl) {
       默认只画目标位和离现价最近的上下各一个，其余的点「缺口」旁边的「+N」才画；图上的小字放不下时会往上下挪一行，再放不下就不写。回放时收起，练习里不画。</p>
     <p><b>筹码</b>（默认不画）：按价格统计图上看得见的那段 K 线的成交量，贴着价格轴横着画（视频 O 的"横过来的山"），右上角写着用了哪段日期；缩放、平移、回放都重算。
       量不低于平均的连续几档描了框，是一座筹码山：山脚是下沿，山顶是上沿（不是量最大的那档）。只标价格所在的、上方和下方最近的那几座。
-      交易计划拿筹码山当目标位（P38）时，那条带高亮、写着「目标带（P38）」，带的读法是 J47；它按最近 1 年算，和图上的可见范围不一定是同一段。
-      山在上方是爬山，越近山顶越难；收盘翻过最大那座的山顶，可能是大行情的起点（J48、J49）。只当价位和目标参考，不是买卖信号，方向还是看均线。周线上不画，回放时目标带收起。</p>
+      交易计划记下进场价（持仓是现价）上方最近的那座，那条带高亮、写着「参考带（P38）」，带的读法是 J47；它只作参考，不排进第一目标、不算盈亏比，按最近 1 年算，和图上的可见范围不一定是同一段。
+      山在上方是爬山，越近山顶越难；收盘翻过最大那座的山顶，可能是大行情的起点（J48、J49）。筹码分布只当价位参考，不是买卖信号，方向还是看均线。周线上不画，回放时参考带收起。</p>
     <p><b>财报 E</b>：时间轴上方的小 E 是财报日，实心的是下一次。财报后常常跳空开盘，止损单按开盘价成交，可能比止损价差很多；
       下一次财报在 10 个交易日内时，结论卡片会提醒。只是提醒，不改打法。</p>
     <p><b>看量</b>：底部的量柱，黄色是超过 50 日均量 2 倍的大量。看两种情况：横盘末期突然放量，是要变盘的信号；
@@ -915,16 +915,16 @@ export function createChart(box, legendEl) {
       gaps = list ? { list, targets } : null;
       paintOverlay();
     },
-    /** 筹码分布的目标带：交易计划里当目标位的筹码山（P38） { price（山脚）, top（山顶） }；没有或练习里传 null。 */
-    setProfileTarget(t) {
-      profileTarget = t ? { foot: t.price, top: t.top } : null;
+    /** 筹码分布的参考带：交易计划记下的上方最近的筹码山（P38，trade_plan 的 mountain） { foot（山脚）, top（山顶） }；没有或练习里传 null。 */
+    setProfileRef(m) {
+      profileRef = m ? { foot: m.foot, top: m.top } : null;
       paintProfile();
     },
-    /** 筹码分布（测试和问鸿雁用）：开没开、不能用的原因、用了哪段 K 线、筹码山、目标带、画在哪。 */
+    /** 筹码分布（测试和问鸿雁用）：开没开、不能用的原因、用了哪段 K 线、筹码山、参考带、画在哪。 */
     profile: () => ({
       on: profileBtn.getAttribute("aria-pressed") === "true", why: profileWhyOff(),
       from: profileNow?.from ?? null, to: profileNow?.to ?? null, bars: profileNow?.bars ?? 0,
-      mountains: profileNow?.mountains ?? [], target: rs.mode === "replay" ? null : profileTarget, drawn: profileLayer.drawn(),
+      mountains: profileNow?.mountains ?? [], ref: rs.mode === "replay" ? null : profileRef, drawn: profileLayer.drawn(),
     }),
     /** 现在画着的结构标注和缺口（测试用）：{ segments, levels, marks, bands }，见 overlays.js。 */
     structure: () => structLayer.scene(),

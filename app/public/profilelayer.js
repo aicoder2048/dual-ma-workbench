@@ -1,4 +1,4 @@
-// 筹码分布画在 K 线图里：贴着价格轴（绘图区右边）横过来的直方图，筹码山描框、标山脚山顶，交易计划拿来当目标位的那条带（P38）高亮。
+// 筹码分布画在 K 线图里：贴着价格轴（绘图区右边）横过来的直方图，筹码山描框、标山脚山顶，交易计划记下的上方最近那座（P38，只作参考）高亮成参考带。
 // 画在图表画布里（series primitive，跟着缩放、平移、价格轴走），在 K 线下面一层；数是 volprofile.js 按可见范围算好的。
 import { layoutLabels } from "./labels.js";
 import { labeledMountains } from "./volprofile.js";
@@ -6,17 +6,17 @@ import { labeledMountains } from "./volprofile.js";
 /** 直方图最宽占绘图区的几成、最多几像素：只占右边一条，不盖住中间的 K 线。 */
 const WIDTH_SHARE = 0.2;
 const MAX_WIDTH = 160;
-/** 山的框比直方图往左多出几像素；山脚、山顶、目标带的小字写在这一条里面，不伸进 K 线和结构标注。 */
+/** 山的框比直方图往左多出几像素；山脚、山顶、参考带的小字写在这一条里面，不伸进 K 线和结构标注。 */
 const FRAME_PAD = 4;
 const LABEL_H = 13;
 
 /**
- * 返回 set({ profile, target, close, guides, colors }) 和测试用的读数。profile 为 null 时不画。
- * target：交易计划的目标带 { foot, top }（P38，带的读法是 J47）或 null；close：最新一根收盘（决定标哪几座山）；
+ * 返回 set({ profile, ref, close, guides, colors }) 和测试用的读数。profile 为 null 时不画。
+ * ref：交易计划的参考带 { foot, top }（P38，带的读法是 J47；不是目标）或 null；close：最新一根收盘（决定标哪几座山）；
  * guides：价位线的价格，小字不压在上面。
  */
 export function createProfileLayer(chart, series) {
-  let state = { profile: null, target: null, close: null, guides: [], colors: {} };
+  let state = { profile: null, ref: null, close: null, guides: [], colors: {} };
   let drawn = null; // 上一次画在哪（测试用）：{ left, right, labels }
   let request = null;
 
@@ -30,7 +30,7 @@ export function createProfileLayer(chart, series) {
   }
 
   function draw(g, size) {
-    const { profile: p, target, close, colors } = state;
+    const { profile: p, ref, close, colors } = state;
     drawn = null;
     if (!p) return;
     const paneW = size.width;
@@ -48,16 +48,16 @@ export function createProfileLayer(chart, series) {
     g.globalAlpha = 1;
     const left = paneW - maxW - FRAME_PAD;
     const labels = [];
-    if (target && ok(y(target.top), y(target.foot))) {
-      const top = y(target.top), bottom = y(target.foot);
+    if (ref && ok(y(ref.top), y(ref.foot))) {
+      const top = y(ref.top), bottom = y(ref.foot);
       g.globalAlpha = 0.16;
-      g.fillStyle = colors.target;
+      g.fillStyle = colors.ref;
       g.fillRect(left, top, paneW - left, bottom - top);
       g.globalAlpha = 0.8;
       g.fillRect(left, top, paneW - left, 1);
       g.fillRect(left, bottom - 1, paneW - left, 1);
       g.globalAlpha = 1;
-      labels.push(label(g, "目标带（P38）", left + 2, top + 1, colors.target, 0));
+      labels.push(label(g, "参考带（P38）", left + 2, top + 1, colors.ref, 0));
     }
     g.strokeStyle = colors.mountain;
     g.lineWidth = 1;
@@ -68,7 +68,7 @@ export function createProfileLayer(chart, series) {
     }
     g.setLineDash([]);
     for (const m of close == null ? [] : labeledMountains(p.mountains, close)) {
-      if (target && Math.abs(m.foot - target.foot) < 1e-9 && Math.abs(m.top - target.top) < 1e-9) continue; // 目标带已经写了
+      if (ref && Math.abs(m.foot - ref.foot) < 1e-9 && Math.abs(m.top - ref.top) < 1e-9) continue; // 参考带已经写了
       if (ok(y(m.top))) labels.push(label(g, `山顶 ${m.top.toFixed(2)}`, left + 2, y(m.top) + 1, colors.mountain, 1));
       if (ok(y(m.foot))) labels.push(label(g, `山脚 ${m.foot.toFixed(2)}`, left + 2, y(m.foot) - LABEL_H - 1, colors.mountain, 1));
     }

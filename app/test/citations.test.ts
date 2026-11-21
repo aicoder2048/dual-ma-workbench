@@ -10,16 +10,22 @@ describe("筹码分布给长风的数据字段", () => {
   const m = (foot: number, top: number, share: number) => ({ foot, top, volume: share * 1e9, share });
   const profile = { available: true as const, days: 365, start: "2025-11-18", end: "2026-11-18", bars: 251, edges: [], volumes: [],
     mountains: [m(120, 140, 0.2), m(160, 175, 0.3), m(185, 200, 0.25)] };
-  const target = { price: 160, top: 175, kind: "筹码山", rule: "P38", source: "解读" as const, date: "2025-11-18~2026-11-18" };
-  const facts = buildFacts({ ...analysis, profile, trade_plan: { ...analysis.trade_plan, holding: { ...analysis.trade_plan.holding, targets: [target] } } });
+  const mountain = { foot: 160, top: 175, date: "2025-11-18~2026-11-18" };
+  const facts = buildFacts({ ...analysis, profile, trade_plan: { ...analysis.trade_plan, holding: { ...analysis.trade_plan.holding, mountain } } });
 
-  test("区间、上方最近的山（反弹目标）、下方的山、计划用的目标带，都能引用", () => {
+  test("区间、上方最近的山（反弹目标）、下方的山、计划记下的参考带，都能引用", () => {
     expect(facts["筹码.区间"].value).toBe("2025-11-18 ~ 2026-11-18，251 根");
     expect(facts["筹码.上方"].value).toBe("160.00–175.00（占 30%）");
     expect(facts["筹码.下方"].value).toBe("120.00–140.00（占 20%）");
     expect(facts["筹码.所在"].value).toBe("不在哪座山里");
-    expect(facts["筹码.目标带"].value).toBe("160.00–175.00");
+    expect(facts["筹码.参考带"].value).toBe("160.00–175.00");
   });
+  test("参考带的说明写着只作参考、不算盈亏比；计划里没有筹码山时照实说", () => {
+    expect(facts["筹码.参考带"].label).toContain("只作参考");
+    expect(facts["筹码.参考带"].label).toContain("不算盈亏比");
+    expect(buildFacts({ ...analysis, profile })["筹码.参考带"].value).toBe("进场价（持仓是现价）上方没有整座的筹码山");
+  });
+  test("筹码山不叫目标带", () => expect(facts["筹码.目标带"]).toBeUndefined());
   test("说明里写着不是买卖信号", () => expect(facts["筹码.山"].label).toContain("不是买卖信号"));
   test("旧数据没有筹码分布：不出这些字段", () => expect(buildFacts(analysis)["筹码.区间"]).toBeUndefined());
 });
