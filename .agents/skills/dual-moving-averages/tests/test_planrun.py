@@ -155,10 +155,10 @@ def test_cli_rejects_a_bad_plan_with_the_reason(tmp_path):
     assert proc.returncode != 0 and "risk_pct = -1 不在" in proc.stderr
 
 
-# ---------- 和完整计划报告（2026-11-21 核心名单，筹码山改作参考之后）逐笔一样 ----------
+# ---------- 和完整计划报告（2026-11-21 核心名单，冲过去的均线密集不再当目标之后）逐笔一样 ----------
 
-# 网页的默认方案和这份报告逐笔一样。筹码山不排进第一目标（docs/adr/0018.md），这份和 main 的基线（-main.json）逐笔相同
-REPORT = pr.OUT / "2026-11-21-fullplan-core-p38ref.json"
+# 网页的默认方案和这份报告逐笔一样。这份是 docs/adr/0025.md 改完之后跑的；之前的基线是 -p38ref.json（327 笔）
+REPORT = pr.OUT / "2026-11-21-fullplan-core-p25conq.json"
 
 
 @pytest.mark.skipif(not REPORT.exists() or not (pr.OUT / "fullplan" / "daily" / "NVDA.jsonl").exists(),

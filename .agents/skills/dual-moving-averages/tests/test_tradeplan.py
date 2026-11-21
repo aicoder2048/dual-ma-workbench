@@ -88,7 +88,9 @@ def test_reward_risk_needs_a_target_above_and_a_stop_below():
 # ---------- 目标位（P25） ----------
 
 def lines_frame() -> pd.DataFrame:
-    """40 根：MA60 从 200 线性跌到 100，线平时散开（相差 > 20%）；第 25–27 根 20、60 四条线靠在 120，第 30–32 根六条线都靠在 130。"""
+    """40 根：MA60 从 200 线性跌到 100，线平时散开（相差 > 20%）；第 25–27 根 20、60 四条线靠在 120，第 30–32 根六条线都靠在 130。
+
+    收盘一直在 120 下方：两个密集区都没被冲过去。"""
     n = 40
     ma60 = [200 - i * 100 / (n - 1) for i in range(n)]
     rows = []
@@ -97,7 +99,7 @@ def lines_frame() -> pd.DataFrame:
         if 25 <= i <= 27:
             row.update(Close=120, MA20=120, EMA20=120.5, MA60=120, EMA60=119.5)
         if 30 <= i <= 32:
-            row.update({k: 130.0 for k in row})
+            row.update({k: 130.0 for k in row}, Close=119)
         rows.append(row)
     return pd.DataFrame(rows, index=pd.bdate_range("2024-01-01", periods=n))
 
@@ -111,6 +113,14 @@ def test_dense_zones_formed_while_ma60_falls():
 def test_first_target_nearest_second_the_full_convergence_above_it():
     t = tp.find_targets(lines_frame(), None, 100)
     assert [(x.kind, round(x.price, 2)) for x in t] == [("20、60 均线密集", 120.0), ("20、60、120 全部汇聚", 130.0)]
+
+
+def test_zone_a_later_close_went_above_is_no_longer_a_target():
+    """视频 G 40:03 冲过去了就找下一个目标位：密集区形成以后收盘站上过它，它就不再是目标。"""
+    df = lines_frame()
+    df.iloc[34, df.columns.get_loc("Close")] = 121   # 120 的密集区形成以后有一天收在它上方，之后又跌下来
+    t = tp.find_targets(df, None, 100)
+    assert (t[0].kind, round(t[0].price, 2)) == ("20、60 均线密集", 130.0)   # 120 那个不在了
 
 
 def test_zone_still_forming_today_is_not_a_target():
@@ -335,18 +345,20 @@ def test_holding_in_a_downtrend_finds_no_target_before_the_20_line_turns_up(qqq_
     assert not any("算不出" in n for n in h["notes"])
 
 
-def test_holding_target_change_leaves_the_flat_plan_alone(qqq_crash):
+def test_flat_plan_skips_the_zone_the_rally_to_the_october_high_went_through(qqq_crash):
+    """9 月的 20/60 密集（713.52）在本轮下跌开始之前：之后收盘到过 759（10-06 高点 762.86），它已经被冲过去了。
+    第一目标是本轮下跌里没补的缺口（10-29，718.07）。"""
     f = qqq_crash["trade_plan"]["flat"]
     assert f["entry"]["price"] == pytest.approx(712.20, abs=0.01)
     assert f["stop"]["price"] == pytest.approx(674.24, abs=0.01)
-    assert [(t["kind"], round(t["price"], 2), t["date"]) for t in f["targets"]] == [("20、60 均线密集", 713.52, "2026-09-25")]
-    assert f["rr"] == pytest.approx(0.0349, abs=0.0001) and f["rr_verdict"] == "不做"
-    assert "713.52" in f["at_target"]
+    assert [(t["kind"], round(t["price"], 2), t["date"]) for t in f["targets"]] == [("缺口", 718.07, "2026-10-29")]
+    assert f["rr"] == pytest.approx(0.155, abs=0.001) and f["rr_verdict"] == "不做"
+    assert "718.07" in f["at_target"]
 
 
 def test_reward_risk_in_the_play_text_has_two_decimals(qqq_crash):
-    """0.0349 写成 0.0:1 像算错了。"""
-    assert "盈亏比 0.03:1，不到 3:1，不做（P24）" in qqq_crash["play"]["text"]
+    """0.155 写成 0.2:1 会丢精度。"""
+    assert "盈亏比 0.15:1，不到 3:1，不做（P24）" in qqq_crash["play"]["text"]
 
 
 def test_plan_without_targets_has_no_at_target_line(plans):
