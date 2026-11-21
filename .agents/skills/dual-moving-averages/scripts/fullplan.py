@@ -320,7 +320,23 @@ def baselines(tickers: list[str], sigs: dict[str, pd.DataFrame], bars: dict[str,
 
 # ---------- 一组品种一个账户 ----------
 
-GROUPS = (("合并（A+B+C）", ("A", "B", "C")), ("A ETF", ("A",)), ("B+C 个股", ("B", "C")), ("D 曾经的巨头", ("D",)))
+GROUPS = (("合并（A+B+C）", ("A", "B", "C")), ("A ETF", ("A",)), ("B+C 个股", ("B", "C")), ("B 科技和 AI", ("B",)),
+          ("C 其他大市值", ("C",)), ("D 曾经的巨头", ("D",)))
+# 用户的核心名单：先测它，过了关再补测其余品种
+CORE = ("SPY QQQ SMH SOXX XLK AAPL MSFT NVDA GOOGL AMZN META TSLA AVGO AMD ORCL TSM PLTR NFLX CRM ADBE ASML MU ANET CRWD "
+        "PANW AMAT LRCX TXN IBM CSCO SAP JPM V MA LLY COST WMT BRK-B").split()
+
+
+def gate(g: dict) -> tuple[bool, list[str]]:
+    """核心名单的关口：完整计划的平均 R 90% 区间整个在 0 以上，而且 MAR 不低于同一批品种上的 MA200 朴素规则。"""
+    full, ma200 = g["runs"][FULL.name], g["baselines"]["MA200 朴素规则"]
+    why = []
+    if full["ci"] is None or full["ci"][0] <= 0:
+        why.append("平均 R 的 90% 区间" + ("算不出" if full["ci"] is None else
+                                       f"是 {full['ci'][0]:+.2f} ~ {full['ci'][1]:+.2f}，{'跨 0' if full['ci'][1] > 0 else '整个在 0 以下'}"))
+    if full["mar"] is None or ma200["mar"] is None or full["mar"] < ma200["mar"]:
+        why.append(f"MAR {f2(full['mar'])} 低于 MA200 朴素规则的 {f2(ma200['mar'])}")
+    return not why, why
 POOLED = GROUPS[0][0]
 RANDOM_REPS = 20
 RANDOM_SEED = 11
@@ -469,7 +485,7 @@ TRADE_HEAD = ("| 票 | 信号日 | 打法 · 进场规则 | 单子 | 计划进�
 LIMITS = [
     "**幸存者偏差**：B、C 组按 2026-11-20 的市值挑，是事后的赢家；A 组（ETF）没有这个问题，结论以 A 组和合并为准，D 组（曾经的巨头）量这个偏差。退市股取不到。",
     "**样本不独立**：同一天几十只票一起动。平均 R 的区间用 60 个交易日一块的日期区块自助法（按进场日分块），已算进这种相关，但区块之间仍不完全独立。",
-    "**这不是没看过的数据**：86 只的旧验证集在 2026-11-20 的评估里已经看过；本报告是开发集，不调任何参数（第 3 步做敏感度，第 4 步用新验证集）。",
+    "**这不是没看过的数据**：这些品种都在 2026-11-20 的评估里（开发集或旧验证集），已经看过；不调任何参数（第 3 步做敏感度，第 4 步用新验证集）。",
     "**止损按最低价、目标按最高价**：计划原文的止损多是\"收盘跌回\"（P23），这里按盘中价执行（方案第 2 节的口径），比收盘止损更早出场、亏损更可控，"
     "但会被盘中假跌破扫掉。收盘口径的失效条件另外按次日开盘执行。",
     "**同一根里止损和目标都碰到算先止损、进场那一根不算目标**：保守，低估一部分赢的交易。",
@@ -485,9 +501,10 @@ LIMITS = [
 def render(groups: dict[str, dict], meta: dict, checks: list[dict]) -> str:
     pool = groups[POOLED]
     full = pool["runs"][FULL.name]
-    out = [f"# 完整计划逐笔回测：开发集（{meta['first']} ~ {meta['last']}）", "",
+    scope = "用户的核心名单" if meta["remaining"] else "2026-11-20 评估的开发集 + 旧验证集"
+    out = [f"# 完整计划逐笔回测：{'核心名单' if meta['remaining'] else '开发集'}（{meta['first']} ~ {meta['last']}）", "",
            "回答\"照结论卡片的交易计划下单，结果怎样\"。只作风险提示，不改定位：归雁是把双均线交易系统用到真实交易上的工具。", "",
-           f"- 生成：{meta['generated']}；代码 `{meta['head'][:12]}`；品种 {meta['n_tickers']} 只（2026-11-20 评估的开发集 + 旧验证集，"
+           f"- 生成：{meta['generated']}；代码 `{meta['head'][:12]}`；品种 {meta['n_tickers']} 只（{scope}，"
            f"A {meta['n_groups']['A']}、B {meta['n_groups']['B']}、C {meta['n_groups']['C']}、D {meta['n_groups']['D']}）",
            f"- 决定点 {meta['days']} 个（每只票每个交易日一份计划），其中 {meta['checked']} 个和完整分析（等于 `dma_analyze.py --csv --asof`）逐字段对过交易计划，全部一致",
            f"- 计划计算 {meta['seconds']['plans']:.0f}s（{meta['jobs']} 个进程），回测和报告 {meta['seconds']['sim']:.0f}s",
@@ -521,6 +538,15 @@ def render(groups: dict[str, dict], meta: dict, checks: list[dict]) -> str:
         b = pool["baselines"][n]
         lines.append(f"- {n}：年化 {pc(b['cagr'])}、最大回撤 {pc(b['mdd'])}、MAR {f2(b['mar'])}。")
     out += lines + [""]
+    if meta["remaining"]:
+        ok, why = gate(pool)
+        out += ["## 关口：要不要补测其余品种", "",
+                "事先定的关口：完整计划在核心名单上，平均 R 的 90% 区间整个在 0 以上，而且 MAR 不低于同一批品种上的 MA200 朴素规则。", ""]
+        if ok:
+            out += ["**过关。** 其余品种待补测：" + " ".join(meta["remaining"]) + "。", ""]
+        else:
+            out += [f"**没过关**：{'；'.join(why)}。照卡片的完整计划在核心名单上没有显示出可验证的优势，"
+                    "建议不再花时间补测其余 " + str(len(meta["remaining"])) + " 只（" + " ".join(meta["remaining"]) + "）。", ""]
     out += ["## 逐个关掉：盈亏比过滤、目标位、仓位各贡献多少", "",
             "每次只关一样，其余照完整计划。差 = 关掉之后 − 完整计划。\"关仓位\"每笔买同样的金额，"
             "金额取完整计划每笔进场金额占净值的平均（各组各算），所以平均用的钱差不多，只是不再按止损远近分配。", "",
@@ -590,6 +616,7 @@ def render(groups: dict[str, dict], meta: dict, checks: list[dict]) -> str:
 def main() -> None:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--tickers", help="只跑这些（逗号分隔），默认评估的全部品种")
+    p.add_argument("--core", action="store_true", help="只跑用户的核心名单（CORE），报告里写关口和待补测的品种")
     p.add_argument("--config", type=Path, default=ev.CONFIG)
     p.add_argument("--out", type=Path, default=PROJECT / "reports/replay")
     p.add_argument("--data", type=Path, help="行情缓存，默认 <out>/data/eval")
@@ -600,7 +627,7 @@ def main() -> None:
     data = a.data or a.out / "data" / "eval"
     u = json.loads((a.out / "eval" / f"universe-{cfg['sample']['snapshot']}.json").read_text())
     gof = {t: g for g, ts in u["groups"].items() for t in ts}
-    tickers = sorted(t.strip().upper() for t in a.tickers.split(",")) if a.tickers else sorted(gof)
+    tickers = sorted(CORE if a.core else (t.strip().upper() for t in a.tickers.split(",")) if a.tickers else gof)
     t0 = time.time()
     recs = daily(tickers, data, a.out, cfg, a.jobs)
     t_plans = time.time() - t0
@@ -624,7 +651,8 @@ def main() -> None:
             "checked": sum(1 for rs in recs.values() for k in range(0, len(rs), CHECK_EVERY)), "jobs": a.jobs,
             "seconds": {"plans": round(t_plans, 1), "sim": round(time.time() - t0 - t_plans, 1)},
             "config": asdict(ps.Config()), "random_reps": RANDOM_REPS,
-            "day_range": day_range({t: bars[t] for t in lead["tickers"]}, cal.index(lead["start"]))}
+            "day_range": day_range({t: bars[t] for t in lead["tickers"]}, cal.index(lead["start"])),
+            "remaining": sorted(set(gof) - set(tickers)) if a.core else []}
     md = render(groups, meta, checks)
     a.out.mkdir(parents=True, exist_ok=True)
     (a.out / f"{a.stem}.md").write_text(md)

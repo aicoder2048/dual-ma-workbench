@@ -317,6 +317,19 @@ def test_daily_plan_equals_cli_trade_plan(tmp_path, ticker, date):
                                                                f["stop"] and f["stop"]["price"], f["rr_verdict"])
 
 
+def group(ci, mar, ma200_mar) -> dict:
+    return {"runs": {fp.FULL.name: {"ci": ci, "mar": mar}}, "baselines": {"MA200 朴素规则": {"mar": ma200_mar}}}
+
+
+def test_core_gate_needs_interval_above_zero_and_mar_at_least_ma200():
+    assert fp.gate(group([0.05, 0.4], 0.5, 0.4)) == (True, [])
+    ok, why = fp.gate(group([-0.1, 0.3], 0.5, 0.4))
+    assert not ok and "跨 0" in why[0]
+    ok, why = fp.gate(group([0.05, 0.4], 0.2, 0.4))
+    assert not ok and "MAR 0.20 低于 MA200 朴素规则的 0.40" in why[0]
+    assert len(fp.gate(group(None, None, 0.4))[1]) == 2
+
+
 def test_daily_plan_ignores_later_prices():
     px = bt.load(FIXTURES / "SPY.csv")
     i = px.index.get_loc(pd.Timestamp("2024-04-19"))
