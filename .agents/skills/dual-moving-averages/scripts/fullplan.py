@@ -322,6 +322,18 @@ def baselines(tickers: list[str], sigs: dict[str, pd.DataFrame], bars: dict[str,
     return out
 
 
+# ---------- 诊断：止损离进场几个 ATR ----------
+
+ATR_N = 14
+
+
+def atr(df: pd.DataFrame, n: int = ATR_N) -> pd.Series:
+    """Wilder 的平均真实波幅：真实波幅 = 最高、最低、前收三者里最大的差，按 1/n 指数平均。只用当天和之前的行情。"""
+    prev = df["Close"].shift()
+    tr = pd.concat([df["High"] - df["Low"], (df["High"] - prev).abs(), (df["Low"] - prev).abs()], axis=1).max(axis=1)
+    return tr.ewm(alpha=1 / n, adjust=False, min_periods=n).mean()
+
+
 # ---------- 一组品种一个账户 ----------
 
 GROUPS = (("合并（A+B+C）", ("A", "B", "C")), ("A ETF", ("A",)), ("B+C 个股", ("B", "C")), ("B 科技和 AI", ("B",)),
@@ -389,11 +401,13 @@ def run_group(job: tuple) -> tuple[str, dict]:
         halves[label] = {"trades": len(rs), "mean_r": est.point if est else None,
                          "ci": None if est is None or est.lo is None else [est.lo, est.hi]}
     firsts = {t: rs[0]["d"] for t, rs in recs.items()}
+    atrs = {t: atr(sigs[t]) for t in recs}
     return name, {"tickers": sorted(recs), "start": cal[start], "end": cal[-1], "notional": notional, "runs": runs,
                   "random": _random_summary(rand) if rand else None, "halves": halves,
                   "baselines": baselines(sorted(recs), sigs, bars, firsts, cal, start, cost),
                   "trades": [{**asdict(t), "signal_date": cal[t.signal], "entry_date": cal[t.entry_i],
-                              "exit_date": cal[t.exit_i]} for t in full]}
+                              "exit_date": cal[t.exit_i], "atr": float(atrs[t.ticker][pd.Timestamp(cal[t.signal])])}
+                             for t in full]}
 
 
 # ---------- 和结论卡片对一遍 ----------
@@ -478,6 +492,53 @@ def trade_line(t: dict) -> str:
 
 
 STOP_BUCKETS = ((0, 0.005), (0.005, 0.01), (0.01, 0.02), (0.02, 0.05), (0.05, 1.0))
+ATR_BUCKETS = ((0, 0.25), (0.25, 0.5), (0.5, 1.0), (1.0, 2.0), (2.0, float("inf")))
+V1 = "PR #42 口径（盘中止损、不设上限）"
+
+
+def bucket_rows(ts: list[dict], dist: np.ndarray, buckets, label) -> list[str]:
+    """按止损距离分档：笔数、平均 R、中位 R、每笔平均盈亏占净值、胜率、止损走的占比、计划盈亏比。"""
+    rs = np.array([t["r"] for t in ts])
+    eq = np.array([equity_pnl(t) for t in ts])
+    out = []
+    for lo, hi in buckets:
+        m = (dist >= lo) & (dist < hi)
+        if not m.any():
+            continue
+        rr = [t["rr"] for t, keep in zip(ts, m) if keep and t["rr"] is not None]
+        stopped = np.mean([t["reason"] == "止损" for t, keep in zip(ts, m) if keep])
+        out.append(f"| {label(lo, hi)} | {int(m.sum())} | {rs[m].mean():+.2f} | {np.median(rs[m]):+.2f} | {pc(float(eq[m].mean()), 2)} | "
+                   f"{p0(float((rs[m] > 0).mean()))} | {p0(float(stopped))} | {np.mean(rr):.1f} |")
+    return out
+
+
+BUCKET_HEAD = ("| 止损距离 | 笔数 | 平均 R | 中位 R | 每笔盈亏占净值 | 胜率 | 止损走的 | 平均盈亏比（计划） |\n"
+               "|---|---:|---:|---:|---:|---:|---:|---:|")
+
+
+def before_after(groups: dict[str, dict], before: dict) -> list[str]:
+    """和上一版报告（PR #42）的完整计划逐组对照；再核一遍"PR #42 口径"这一行是不是逐项复现了上一版。"""
+    out = ["| 组 | 版本 | 笔数 | 平均 R（90% 区间） | 胜率 | 年化 | 最大回撤 | MAR | MA200 的 MAR |", "|---|---|---:|---:|---:|---:|---:|---:|---:|"]
+    same = []
+    for gname, g in groups.items():
+        old = before["groups"].get(gname)
+        if old is None:
+            continue
+        ma = f2(g["baselines"]["MA200 朴素规则"]["mar"])
+        for label, s in (("PR #42", old["runs"][FULL.name]), ("这一版", g["runs"][FULL.name])):
+            out.append(f"| {gname} | {label} | {s['trades']} | {rr_cell(s)} | {p0(s['win'])} | {pc(s['cagr'])} | {pc(s['mdd'])} | "
+                       f"{f2(s['mar'])} | {ma} |")
+        rep, o = g["runs"][V1], old["runs"][FULL.name]
+        same.append(all(rep[k] == o[k] for k in ("trades", "mean_r", "cagr", "mdd")))
+    check = ("每组的\"PR #42 口径\"一行（同一份每天的计划，止损看盘中最低价、不设单票上限）和上一版报告的完整计划逐项一致"
+             "（笔数、平均 R、年化、最大回撤），前后的差只来自这两处改动。" if all(same) else
+             "**注意**：\"PR #42 口径\"一行和上一版报告的完整计划对不上，前后的差不全是这两处改动。")
+    return out + ["", check]
+
+
+def equity_pnl(t: dict) -> float:
+    """这笔盈亏占进场前一天净值的比例。分母不随止损远近变，不会像 R 那样被几分钱的止损放大。"""
+    return t["pnl"] * t["notional"] / (t["shares"] * t["fill"])
 
 
 def day_range(bars: dict[str, ps.Bars], start: int) -> float:
@@ -494,7 +555,7 @@ LIMITS = [
     "**样本不独立**：同一天几十只票一起动。平均 R 的区间用 60 个交易日一块的日期区块自助法（按进场日分块），已算进这种相关，但区块之间仍不完全独立。",
     "**这不是没看过的数据**：这些品种都在 2026-11-20 的评估里（开发集或旧验证集），已经看过；不调任何参数（第 3 步做敏感度，第 4 步用新验证集）。",
     "**止损按收盘、第二天开盘走**：照计划原文。真实下单时有人会在收盘前几分钟看到要跌破就走，比这里早一点、亏得少一点；"
-    "跳空低开的亏损全部算进去。P22（突破买入的起涨 K 线最低价）原文没写收盘，按\"收盘跌破小平台就是破线\"同样用收盘；这次回测里没有这类交易。",
+    "跳空低开的亏损全部算进去。P22（突破买入的起涨 K 线最低价）原文没写收盘，按\"收盘跌破小平台就是破线\"同样用收盘。",
     "**进场那一根不算目标**：保守，低估一部分赢的交易。",
     "**小时线**：回放没有小时线（Polygon 只回到 2021 年底），吃回撤的计划常写\"只差小时线多头排列（看小时图）\"。"
     "完整计划当作满足，\"要看小时线的不进\"当作不满足；真实使用时用户会看小时图，结果在两行之间。",
@@ -538,6 +599,11 @@ def render(groups: dict[str, dict], meta: dict, checks: list[dict]) -> str:
             "- **账户**：每组品种一个账户，起始 100 万，空仓的钱收益算 0。年化、回撤、MAR 都是这个账户的净值曲线。",
             "- **对照**：买入持有、MA200、MA60 朴素规则（每只票分一样多的钱，在场就满仓，不按仓位）；随机进场（同样的仓位规则、同样的止损和目标距离，"
             f"最多拿真实那笔的根数，{RANDOM_REPS} 次取中位数，括号里是 5% ~ 95%），它和完整计划的差就是\"进场选择值多少\"。", ""]
+    if meta.get("before"):
+        out += ["## 和上一版（PR #42）对照", "",
+                "这一版只改了两处：止损按收盘判断、第二天开盘走（上一版看盘中最低价）；单票持仓金额不超过净值的 "
+                f"{cfg_pos * 100:.0f}%（上一版不限）。每天的计划、进场规则、止损价位、目标、盈亏比过滤都没动。", "",
+                *before_after(groups, meta["before"]), ""]
     out += ["## 结论", "", f"### {POOLED}（{len(pool['tickers'])} 只，{pool['start']} ~ {pool['end']}）", "", *group_table(pool), ""]
     rnd = pool["random"]
     ci = full["ci"]
@@ -593,17 +659,21 @@ def render(groups: dict[str, dict], meta: dict, checks: list[dict]) -> str:
     out += ["按打法和进场规则：", "", "| 打法 · 进场规则 | 笔数 | 平均 R | 胜率 |", "|---|---:|---:|---:|"]
     for k, rs in sorted(by_key.items(), key=lambda x: -len(x[1])):
         out.append(f"| {k} | {len(rs)} | {np.mean(rs):+.2f} | {p0(float(np.mean(np.array(rs) > 0)))} |")
-    dist = np.array([(t["plan_entry"] - t["stop"]) / t["plan_entry"] for t in ts])
-    rs_all = np.array([t["r"] for t in ts])
+    unit = np.array([t["plan_entry"] - t["stop"] for t in ts])
+    dist = unit / np.array([t["plan_entry"] for t in ts])
+    in_atr = unit / np.array([t["atr"] for t in ts])
     out += ["", f"按止损离计划进场价多远（这段时间 {POOLED} 每天最高最低价相差的中位数是收盘价的 {meta['day_range'] * 100:.1f}%）：", "",
-            "| 止损距离 | 笔数 | 平均 R | 胜率 | 平均盈亏比（计划） |", "|---|---:|---:|---:|---:|"]
-    for lo, hi in STOP_BUCKETS:
-        m = (dist >= lo) & (dist < hi)
-        if m.any():
-            rr = [t["rr"] for t, keep in zip(ts, m) if keep and t["rr"] is not None]
-            label = f"{lo * 100:g}% ~ {hi * 100:g}%" if hi < 1 else f"≥ {lo * 100:g}%"
-            out.append(f"| {label} | {int(m.sum())} | {rs_all[m].mean():+.2f} | {p0(float((rs_all[m] > 0).mean()))} | "
-                       f"{np.mean(rr):.1f} |")
+            BUCKET_HEAD, *bucket_rows(ts, dist, STOP_BUCKETS, lambda lo, hi: f"{lo * 100:g}% ~ {hi * 100:g}%" if hi < 1 else f"≥ {lo * 100:g}%"),
+            "", f"按止损离计划进场价几个 ATR（信号日的 ATR({ATR_N})，Wilder 平均真实波幅；这批交易止损距离的中位数是 "
+            f"{np.median(in_atr):.2f} 个 ATR）：", "",
+            BUCKET_HEAD, *bucket_rows(ts, in_atr, ATR_BUCKETS, lambda lo, hi: f"{lo:g} ~ {hi:g} ATR" if hi < float("inf") else f"≥ {lo:g} ATR")]
+    rs_all = np.array([t["r"] for t in ts])
+    eq_all = np.array([equity_pnl(t) for t in ts])
+    calm = np.argsort(-np.abs(rs_all))[10:]
+    out += ["", f"R 的分母是这笔的初始风险。止损离成交价只有几分钱时分母极小，按收盘止损、第二天开盘走，单笔 R 可以到正负几十（见下面 R 最高、最低的 10 笔），"
+            f"平均 R 由少数几笔决定：全部 {len(ts)} 笔平均 {rs_all.mean():+.2f}R，去掉 |R| 最大的 10 笔是 {rs_all[calm].mean():+.2f}R，"
+            f"中位 {np.median(rs_all):+.2f}R。每笔盈亏占前一天净值不受分母影响：平均 {pc(float(eq_all.mean()), 2)}、"
+            f"中位 {pc(float(np.median(eq_all)), 2)}。"]
     kinds = Counter(t["kind"] for t in ts)
     out += ["", "单子类型：" + "，".join(f"{k} {v} 笔" for k, v in kinds.most_common()) + "。",
             "离场原因：" + "，".join(f"{k} {v} 笔" for k, v in Counter(t["reason"] for t in ts).most_common()) + "。",
@@ -633,6 +703,7 @@ def main() -> None:
     p.add_argument("--data", type=Path, help="行情缓存，默认 <out>/data/eval")
     p.add_argument("--jobs", type=int, default=14)
     p.add_argument("--stem", default="2026-11-21-fullplan-dev")
+    p.add_argument("--before", type=Path, help="上一版报告的 JSON，报告里加一节前后对照")
     a = p.parse_args()
     cfg = es.load_config(a.config)
     data = a.data or a.out / "data" / "eval"
@@ -664,7 +735,8 @@ def main() -> None:
             "config": asdict(ps.Config(cost=cost, max_position=cfg["fullplan"]["max_position"])), "random_reps": RANDOM_REPS,
             "day_range": day_range({t: bars[t] for t in lead["tickers"]}, cal.index(lead["start"])),
             "remaining": sorted(set(gof) - set(tickers)) if a.core else []}
-    md = render(groups, meta, checks)
+    before = json.loads(a.before.read_text()) if a.before else None
+    md = render(groups, {**meta, "before": before}, checks)
     a.out.mkdir(parents=True, exist_ok=True)
     (a.out / f"{a.stem}.md").write_text(md)
     (a.out / f"{a.stem}.json").write_text(json.dumps({"meta": meta, "groups": groups, "card_check": checks},

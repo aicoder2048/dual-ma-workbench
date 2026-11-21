@@ -302,6 +302,27 @@ def test_one_block_has_no_interval():
     assert fp.summarize(ps.Result(ts, np.array([1.0, 1.0]), np.array([0.0, 0.0])), cal, BC)["ci"] is None
 
 
+# ---------- 诊断：止损距离按 ATR ----------
+
+def test_atr_is_wilders_average_true_range_including_gaps():
+    df = pd.DataFrame({"High": [11.0, 12.0, 12.0, 15.0], "Low": [9.0, 10.0, 10.0, 13.0], "Close": [10.0, 11.0, 11.0, 14.0]})
+    # 真实波幅：2、2、2、max(2, |15 − 11|, |13 − 11|) = 4；n = 2 的 Wilder 平均：第 2 根起 2、2，然后 (2 + 4) / 2 = 3
+    assert fp.atr(df, 2).tolist()[1:] == pytest.approx([2.0, 2.0, 3.0])
+
+
+def test_atr_on_a_day_ignores_later_bars():
+    df = pd.DataFrame({"High": [11.0, 12.0, 12.0, 15.0], "Low": [9.0, 10.0, 10.0, 13.0], "Close": [10.0, 11.0, 11.0, 14.0]})
+    later = df.copy()
+    later.iloc[3] = [50.0, 1.0, 30.0]
+    pd.testing.assert_series_equal(fp.atr(df, 2).iloc[:3], fp.atr(later, 2).iloc[:3])
+
+
+def test_trade_pnl_as_a_share_of_equity_ignores_the_stop_distance():
+    from dataclasses import asdict
+    (t,) = run({"AAA": bars(WIN)}, {0: [order()]}).trades
+    assert fp.equity_pnl(asdict(t)) == pytest.approx(3000 / 100_000)       # 赚 3000，进场前净值 10 万
+
+
 # ---------- 计划 → 单：消融开关 ----------
 
 def rec(d: str, verdict: str | None, rule: str = "P19、P20", entry=10.0, stop=9.0, t1: float | None = 13.0,
