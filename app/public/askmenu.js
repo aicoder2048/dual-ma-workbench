@@ -42,7 +42,7 @@ export function cardQuestions(card, analysis, report) {
     add(Boolean(h.stop), h.stop && `止损为什么是「${h.stop.label}」，放在 ${h.stop.price.toFixed(2)}？`);
     add(r.record.setup?.ci_crosses_zero === true, "回测的 90% 区间跨过 0，说明什么？");
     add(f.trade.entry === null, "这套打法为什么空仓不买？");
-    add(f.trade.rr !== null, f.trade.rr !== null && `盈亏比 ${f.trade.rr.toFixed(1)}:1 是怎么算的，目标位从哪来？`);
+    add(f.trade.rr !== null, f.trade.rr !== null && `盈亏比 ${f.trade.rr.toFixed(2)}:1 是怎么算的，目标位从哪来？`);
     add(true, "空仓和持仓的做法为什么不一样？");
   } else if (card === "play") {
     const t = a.regime.name;

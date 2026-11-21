@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { parseCost, pnlText, situationOf } from "../public/viz.js";
+import { cardQuestions } from "../public/askmenu.js";
+import { conclusionCard, parseCost, pnlText, situationOf } from "../public/viz.js";
+import type { Analysis } from "../src/citations.ts";
+import { buildReport } from "../src/report.ts";
+import nvda from "./fixtures/nvda-analysis.json";
 
 describe("成本价：浏览器端解析和处境", () => {
   test("逗号、全角数字、空格都能认", () => {
@@ -29,5 +33,26 @@ describe("成本价：浏览器端解析和处境", () => {
   test("提示：持平、看不懂", () => {
     expect(pnlText("150", 150)).toContain("持平");
     expect(pnlText("abc", 150)).toContain("看不懂");
+  });
+});
+
+describe("盈亏比两位小数：结论卡的小标签和问鸿雁的问题", () => {
+  const withRr = (rr: number, verdict: "不做" | "可做") => {
+    const a = structuredClone(nvda) as Analysis;
+    a.trade_plan.flat = { ...a.trade_plan.flat, rr, rr_verdict: verdict };
+    return { a, r: buildReport(a) };
+  };
+  const chip = (html: string) => html.match(/data-item="rr"[\s\S]*?<b class="num">([^<]+)<\/b>/)![1];
+  test("0.0349 写 0.03:1，不写 0.0:1", () => {
+    const { a, r } = withRr(0.0349, "不做");
+    const card = conclusionCard(r, a.close, { pos: "flat", cost: "" });
+    expect(chip(card)).toBe("0.03:1");
+    expect(card).toContain("不做：盈亏比 0.03:1，不到 3:1。");
+    expect(cardQuestions("verdict", a, r).map((q) => q.text).join("\n")).toContain("盈亏比 0.03:1 是怎么算的");
+  });
+  test("正好 3 写 3.00:1", () => {
+    const { a, r } = withRr(3, "可做");
+    expect(chip(conclusionCard(r, a.close, { pos: "flat", cost: "" }))).toBe("3.00:1");
+    expect(cardQuestions("verdict", a, r).map((q) => q.text).join("\n")).toContain("盈亏比 3.00:1 是怎么算的");
   });
 });

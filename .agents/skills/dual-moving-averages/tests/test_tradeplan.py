@@ -344,6 +344,10 @@ def test_holding_target_change_leaves_the_flat_plan_alone(qqq_crash):
     assert "713.52" in f["at_target"]
 
 
+def test_reward_risk_in_the_play_text_has_two_decimals(qqq_crash):
+    """0.0349 写成 0.0:1 像算错了。"""
+    assert "盈亏比 0.03:1，不到 3:1，不做（P24）" in qqq_crash["play"]["text"]
+
 
 def test_plan_without_targets_has_no_at_target_line(plans):
     assert plans["TSLA"]["trade_plan"]["flat"]["at_target"] is None

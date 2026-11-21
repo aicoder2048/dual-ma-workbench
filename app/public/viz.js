@@ -376,7 +376,7 @@ function rrChip(t) {
   if (t.rr === null) return "";
   const gap = t.rr_gap ? `：要 3:1，目标得到 ${f2(t.rr_gap.target_for_min)}，或止损收紧到 ${f2(t.rr_gap.stop_for_min)}` : "";
   return `<span class="pchip rr ${RR_CLASS[t.rr_verdict]}" data-item="rr" ${tip(`盈亏比 ${t.rr.toFixed(2)}:1，${t.rr_verdict}（P24）${gap}`)}>
-    <span class="ck">盈亏比</span><b class="num">${t.rr.toFixed(1)}:1</b>${esc(t.rr_verdict)}</span>`;
+    <span class="ck">盈亏比</span><b class="num">${t.rr.toFixed(2)}:1</b>${esc(t.rr_verdict)}</span>`;
 }
 
 /** 股数标签：填了账户给股数；没填给每 1 万元风险对应多少股（A6）。 */

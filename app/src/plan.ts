@@ -384,7 +384,8 @@ export function playKey(a: Analysis): string {
   return a.trade_plan.key;
 }
 
-const ratio = (x: number) => `${x.toFixed(1)}:1`;
+/** 盈亏比两位小数：0.03:1 写成 0.0:1 会像算错了。 */
+const ratio = (x: number) => `${x.toFixed(2)}:1`;
 
 /** 目标位一句：价位、是什么、离现价多远；解读的标出来。 */
 function targetsText(t: TradePlan, close: number): string {

@@ -466,7 +466,7 @@ def verdict_line(p: PlanSet) -> str | None:
     if f.rr_verdict != "不做":
         return None
     t1 = f.targets[0]
-    return (f"盈亏比 {f.rr:.1f}:1，不到 3:1，不做（P24）。第一目标 {_f(t1.price)}（{t1.kind}）。"
+    return (f"盈亏比 {f.rr:.2f}:1，不到 3:1，不做（P24）。第一目标 {_f(t1.price)}（{t1.kind}）。"
             f"要 3:1，目标得到 {_f(f.rr_gap['target_for_min'])}，或止损收紧到 {_f(f.rr_gap['stop_for_min'])}。")
 
 
