@@ -8,6 +8,8 @@
   拐头失败就止损，价位用 EMA20 和抵扣价算；吃回撤是 60 线组拐头（视频没给价位，标"解读"）。
 - 目标位（P25）：上方最近的缺口或均线密集（20、60 汇在一起也算），下一个是 20/60/120 全部汇聚处。
   上方都没有时用最近的波峰（前高，解读）。
+- 到第一目标是检查点（P25）：中长线（60/120）完好就继续拿，按止损和失效离场；不完好就在目标位走。
+  完好的判断只在这里（holds_past_target），回测（fullplan、plansim）和网页都读它。
 - 盈亏比 = (第一目标 − 进场) ÷ (进场 − 止损)。< 3 不做，≥ 5 理想（P24）。
 - 股数 = 每笔可承受亏损 ÷ (进场 − 止损)，向下取整（A6）。没填账户只给每 1 万元风险对应多少股。
 """
@@ -74,6 +76,7 @@ class TradePlan:
     rr_gap: dict | None           # 不做时：要 3:1，目标得到哪、或止损得收紧到哪
     risk_pct: float | None        # 进场（持仓：现价）到止损的距离，占进场价 %
     size: Size | None
+    at_target: str | None = None  # 到第一目标怎么办（P25）；没有目标时为 None
     notes: list[str] = field(default_factory=list)
 
 
@@ -198,6 +201,29 @@ def find_targets(df: pd.DataFrame, structure: Structure | None, price: float) ->
         if high is not None:
             return [Target(high.price, "前高", "P25", "解读", high.date)]
     return []
+
+
+# ---------- 到第一目标（P25） ----------
+
+# 中长线完好：类型还是稳定上涨或加速上涨（J1 有类型、J3/J4 向上，J7 不在转折中）。打法键（rules.play_key）就是这个判断；
+# 横盘、J6 的过渡状态（多头结构回撤中、顶部转折中……）、下跌都不算完好
+INTACT_KEYS = frozenset({"稳定上涨", "加速上涨"})
+
+
+def holds_past_target(key: str) -> bool:
+    """到第一目标时（看前一天收盘的打法键）：中长线完好就不走（视频 G 42:14）。"""
+    return key in INTACT_KEYS
+
+
+def at_target_line(key: str, targets: list[Target]) -> str | None:
+    if not targets:
+        return None
+    t1 = _f(targets[0].price)
+    if holds_past_target(key):
+        return (f"到第一目标 {t1} 不是自动离场：中长线完好（现在是{key}）就继续拿，按止损和失效离场；"
+                "到时 60/120 已不是稳定上涨或加速上涨，就在目标位走（P25）")
+    return (f"到第一目标 {t1}：现在是{key}，中长线不算完好，到了就在目标位走；"
+            "到时已经是稳定上涨或加速上涨，就继续拿，按止损和失效离场（P25）")
 
 
 # ---------- 每套打法的进场和止损 ----------
@@ -355,7 +381,7 @@ def _legs(c: rl.Ctx, key: str) -> tuple[Entry | None, Stop | None, Stop | None, 
     return None, None, _ema20_stop(c, "P18", "MA、EMA 不协同就减"), [f"{no_buy}：排列没理顺"]
 
 
-def _plan(c: rl.Ctx, entry: Entry | None, stop: Stop | None, ref: float | None, sizing: Sizing | None,
+def _plan(c: rl.Ctx, key: str, entry: Entry | None, stop: Stop | None, ref: float | None, sizing: Sizing | None,
           notes: list[str]) -> TradePlan:
     """ref：算目标和距离的价位（空仓是进场价，持仓是现价）。sizing 为 None（持仓）不算股数、不算盈亏比。"""
     notes = list(notes)
@@ -366,8 +392,9 @@ def _plan(c: rl.Ctx, entry: Entry | None, stop: Stop | None, ref: float | None, 
         notes.append("上方没有缺口、均线密集区，也没有更高的波峰：目标位算不出")
     s = stop.price if stop else None
     risk_pct = None if ref is None or s is None or s >= ref else (ref - s) / ref * 100
+    at_target = at_target_line(key, targets)
     if sizing is None:
-        return TradePlan(entry, stop, targets, None, None, None, risk_pct, None, notes)
+        return TradePlan(entry, stop, targets, None, None, None, risk_pct, None, at_target, notes)
     rr = reward_risk(ref, s, targets[0].price) if ref is not None and s is not None and targets else None
     verdict = rr_verdict(rr)
     gap = None
@@ -379,16 +406,16 @@ def _plan(c: rl.Ctx, entry: Entry | None, stop: Stop | None, ref: float | None, 
     size, why = size_position(ref, s, sizing) if entry is not None else (None, None)
     if why and ref is not None:
         notes.append(why)
-    return TradePlan(entry, stop, targets, rr, verdict, gap, risk_pct, size, notes)
+    return TradePlan(entry, stop, targets, rr, verdict, gap, risk_pct, size, at_target, notes)
 
 
 def build(c: rl.Ctx, sizing: Sizing | None = None) -> PlanSet:
     key = plan_key(c)
     entry, flat_stop, hold_stop, notes = _legs(c, key)
     ref = entry.price if entry else None
-    flat = _plan(c, entry, flat_stop if entry else None, ref, sizing or Sizing(), notes)
+    flat = _plan(c, key, entry, flat_stop if entry else None, ref, sizing or Sizing(), notes)
     hold_notes = ([DOWN_NO_STOP] if key in ("稳定下跌", "加速下跌") else []) + ["止损按进场的原则给，成本价只用来算仓位"]
-    holding = _plan(c, None, hold_stop, c.close, None, hold_notes)
+    holding = _plan(c, key, None, hold_stop, c.close, None, hold_notes)
     return PlanSet(key, flat, holding)
 
 

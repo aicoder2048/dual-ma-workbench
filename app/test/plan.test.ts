@@ -79,6 +79,8 @@ describe("结论：做法跟着阶段走，带触发价、止损和风险（SPY 
     const labels = p.flat.items.map((i) => i.label);
     for (const l of ["目标", "盈亏比", "股数"]) expect(labels).toContain(l);
     expect(p.flat.items.find((i) => i.label === "目标")!.text).toContain("前高 524.61");
+    expect(p.flat.items.find((i) => i.label === "到目标")!.text).toBe(spy.trade_plan.flat.at_target!); // P25 读交易计划，不在前端重算
+    expect(p.holding.items.find((i) => i.label === "到目标")!.text).toContain("就继续拿，按止损和失效离场");
     expect(p.flat.items.find((i) => i.label === "股数")!.text).toContain("每 1 万元风险对应 804 股");
     expect(p.flat.trade).toBe(spy.trade_plan.flat);
     expect(p.holding.trade).toBe(spy.trade_plan.holding);

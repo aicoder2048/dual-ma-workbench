@@ -472,6 +472,7 @@ def plan_lines(tpj: dict) -> list[str]:
         if p["targets"]:
             items.append("目标：" + "；".join(f"{t['price']:.2f}（{t['kind']}，{t['date']}{'，解读' if t['source'] == '解读' else ''}）"
                                             for t in p["targets"]))
+            items.append(p["at_target"])
         if name == "空仓" and p["entry"]:
             items.append(f"盈亏比：{p['rr']:.2f}:1，{p['rr_verdict']}" if p["rr"] is not None else "盈亏比：算不了")
             z = p["size"]

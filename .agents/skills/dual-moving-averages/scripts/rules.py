@@ -674,8 +674,8 @@ def p25_targets(c: Ctx) -> Result:
     p = c.plan.flat if c.plan.flat.entry is not None and c.plan.flat.entry.price is not None else c.plan.holding
     if not p.targets:
         return _met(False, next((n for n in p.notes if "目标" in n), "上方没有目标位"))
-    return _met(True, "；".join(f"目标 {i} {t.kind} {_f(t.price)}（{t.date}）" for i, t in enumerate(p.targets, 1)),
-                {f"目标 {i}": t.price for i, t in enumerate(p.targets, 1)})
+    basis = "；".join(f"目标 {i} {t.kind} {_f(t.price)}（{t.date}）" for i, t in enumerate(p.targets, 1))
+    return _met(True, f"{basis}。{p.at_target}", {f"目标 {i}": t.price for i, t in enumerate(p.targets, 1)})
 
 
 RULES: tuple[Rule, ...] = (
@@ -753,9 +753,8 @@ RULES: tuple[Rule, ...] = (
     Rule("P22", Kind.ACTION, "突破买入的止损：起涨 K 线最低价", p22_breakout_stop),
     Rule("P23", Kind.ACTION, "什么原则进，就什么原则出", p23_exit_by_entry),
     Rule("P24", Kind.ACTION, "盈亏比不到 3:1 不做", p24_reward_risk),
-    Rule("P25", Kind.ACTION, "目标位：缺口和均线密集区", p25_targets),
+    Rule("P25", Kind.ACTION, "目标位：缺口和均线密集区；到第一目标中长线完好就继续拿", p25_targets),
     Rule("P26", Kind.ACTION, "预期没到、底线没破就拿着", None),
-    Rule("P27", Kind.ACTION, "到目标、中长线完好不一定走", None),
     Rule("P28", Kind.ACTION, "前高过不去是止盈点", None),
     Rule("P29", Kind.ACTION, "标志性动作当参考点", None),
     Rule("P30", Kind.ACTION, "在门槛价设买入提醒", None),

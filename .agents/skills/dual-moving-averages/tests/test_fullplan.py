@@ -80,10 +80,10 @@ def order(t="AAA", signal=0, entry=10.0, stop=9.0, target=13.0, kind=K.STOP, exi
     return ps.Order(t, signal, kind, entry, stop, target, exits, **kw)
 
 
-def run(b: dict[str, ps.Bars], orders: dict[int, list[ps.Order]], inval=None, cfg=NO_COST) -> ps.Result:
+def run(b: dict[str, ps.Bars], orders: dict[int, list[ps.Order]], inval=None, cfg=NO_COST, hold=None) -> ps.Result:
     n = len(next(iter(b.values())).o)
     inval = inval or {t: [frozenset()] * n for t in b}
-    return ps.simulate(n, b, orders, inval, 0, cfg)
+    return ps.simulate(n, b, orders, inval, 0, cfg, hold)
 
 
 WIN = [(9.5, 9.6, 9.4, 9.5), (9.8, 10.2, 9.7, 10.1), (11.0, 13.5, 10.8, 13.2), (13.0, 13.1, 12.9, 13.0)]
@@ -156,6 +156,37 @@ def test_target_reached_in_a_bar_that_dips_below_the_stop_is_a_win():
     rows = [WIN[0], WIN[1], (10.0, 13.5, 8.8, 12.0), WIN[3]]
     (t,) = run({"AAA": bars(rows)}, {0: [order()]}).trades
     assert (t.exit_px, t.reason) == (13.0, "目标") and t.r == pytest.approx(3.0)
+
+
+# 到第一目标（P25）：前一天收盘中长线完好，碰到目标不走，拿到止损或失效；不完好就在目标位走
+
+PAST = [WIN[0], WIN[1], (11.0, 13.5, 10.8, 13.2), (13.3, 14.0, 13.1, 13.8), (13.0, 13.2, 12.4, 12.5), (12.3, 12.4, 12.0, 12.1)]
+EMA20_BREAK_AT_4 = {"AAA": [frozenset()] * 4 + [frozenset({"EMA20 止损"}), frozenset()]}
+
+
+def test_target_reached_with_60_120_intact_keeps_the_trade_until_the_invalidation():
+    hold = {"AAA": [True] * 6}
+    (t,) = run({"AAA": bars(PAST)}, {0: [order(exits=("EMA20 止损",))]}, EMA20_BREAK_AT_4, hold=hold).trades
+    # 13 碰到了不走；第 4 根收盘 EMA20 止损，第 5 根开盘 12.3 走：1000 股 × 2.3
+    assert (t.exit_i, t.exit_px, t.reason, t.past_target) == (5, 12.3, "失效：EMA20 止损", True)
+    assert t.r == pytest.approx(2.3)
+
+
+def test_target_reached_with_60_120_broken_exits_at_the_target():
+    hold = {"AAA": [True, False, True, True, True, True]}       # 碰到目标的前一天（第 1 根）收盘不完好
+    (t,) = run({"AAA": bars(PAST)}, {0: [order(exits=("EMA20 止损",))]}, EMA20_BREAK_AT_4, hold=hold).trades
+    assert (t.exit_i, t.exit_px, t.reason, t.past_target) == (2, 13.0, "目标", False)
+
+
+def test_structure_breaking_after_the_target_passed_does_not_bring_the_target_back():
+    hold = {"AAA": [True, True, False, False, False, False]}    # 过了目标之后才坏
+    (t,) = run({"AAA": bars(PAST)}, {0: [order(exits=("EMA20 止损",))]}, EMA20_BREAK_AT_4, hold=hold).trades
+    assert (t.exit_i, t.reason) == (5, "失效：EMA20 止损")
+
+
+def test_without_structure_input_the_first_target_is_an_exit():
+    (t,) = run({"AAA": bars(PAST)}, {0: [order(exits=("EMA20 止损",))]}, EMA20_BREAK_AT_4).trades
+    assert (t.exit_i, t.exit_px, t.reason) == (2, 13.0, "目标")
 
 
 def test_stop_break_takes_precedence_over_an_invalidation_at_the_same_close():
@@ -394,6 +425,11 @@ def test_orders_carry_the_plays_invalidation_and_entry_kind():
 def test_plan_without_a_usable_stop_gives_no_order():
     recs = {"AAA": [rec(DAYS[0], "可做", stop=None), rec(DAYS[1], "可做", stop=10.0), rec(DAYS[2], "可做", entry=None)]}
     assert fp.orders_for(recs, POS, B, fp.Variant("x", rr_filter=False)) == {}
+
+
+def test_hold_past_target_follows_each_days_play_key():
+    assert fp.hold_for(RECS, POS, 5)["AAA"] == [False, False, True, False, False]   # 第 2 天是稳定上涨
+    assert fp.FULL.hold_if_intact and not fp.V2.hold_if_intact
 
 
 def test_random_entry_keeps_count_distances_and_holding_cap():

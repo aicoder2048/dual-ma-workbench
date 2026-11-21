@@ -228,6 +228,28 @@ def test_googl_bottom_turn_plan_targets_the_gap(plans):
     assert plans["GOOGL"]["trade_plan"]["holding"]["stop"] is None
 
 
+# ---------- 到第一目标（P25）：检查点，不是自动离场 ----------
+
+@pytest.mark.parametrize(("key", "hold"), [("稳定上涨", True), ("加速上涨", True), ("多头结构回撤中", False), ("横盘", False),
+                                           ("横盘破位", False), ("过渡", False), ("加速下跌", False), ("空头结构反弹中", False)])
+def test_first_target_holds_only_while_60_120_still_trend_up(key, hold):
+    assert tp.holds_past_target(key) is hold
+
+
+def test_steady_uptrend_plan_keeps_holding_past_the_first_target(plans):
+    f = plans["SPY"]["trade_plan"]["flat"]
+    assert "524.61" in f["at_target"] and "就继续拿，按止损和失效离场" in f["at_target"]
+
+
+def test_bottom_turn_plan_leaves_at_the_first_target(plans):
+    f = plans["GOOGL"]["trade_plan"]["flat"]
+    assert "178.74" in f["at_target"] and "到了就在目标位走" in f["at_target"]
+
+
+def test_plan_without_targets_has_no_at_target_line(plans):
+    assert plans["TSLA"]["trade_plan"]["flat"]["at_target"] is None
+
+
 def test_account_setting_turns_into_shares():
     a = dma.analyze(load_fixture("GOOGL", "2025-04-08"), "GOOGL", "fixture", sizing=tp.Sizing(account=100_000))
     z = a["trade_plan"]["flat"]["size"]
