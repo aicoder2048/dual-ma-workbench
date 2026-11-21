@@ -58,7 +58,7 @@ uv run <SKILL_DIR>/scripts/dma_analyze.py <TICKER> [--asof YYYY-MM-DD]
 uv run <SKILL_DIR>/scripts/dma_analyze.py --csv prices.csv   # 列：Date, Close[, Volume]
 ```
 
-脚本先输出"0) 模糊判断"（偏多 / 偏空 / 不明、依据、10 天后的判断、两个方向上什么价位会改变判断），再输出：类型 × 阶段、钟表、各周期 MA/EMA、排列、乖离率分位、20/60 和 60/120 的五个进度点、周线和小时线的排列、成交量；唯一的一段打法和交易计划（空仓：进场触发价、止损、目标位、盈亏比、建议股数；持仓：止损、目标位）；三条 MA 的抵扣价推演；规则清单（每条规则的状态、依据、价位，让位的标"某某优先"）。`--account <金额>` 给账户规模，`--risk-pct`（默认 1）或 `--risk-amount` 给每笔可承受亏损，计划里才有股数；不给只算每 1 万元风险对应多少股。`--json` 另带 `trade_plan`（`scripts/tradeplan.py`），和 `projection`（门槛路径、持平情景、求解）、`structure`（顶底构造、波段）、`weekly`、`hourly`、`thresholds`，和 `ma200`（见下面的 MA200 对照）。
+脚本先输出"0) 模糊判断"（偏多 / 偏空 / 不明、依据、10 天后的判断、两个方向上什么价位会改变判断），再输出：类型 × 阶段、钟表、各周期 MA/EMA、排列、乖离率分位、20/60 和 60/120 的五个进度点、周线和小时线的排列、成交量；唯一的一段打法和交易计划（空仓：进场触发价、止损、目标位、盈亏比、建议股数；持仓：止损、目标位）；三条 MA 的抵扣价推演；规则清单（每条规则的状态、依据、价位，让位的标"某某优先"）。`--account <金额>` 给账户规模，`--risk-pct`（默认 1）或 `--risk-amount` 给每笔可承受亏损，计划里才有股数；不给只算每 1 万元风险对应多少股。`--json` 另带 `trade_plan`（`scripts/tradeplan.py`），和 `projection`（门槛路径、持平情景、求解）、`structure`（顶底构造、波段）、`weekly`、`hourly`、`thresholds`，和 `ma200`（见下面的 MA200 对照），和 `earnings`（过去几次和下一次财报日，yfinance，每只票缓存一天；取不到、`--csv` 时写明原因）。财报日只是信息，不进规则：下次财报在 `EARNINGS_WARN_DAYS`（10 个交易日，脚本自定）内时，提醒跳空可能越过止损价。
 
 依赖（pandas、yfinance）用 PEP 723 写在脚本开头，`uv run` 自动安装。装了 yfinance 只是为了能回退，不代表用了它。
 

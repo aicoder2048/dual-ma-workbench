@@ -42,6 +42,7 @@ from zoneinfo import ZoneInfo
 
 import pandas as pd
 
+import earnings as ea
 import regime as rg
 import rules as rl
 import tradeplan as tp
@@ -79,6 +80,7 @@ THRESHOLDS = {
     "PATTERN_RECENT_BARS": (rl.PATTERN_RECENT_BARS, "脚本自定"),
     "BIAS120_PCT": (rl.BIAS120_PCT, "视频"), "WEEKLY_BIAS120_PCT": (rl.WEEKLY_BIAS120_PCT, "视频"),
     "RR_MIN": (tp.RR_MIN, "视频"), "RR_IDEAL": (tp.RR_IDEAL, "视频"),
+    "EARNINGS_WARN_DAYS": (ea.WARN_DAYS, "脚本自定"),
 }
 
 
@@ -92,6 +94,8 @@ def _plain(x):
         return [_plain(v) for v in x]
     return x
 
+
+NO_EARNINGS = {"available": False, "reason": "CSV 模式不取财报日"}
 
 HISTORY_YEARS = 5           # 取多少年日线（周线 MA120 要 120 周）
 DAILY_YEARS = 3             # 日线分析只看最近 3 年（乖离率分位用这段全部历史），和取 5 年之前一致
@@ -377,11 +381,13 @@ def lean_after(df: pd.DataFrame) -> dict:
 
 
 def analyze(df: pd.DataFrame, label: str, src: str, history: pd.DataFrame | None = None,
-            hourly: dict | None = None, sizing: tp.Sizing | None = None) -> dict:
+            hourly: dict | None = None, sizing: tp.Sizing | None = None, earnings: dict | None = None) -> dict:
     """把三步分析算成结构化数据，Markdown 和 HTML 都从这里渲染。
 
     history 是周线用的更长历史，默认就用 df；hourly 是 hourly.load_hourly 的结果，没有时 P13 需看图。
     sizing 是账户规模和每笔可承受亏损，只影响交易计划的股数；不给时只算每 1 万元风险对应多少股。
+    earnings 是 earnings.load_earnings 的结果（只是信息，不进规则）；--csv 和回测、逐根扫描都不取（NO_EARNINGS），
+    这样进程内的分析和 --csv 的输出逐字一样。
     """
     hourly = hourly or {"available": False, "reason": "没有取小时线"}
     row = df.iloc[-1]
@@ -434,6 +440,7 @@ def analyze(df: pd.DataFrame, label: str, src: str, history: pd.DataFrame | None
         "drops": drops, "lean": lean,
         "projection": projection(df), "structure": structure_json(df), "weekly": weekly,
         "hourly": hourly, "ma200": ma200_of(df, regime),
+        "earnings": earnings or NO_EARNINGS,
     }
 
 
@@ -526,6 +533,11 @@ def render_markdown(a: dict) -> str:
     out.append(f"- 周线：MA {w['arr_ma']}、EMA {w['arr_ema']}" if w["available"] else f"- 周线：{w['reason']}")
     out.append(f"- 小时线（到 {h['last']}）：MA {h['arr_ma']}、EMA {h['arr_ema']}" if h["available"]
                else f"- 小时线：{h['reason']}")
+    e = a["earnings"]
+    if e["available"]:
+        out.append(f"- 下次财报：{e['next']}（{e['days_to_next']} 个交易日后）" if e["next"] else "- 下次财报：还没公布")
+    else:
+        out.append(f"- 财报日：{e['reason']}")
     if a["volume"]:
         out.append(f"- 成交量：今日 {a['volume']['ratio']:.1f}× 50 日均量；近 20 日大量（>{rl.VOLUME_SPIKE}×）："
                    + (", ".join(a["volume"]["spikes"]) or "无"))
@@ -587,7 +599,8 @@ def main() -> None:
         hourly = load_hourly(a.ticker, a.asof, find_polygon_key(a.env_file), a.source, polygon_json)
     elif a.csv:
         hourly = {"available": False, "reason": "CSV 模式不取小时线"}
-    result = analyze(df, a.ticker.upper() if a.ticker else a.csv, src, history, hourly, sizing)
+    earnings = ea.load_earnings(a.ticker.upper(), str(df.index[-1].date()), str(df.index[0].date())) if a.ticker else None
+    result = analyze(df, a.ticker.upper() if a.ticker else a.csv, src, history, hourly, sizing, earnings)
     if a.json:
         from html_report import CHART_BARS, chart_data
 
