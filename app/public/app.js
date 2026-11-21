@@ -488,6 +488,13 @@ async function main() {
   installCitationHandlers(() => (state.data ? `${state.data.analysis.label} ${state.data.analysis.date}` : ""));
   chartApi = createChart($("chart"), $("legend"));
   chartApi?.onAnalyzeDate((date) => state.ticker && loadAnalysis(state.ticker, date));
+  // 点结论卡片上的价位（触发、止损、目标）：图上那条线亮几秒；默认视口里图在结论下面，先滚到看得见
+  $("verdict").addEventListener("click", (e) => {
+    const chip = e.target.closest(".pchip[data-price]");
+    if (!chip || !chartApi) return;
+    chartApi.flashLevel({ kind: chip.dataset.kind, price: Number(chip.dataset.price), title: chip.dataset.title });
+    $("chart").scrollIntoView({ block: "nearest", behavior: "smooth" });
+  });
   initDrawer();
   initSelection({
     chart: chartApi,

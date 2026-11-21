@@ -2762,3 +2762,58 @@ describe("图层菜单", () => {
     await page.close();
   }, 30_000);
 });
+
+describe("结论卡片上的价位：点一下，图上那条线亮几秒", () => {
+  const flashing = (page: Page) => page.evaluate(async () => (await import("/app.js")).getChart().flashing());
+  const levels = (page: Page) => page.evaluate(async () => (await import("/app.js")).getChart().levels());
+  const gone = (page: Page) => until(page, "亮着的线收掉", async () => (await import("/app.js")).getChart().flashing() === null, 8000);
+  const chip = (item: string) => `#verdict .concl-row[data-situation="flat"] [data-item="${item}"]`;
+  /** 亮着的那条线在屏幕上看得见：它的纵坐标落在图里，那个位置上是图，没被输入框之类的挡住。 */
+  const lineOnScreen = (page: Page) => until(page, "亮着的线在屏幕上看得见", async () => {
+    const c = (await import("/app.js")).getChart();
+    const f = c.flashing();
+    const el = document.getElementById("chart")!;
+    const r = el.getBoundingClientRect();
+    if (!f || f.y === null || f.y < 0 || f.y > r.height - c.chart.timeScale().height()) return false;
+    const hit = document.elementFromPoint(r.left + 60, r.top + f.y);
+    return !!hit && el.contains(hit);
+  }, 3000);
+
+  test("默认视图点「止损」：图滚进视野，那条线亮起来、看得见没被挡，几秒后自己收掉；价位线图层关着、用键盘点也一样；很远的价位也看得见", async () => {
+    const { page, errors } = await open();
+    await page.waitForSelector("#chart canvas");
+    for (const item of ["trigger", "stop", "target"]) expect({ item, ok: await notCovered(page, chip(item)) }).toEqual({ item, ok: true });
+    expect(await flashing(page)).toBeNull();
+    const before = await levels(page);
+    expect(before).toHaveLength(4);
+
+    await page.click(chip("stop"));
+    const stop = (await flashing(page))!;
+    expect([stop.kind, stop.title]).toEqual(["stop", "止损"]);
+    expect(stop.price).toBeCloseTo(183.08, 2);
+    await lineOnScreen(page);
+    expect(await levels(page)).toEqual(before); // 平时的价位线不动
+    await gone(page);
+    expect(await levels(page)).toEqual(before);
+
+    // 价位线图层关着：图上没有价位线，点了照样亮；用键盘点（Tab 到标签上按 Enter）
+    await switchLayer(page, "levels");
+    expect(await levels(page)).toEqual([]);
+    await page.focus(chip("target"));
+    await page.keyboard.press("Enter");
+    expect(await flashing(page)).toMatchObject({ kind: "target", title: "目标", price: 228.86 });
+    await lineOnScreen(page);
+    // 亮着的时候再点另一个：换成那一条，不是两条
+    await page.click(chip("trigger"));
+    expect(await flashing(page)).toMatchObject({ kind: "trigger", title: "触发", price: 212.21 });
+    await lineOnScreen(page);
+    expect(await levels(page)).toEqual([]);
+    await gone(page);
+
+    // 价位在图的价格范围外面（替身里没有这么远的目标，直接叫图表亮一个）：价格轴撑到它，线还是看得见
+    await page.evaluate(async () => (await import("/app.js")).getChart().flashLevel({ kind: "target", price: 400, title: "目标" }));
+    await lineOnScreen(page);
+    expect(errors).toEqual([]);
+    await page.close();
+  }, 40_000);
+});

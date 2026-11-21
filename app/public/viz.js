@@ -360,11 +360,13 @@ export function planBody(plans, p, close) {
 /**
  * 一个价位标签：是什么、价位、离现价多远。item 给测试和读屏定位（trigger / stop / target）。
  * note 换掉"离现价多远"那一格；compact 时不写价位的说明（悬停看），五样放得下一行。
+ * 是个按钮：点一下，图上那条线亮几秒（app.js 接到 chart.flashLevel；cls 就是价位线的种类 trigger / stop / target）。
  */
 function priceChip(key, lv, close, cls, { item = cls, note = pct((lv?.price / close - 1) * 100), compact = false, more = "" } = {}) {
   if (!lv) return "";
-  return `<span class="pchip ${cls}" data-item="${item}" ${tip(`${key}：${lv.label} ${f2(lv.price)}${more ? `。${more}` : ""}`)}><span class="ck">${key}</span>${compact ? "" : esc(lv.label)}
-    <b class="num">${f2(lv.price)}</b>${note ? `<span class="num muted">${note}</span>` : ""}</span>`;
+  return `<button type="button" class="pchip ${cls}" data-item="${item}" data-kind="${cls}" data-price="${lv.price}" data-title="${key}" ${
+    tip(`${key}：${lv.label} ${f2(lv.price)}${more ? `。${more}` : ""}（点一下，图上亮出这条线）`)}><span class="ck">${key}</span>${compact ? "" : esc(lv.label)}
+    <b class="num">${f2(lv.price)}</b>${note ? `<span class="num muted">${note}</span>` : ""}</button>`;
 }
 
 const RR_CLASS = { 不做: "bad", 可做: "ok", 理想: "good" };

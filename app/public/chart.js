@@ -29,6 +29,8 @@ const css = (n) => getComputedStyle(document.documentElement).getPropertyValue(n
 
 // 破线拐头着色：tone 由 Python 算好（见 html_report.bar_tones），这里只查颜色
 const TONE_TOKENS = { bull: "--bar-bull", bear: "--bar-bear", mixed: "--bar-mixed" };
+/** 点结论卡片上的价位，图上那条线亮多久（毫秒）。 */
+const FLASH_MS = 4000;
 
 export function createChart(box, legendEl) {
   if (!window.LightweightCharts) {
@@ -51,7 +53,17 @@ export function createChart(box, legendEl) {
     handleScroll: { mouseWheel: false, pressedMouseMove: true, horzTouchDrag: true, vertTouchDrag: false },
     handleScale: { mouseWheel: false, pinch: true, axisPressedMouseMove: true },
   });
-  const candles = chart.addCandlestickSeries({ priceLineVisible: false });
+  let flash = null; // 正在亮着的那条价位线，见下面的 flashLevel
+  const candles = chart.addCandlestickSeries({
+    priceLineVisible: false,
+    // 亮着的价位在图的价格范围外面时，把范围撑到它，不然点了看不见
+    autoscaleInfoProvider: (base) => {
+      const info = base();
+      if (!info?.priceRange || !flash) return info;
+      const { minValue, maxValue } = info.priceRange;
+      return { ...info, priceRange: { minValue: Math.min(minValue, flash.price), maxValue: Math.max(maxValue, flash.price) } };
+    },
+  });
   const vol = chart.addHistogramSeries({ priceScaleId: "vol", priceFormat: { type: "volume" }, lastValueVisible: false, priceLineVisible: false });
   chart.priceScale("vol").applyOptions({ scaleMargins: { top: 0.8, bottom: 0 } });
   const series = {};
@@ -224,6 +236,19 @@ export function createChart(box, legendEl) {
   /** 图上的小字（缺口、颈线……）避开价位线和自己画的线。 */
   const guidePrices = () => [...(levelsShown() ? levels.map((lv) => lv.price) : []), ...drawn];
   const syncGuides = () => structLayer.setGuides(guidePrices());
+
+  // ---------- 点结论卡片上的价位：那条线在图上亮几秒（价位线图层关着、回放中也照样亮）。lv：{ kind, price, title } ----------
+  function flashLevel(lv) {
+    clearFlash();
+    const line = candles.createPriceLine({ price: lv.price, color: css(LEVEL_COLOR[lv.kind]), lineWidth: 3, lineStyle: 0, axisLabelVisible: true, title: lv.title });
+    flash = { kind: lv.kind, price: lv.price, title: lv.title, line, timer: setTimeout(clearFlash, FLASH_MS) };
+  }
+  function clearFlash() {
+    if (!flash) return;
+    clearTimeout(flash.timer);
+    candles.removePriceLine(flash.line);
+    flash = null;
+  }
 
   // ---------- 结构标注：波段、最近的顶部 / 底部构造、M 顶 / W 底 / 2B（skill 的 structure.py 算好的，这里只画） ----------
   const structLayer = createOverlay(chart, candles, box);
@@ -769,6 +794,7 @@ export function createChart(box, legendEl) {
       if (rs.mode === "replay" || !d.weekly) frame = "day"; // 回放只在日线上；没有周线（练习）就回日线
       if (tool === "pick-start") tool = "none"; // 换了数据：选到一半的起点作废
       ruler = null; // 量的两点属于旧数据
+      clearFlash(); // 亮着的价位也是
       arm();
       if (!sameTicker) { drawKey = key; loadDrawn(); }
       structure = gaps = null; // 结构、缺口属于上一份分析；app 随后用 setStructure 给这份的（练习、揭晓时不给）
@@ -860,6 +886,10 @@ export function createChart(box, legendEl) {
     focus: () => ({ group: shownFocus(), band: structLayer.ribbon().points }),
     /** 当前画在图上的价位线（测试和问鸿雁用）。 */
     levels: () => (levelsShown() ? levels.map(({ kind, title, price }) => ({ kind, title, price })) : []),
+    /** 点了结论卡片上的一个价位：{ kind, price, title } 那条线在图上亮几秒，价位线图层关着也亮。 */
+    flashLevel,
+    /** 正在亮着的价位（测试用）：{ kind, price, title, y（在图上的纵坐标） }，没有是 null。 */
+    flashing: () => (flash ? { kind: flash.kind, price: flash.price, title: flash.title, y: candles.priceToCoordinate(flash.price) } : null),
     /** 图层（测试用）：现在是哪个预设（null = 自定），每个图层开没开、画没画、不能用的原因。 */
     layers: () => ({ preset: presetOf(layers), rows: layerRows(layers, layerCtx()).map(({ key, on, shown: drawn, why }) => ({ key, on, shown: drawn, why })) }),
     /** 图上的抵扣价小黄点（测试用）：["20扣", …]。 */
