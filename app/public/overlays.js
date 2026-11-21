@@ -120,12 +120,28 @@ export function structureScene(s, candles) {
  */
 export function gapBands(gaps, targets, candles) {
   if (!gaps?.length || !candles.length) return [];
-  const used = (g) => (targets ?? []).some((t) => t.kind === "缺口" && t.date === g.date && Math.abs(t.price - g.bottom) < 1e-6);
   const last = candles.length - 1;
   return gaps.filter((g) => g.date <= candles[last].time).map((g) => {
     const from = candles.findIndex((c) => c.time >= g.date);
-    const target = used(g);
+    const target = isTarget(g, targets);
     return { from, to: last, top: g.top, bottom: g.bottom, target, date: g.date,
       label: `缺口 ${f2(g.bottom)}–${f2(g.top)}${target ? " · 目标位" : ""}` };
   });
+}
+
+/** 交易计划拿这个缺口当目标位了吗（目标位记的是缺口的日期和下沿）。 */
+const isTarget = (g, targets) => (targets ?? []).some((t) => t.kind === "缺口" && t.date === g.date && Math.abs(t.price - g.bottom) < 1e-6);
+
+/**
+ * 默认只画要紧的缺口：交易计划当目标位的，加上离现价最近的上方、下方各一个（价格在缺口里面算上方）。
+ * 其余的收在「全部缺口」后面。按原来的顺序返回。
+ */
+export function pickGaps(gaps, targets, close) {
+  if (!gaps?.length) return [];
+  const above = gaps.filter((g) => g.top > close), below = gaps.filter((g) => g.top <= close);
+  const nearest = [
+    above.reduce((a, g) => (!a || g.bottom < a.bottom ? g : a), null),
+    below.reduce((a, g) => (!a || g.top > a.top ? g : a), null),
+  ];
+  return gaps.filter((g) => nearest.includes(g) || isTarget(g, targets));
 }

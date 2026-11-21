@@ -3,15 +3,10 @@ import { baseCandleStyle, candleBar as styledBar } from "./candles.js";
 import { createOverlay } from "./chartoverlay.js";
 import { earningsMarks, logicalOf } from "./earnings.js";
 import { measure, measureLines } from "./measure.js";
-import { gapBands, structureScene } from "./overlays.js";
+import { BAND_ALPHA, CANDLE_ALPHA, GROUPS, SPECS, alpha, bandPoints, lineStyle, nextFocus } from "./lines.js";
+import { gapBands, pickGaps, structureScene } from "./overlays.js";
 import { ohlcRow, weekLabel } from "./readout.js";
 import { DEFAULT_SPEED, OFF, SPEEDS, appendDelta, earliestIndex, indexOnOrBefore, randomIndex, sliceAt, speedMs, step } from "./replay.js";
-
-const SPECS = [];
-[20, 60, 120].forEach((n) => ["MA", "EMA"].forEach((k) =>
-  SPECS.push({ key: k + n, token: `--${k.toLowerCase()}${n}`, dashed: k === "EMA", width: k === "MA" ? 2 : 1 })));
-// MA200 朴素规则的对照线：默认不画，在图例里点开
-SPECS.push({ key: "MA200", token: "--ma200", dashed: false, width: 1, off: true });
 
 /** 图表库传来的时间（"2026-10-22"、{year,month,day} 或 UTC 秒）→ "2026-10-22"。 */
 function isoDate(t) {
@@ -34,6 +29,9 @@ const TONE_TITLE = [
   "绿：收盘在 MA20 上方，且高于 20 日抵扣价（MA20 向上）",
   "黑：两样都不满足（MA20 向下）。第一根黑柱就是破线拐头信号",
   "灰：只满足一样，过渡状态",
+  "这是 LEI 黑绿线指标第一个因子的简化版，只看 MA20 破线和拐头；不是他的黑绿线（他还看 60 线组、20/60 交叉和 MACD 强度，代码没公开）",
+  "怎么读（视频 P）：多头排列里绿 = 持有 / 做多，黑 = 离场；空头排列里见绿也不做多；灰 = 不动",
+  "三点钟方向的横盘里颜色会来回翻，别跟着翻来翻去地交易",
 ].join("&#10;");
 
 export function createChart(box, legendEl) {
@@ -62,26 +60,33 @@ export function createChart(box, legendEl) {
   chart.priceScale("vol").applyOptions({ scaleMargins: { top: 0.8, bottom: 0 } });
   const series = {};
   for (const s of SPECS) {
-    series[s.key] = chart.addLineSeries({ lineWidth: s.width, lineStyle: s.dashed ? 2 : 0, visible: !s.off,
-      priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false });
+    series[s.key] = chart.addLineSeries({ visible: !s.off, priceLineVisible: false, crosshairMarkerVisible: false });
   }
 
-  legendEl.innerHTML = "";
+  // 图例：每组一个「20 线组」按钮（点它聚焦这一组），后面是这组两条线的开关（点它显示 / 隐藏这条线）
+  legendEl.innerHTML = GROUPS.map((n) => `<span class="legend-group" data-group="${n}">`
+    + `<button type="button" class="group-focus" data-group="${n}" aria-pressed="false" style="--c: var(--ma${n})"`
+    + ` title="聚焦 ${n} 线组：MA${n} 和 EMA${n} 之间填上色带，另外两组变淡；再点一次或按 Esc 取消">${n} 线组</button></span>`).join("");
   for (const s of SPECS) {
     const b = document.createElement("button");
     b.type = "button";
     b.setAttribute("aria-pressed", String(!s.off));
     b.dataset.line = s.key;
-    if (s.off) b.title = "MA200 朴素规则的对照线（收盘在上方持有，否则空仓），默认不画";
-    b.innerHTML = `<i class="${s.dashed ? "dash" : ""}" style="--c: var(${s.token})"></i>${s.key}`;
+    b.title = s.off ? "MA200 朴素规则的对照线（收盘在上方持有，否则空仓），默认不画" : `显示 / 隐藏 ${s.key}`;
+    b.innerHTML = `<i class="${s.kind.toLowerCase()}" style="--c: var(${s.token})"></i>${s.key}`;
     b.addEventListener("click", () => {
       const on = b.getAttribute("aria-pressed") !== "true";
       b.setAttribute("aria-pressed", String(on));
       series[s.key].applyOptions({ visible: on });
+      paintRibbon();
       showReadout(null);
     });
-    legendEl.appendChild(b);
+    (legendEl.querySelector(`.legend-group[data-group="${s.group}"]`) ?? legendEl).appendChild(b);
   }
+  legendEl.addEventListener("click", (e) => {
+    const g = e.target.closest(".group-focus");
+    if (g) setFocus(nextFocus(shownFocus(), { type: "click", group: Number(g.dataset.group) }));
+  });
 
   // 对数坐标：等比涨幅等高，钟表方向才可比（文章 2.4）。默认开，记在本机。
   let logScale = true;
@@ -117,7 +122,7 @@ export function createChart(box, legendEl) {
     // 照 TradingView：第一行日期 + 开高低收 + 比前一根涨跌 + 量和量比，第二行各条均线的值
     const label = frame === "week" ? weekLabel(showTime(c.time), view.partial && c === view.candles.at(-1)) : showTime(c.time);
     const lines = SPECS.filter((sp) => series[sp.key].options().visible && (frame === "day" || !sp.off))
-      .map((sp) => `<span><i class="${sp.dashed ? "dash" : ""}" style="--c: var(${sp.token})"></i>${sp.key} ${f2(at(sp.key))}</span>`).join("");
+      .map((sp) => `<span><i class="${sp.kind.toLowerCase()}" style="--c: var(${sp.token})"></i>${sp.key} ${f2(at(sp.key))}</span>`).join("");
     readout.innerHTML = `<div class="ro-ohlc">${ohlcRow(label, c, prev, view.volume.find((v) => v.time === c.time))}</div><div class="ro-lines">${lines}</div>`;
     const row = readout.firstChild;
     if (row.scrollWidth > row.clientWidth) row.classList.add("tight"); // 窄栏（默认视口）：量和量比比涨跌额要紧
@@ -145,7 +150,8 @@ export function createChart(box, legendEl) {
     + `${Object.values(TONE_TOKENS).map((t) => `<i style="--c: var(${t})"></i>`).join("")}着色</button>`
     + `<button type="button" class="levels-toggle" aria-pressed="true" title="把结论里的触发价、止损和推翻判断的价位画成虚线">价位线</button>`
     + `<button type="button" class="struct-toggle" aria-pressed="true">结构</button>`
-    + `<button type="button" class="gaps-toggle" aria-pressed="true">缺口</button>`
+    + `<span class="gaps-pair"><button type="button" class="gaps-toggle" aria-pressed="true">缺口</button>`
+    + `<button type="button" class="gaps-all" aria-pressed="false" hidden></button></span>`
     + `<button type="button" class="chart-help-toggle" aria-expanded="false">怎么用</button>`;
   legendEl.after(tools);
 
@@ -208,7 +214,11 @@ export function createChart(box, legendEl) {
       price: lv.price, color: css(LEVEL_COLOR[lv.kind]), lineWidth: 1, lineStyle: 2,
       axisLabelVisible: true, title: lv.title,
     })) : [];
+    syncGuides();
   };
+  /** 图上的小字（缺口、颈线……）避开价位线和自己画的线。 */
+  const guidePrices = () => [...(levelsShown() ? levels.map((lv) => lv.price) : []), ...drawn];
+  const syncGuides = () => structLayer.setGuides(guidePrices());
   const levelsBtn = tools.querySelector(".levels-toggle");
   levelsBtn.addEventListener("click", () => {
     levelsOn = !levelsOn;
@@ -232,9 +242,15 @@ export function createChart(box, legendEl) {
   // 缺口：没补的向下缺口画成色带（和交易计划找目标位同一个定义，tradeplan.unfilled_gaps）；被用作目标位的标出来
   let gaps = null; // { list, targets }
   let gapsOn = true;
-  try { gapsOn = localStorage.getItem("dma-gaps") !== "0"; } catch { /* 隐私模式 */ }
+  // 默认只画要紧的缺口（目标位 + 离现价最近的上下各一个），「+N」画出所有的
+  let gapsAll = false;
+  try {
+    gapsOn = localStorage.getItem("dma-gaps") !== "0";
+    gapsAll = localStorage.getItem("dma-gaps-all") === "1";
+  } catch { /* 隐私模式 */ }
   const gapsBtn = tools.querySelector(".gaps-toggle");
-  const GAPS_TITLE = "没补的向下缺口：从跳空那天画到现在的色带，上沿是跳空前一天的最低价，下沿是还没补的那段的底；交易计划拿它当目标位的标「目标位」";
+  const gapsAllBtn = tools.querySelector(".gaps-all");
+  const GAPS_TITLE = "没补的向下缺口：从跳空那天画到现在的色带，上沿是跳空前一天的最低价，下沿是还没补的那段的底；交易计划拿它当目标位的标「目标位」。默认只画目标位和离现价最近的上下各一个";
   const gapsWhyOff = () => (frame === "week" ? "缺口按日线算：切回日线看"
     : rs.mode === "replay" ? "回放时收起：缺口补没补要看之后的 K 线"
     : !gaps ? "这份数据没有缺口（练习里不画，免得提前看到答案）"
@@ -250,12 +266,25 @@ export function createChart(box, legendEl) {
     const showStruct = syncToggle(structBtn, structOn, structWhyOff(), STRUCT_TITLE);
     const showGaps = syncToggle(gapsBtn, gapsOn, gapsWhyOff(), GAPS_TITLE);
     const bars = view?.candles ?? [];
+    const all = showGaps && bars.length ? gaps.list.filter((g) => g.date <= bars.at(-1).time) : [];
+    const picked = pickGaps(all, gaps?.targets, bars.at(-1)?.close);
+    const more = all.length - picked.length;
+    gapsAllBtn.hidden = !more;
+    gapsAllBtn.setAttribute("aria-pressed", String(gapsAll));
+    gapsAllBtn.textContent = gapsAll ? "全部" : `+${more}`;
+    gapsAllBtn.title = gapsAll ? "现在画着所有没补的缺口；点一下只留目标位和离现价最近的上下各一个"
+      : `还有 ${more} 个离得远、不是目标位的缺口没画；点一下全画出来`;
     const scene = {
       ...(showStruct ? structureScene(structure, bars) : {}),
-      bands: showGaps ? gapBands(gaps.list, gaps.targets, bars) : [],
+      bands: gapBands(gapsAll ? all : picked, gaps?.targets, bars),
     };
     structLayer.set(scene, overlayColors(), bars);
   }
+  gapsAllBtn.addEventListener("click", () => {
+    gapsAll = !gapsAll;
+    try { localStorage.setItem("dma-gaps-all", gapsAll ? "1" : "0"); } catch { /* 忽略 */ }
+    paintOverlay();
+  });
   gapsBtn.addEventListener("click", () => {
     gapsOn = !gapsOn;
     try { localStorage.setItem("dma-gaps", gapsOn ? "1" : "0"); } catch { /* 忽略 */ }
@@ -273,13 +302,17 @@ export function createChart(box, legendEl) {
   help.hidden = true;
   help.innerHTML = `
     <p><b>悬停读数</b>：鼠标停在某天，上方显示那天的开高低收、涨跌、成交量（"1.2× 均量"是和 50 日均量比，超过 2 倍的大量标黄）和 6 条线。用来看"那次回调碰到了哪条线、守没守住"。</p>
+    <p><b>聚焦一组</b>：点图例里的「20 线组」「60 线组」「120 线组」，这一组的 MA 和 EMA 之间填上色带，另外两组变淡。
+      色带变宽是两种算法分歧变大，收窄、翻面是在转折；三组色带一起画太乱，所以一次只看一组。再点一次或按 Esc 取消；点 MA20 这类小按钮是显示 / 隐藏那一条线。</p>
     <p><b>缩放</b>：按住 ⌘（或 Ctrl）滚轮，或触控板双指捏合，以最新一天为准放大缩小；按住拖动可以左右平移。只滚轮时滚动的是页面。</p>
     <p><b>固定范围</b>（1 周 / 1 月 / 半年 / 1 年 / 全部）：均线的斜率（几点钟方向）只有在同样长的时间里比才不失真，所以要固定时长、用对数坐标。
       <b>1 年</b>（默认）判断现在是几点钟、属于哪种趋势；<b>全部</b>看大周期和横盘有多长（"横有多长，竖有多高"）；<b>半年</b>看最近的细节，比如这次回调比上次深还是浅；<b>1 周、1 月</b>看最近几根 K 线怎么走。</p>
     <p><b>画线</b>：点「画线」，再点图上一处，就在那个价位画一条横线，刷新后还在。常画的是前高、前低、自己的成本价、"跌破就重新看"的价位。
       图上的<b>虚线价位线</b>是自动画的：绿色是结论里的触发价（不买的打法是"先看"），红色是止损，黄色是推翻判断的价位。</p>
     <p><b>着色</b>：绿 = 收盘在 MA20 上方且高于 20 日抵扣价（MA20 向上）；黑 = 两样都不满足（MA20 向下）；灰 = 只满足一样。
-      第一根黑柱就是 20 线破线拐头；连续黑柱、收不回去，才说明拐头确认了。点工具栏里的「着色」可以关掉。</p>
+      第一根黑柱就是 20 线破线拐头；连续黑柱、收不回去，才说明拐头确认了。点工具栏里的「着色」可以关掉。
+      这是 LEI 黑绿线指标第一个因子的简化版，只用 MA20 破线（收盘对 MA20）和拐头（收盘对 20 日抵扣价）；不是他的黑绿线，他还看 60 线组、20/60 交叉和 MACD 强度，代码没有公开。
+      按均线排列读（视频 P）：多头排列里绿 = 持有 / 做多，黑 = 离场；空头排列里见绿也不做多；灰 = 不动。三点钟方向的横盘里颜色会来回翻，别跟着翻的颜色交易。</p>
     <p><b>测量</b>：点「测量」，在图上按住从一点拖到另一点，框里写涨跌多少、涨跌幅、隔几根 K 线（几个自然日），和这段距离是几个 ATR(14)。
       用来看止损离进场几个 ATR：不到 1 个 ATR 的止损，平常的波动就可能扫到。回放时一样能用；Esc 或再点一次「测量」清掉。</p>
     <p><b>日 / 周</b>：「周」换成周 K 线和周线的 6 条线（5 年），看大一级的趋势（规则 J11 看的就是它）；读数条写那一周的开高低收和比上一周的涨跌，没走完的本周会注明。
@@ -288,7 +321,8 @@ export function createChart(box, legendEl) {
       「顶·已完成」「底·形成中」这类标记是最近的顶部、底部构造；形成中时旁边的短虚线写着下一根 K 线怎样就完成（比如"下一根低 &lt; 412.30"）。
       「M顶」「W底」「2B顶」「2B底」标在收盘越过颈线（2B 是越过前高 A）的那根，带"?"的是还没确认；点标记看它的日期、价位和规则原文。回放时收起，练习里不画。</p>
     <p><b>缺口</b>：没补上的向下跳空缺口画成浅色带，从跳空那天一直画到现在：上沿是跳空前一天的最低价，下沿是之后涨回去还没补到的位置。
-      交易计划拿上方最近的缺口当目标位（P25），被用作目标位的那条颜色深一点、写着「目标位」。回放时收起，练习里不画。</p>
+      交易计划拿上方最近的缺口当目标位（P25），被用作目标位的那条颜色深一点、写着「目标位」。
+      默认只画目标位和离现价最近的上下各一个，其余的点「缺口」旁边的「+N」才画；图上的小字放不下时会往上下挪一行，再放不下就不写。回放时收起，练习里不画。</p>
     <p><b>财报 E</b>：时间轴上方的小 E 是财报日，实心的是下一次。财报后常常跳空开盘，止损单按开盘价成交，可能比止损价差很多；
       下一次财报在 10 个交易日内时，结论卡片会提醒。只是提醒，不改打法。</p>
     <p><b>看量</b>：底部的量柱，黄色是超过 50 日均量 2 倍的大量。看两种情况：横盘末期突然放量，是要变盘的信号；
@@ -321,6 +355,7 @@ export function createChart(box, legendEl) {
     drawnLines = drawn.map((price) => candles.createPriceLine({
       price, color: css("--accent"), lineWidth: 1, lineStyle: 0, axisLabelVisible: true, title: "我的线",
     }));
+    syncGuides();
   };
   const drawBtn = tools.querySelector(".draw-toggle");
   drawBtn.addEventListener("click", () => setTool(tool === "draw" ? "none" : "draw"));
@@ -353,15 +388,42 @@ export function createChart(box, legendEl) {
       grid: { vertLines: { color: css("--grid") }, horzLines: { color: css("--grid") } },
       rightPriceScale: { borderColor: css("--line") }, timeScale: { borderColor: css("--line") },
     });
-    candles.applyOptions(baseCandleStyle({ up: css("--up"), down: css("--down") }));
-    toneColors = Object.fromEntries(Object.entries(TONE_TOKENS).map(([k, t]) => [k, css(t)]));
+    // K 线淡一点（着色时也一样），均线浮在上面
+    const faded = (token) => alpha(css(token), CANDLE_ALPHA);
+    candles.applyOptions(baseCandleStyle({ up: faded("--up"), down: faded("--down") }));
+    toneColors = Object.fromEntries(Object.entries(TONE_TOKENS).map(([k, t]) => [k, faded(t)]));
     candles.setData(view.candles.map(candleBar));
     vol.setData(view.volume.map(volBar));
-    for (const s of SPECS) series[s.key].applyOptions({ color: css(s.token) });
+    paintLines();
     paintLevels();
     paintMarkers();
     paintOverlay();
   }
+  // ---------- 聚焦一组：这组的 MA、EMA 照常、中间填色带，另外两组变淡；记在本机 ----------
+  let focus = null;
+  try { focus = nextFocus(null, { type: "click", group: Number(localStorage.getItem("dma-focus")) }); } catch { /* 隐私模式 */ }
+  let practicing = false;
+  const shownFocus = () => (practicing ? null : focus); // 练习时图例收起了，没法取消聚焦：不聚焦
+  function setFocus(next) {
+    focus = next;
+    try { localStorage.setItem("dma-focus", focus ? String(focus) : ""); } catch { /* 忽略 */ }
+    paintLines();
+  }
+  function paintLines() {
+    const f = shownFocus();
+    const colors = Object.fromEntries(SPECS.map((s) => [s.token, css(s.token)]));
+    for (const s of SPECS) series[s.key].applyOptions(lineStyle(s, colors, f));
+    if (f) legendEl.dataset.focus = String(f); else delete legendEl.dataset.focus;
+    legendEl.querySelectorAll(".group-focus").forEach((b) => b.setAttribute("aria-pressed", String(Number(b.dataset.group) === f)));
+    paintRibbon();
+  }
+  /** 色带跟着图上的数据走（回放截到哪天就画到哪天）；这组有一条线被隐藏了就不画。 */
+  function paintRibbon() {
+    const f = shownFocus();
+    const both = f && series[`MA${f}`].options().visible && series[`EMA${f}`].options().visible;
+    structLayer.setRibbon(both ? bandPoints(view, f) : [], f ? alpha(css(`--ma${f}`), BAND_ALPHA) : "");
+  }
+
   const volBar = (v) => ({ time: v.time, value: v.value, color: css(v.spike ? "--drop" : "--line") });
   function paintMarkers() {
     const drop = css("--drop");
@@ -538,6 +600,7 @@ export function createChart(box, legendEl) {
       const p = view.lines[s.key]?.at(-1);
       if (p?.time === t) series[s.key].update({ ...p });
     }
+    paintRibbon();
     paintMarkers();
     showReadout(null);
   }
@@ -722,10 +785,11 @@ export function createChart(box, legendEl) {
   });
   document.addEventListener("mouseup", () => { dragging = false; });
 
-  // 快捷键：Shift+↓ 播放 / 暂停，Shift+→ 前进一根；Esc 退出画线、测量、选起点。焦点在输入框里时不管。
+  // 快捷键：Shift+↓ 播放 / 暂停，Shift+→ 前进一根；Esc 退出画线、测量、选起点，再按一次取消聚焦。焦点在输入框里时不管。
   document.addEventListener("keydown", (e) => {
     if (e.target.closest?.("input, textarea, select, [contenteditable]")) return;
     if (e.key === "Escape" && tool !== "none") { setTool("none"); return; }
+    if (e.key === "Escape" && shownFocus()) { setFocus(null); return; }
     if (rs.mode !== "replay" || !e.shiftKey || e.metaKey || e.ctrlKey || e.altKey) return;
     const action = { ArrowDown: "toggle", ArrowRight: "forward", ArrowLeft: "back" }[e.key];
     if (!action) return;
@@ -773,6 +837,7 @@ export function createChart(box, legendEl) {
       candles.update(candleBar(delta.candle));
       for (const v of delta.volume) vol.update(volBar(v));
       for (const s of SPECS) for (const p of delta.lines[s.key] ?? []) series[s.key].update({ ...p });
+      paintRibbon();
       paintMarkers();
       showReadout(null);
       // 最新一根跑出右边时跟上
@@ -790,6 +855,8 @@ export function createChart(box, legendEl) {
     setPractice(on) {
       if (on) leaveReplay();
       replayBtn.hidden = on;
+      practicing = on;
+      paintLines();
     },
     /** 停止回放、回到完整数据（取数失败、中栏收起图表时用）。 */
     stopReplay() { leaveReplay(); },
@@ -811,11 +878,20 @@ export function createChart(box, legendEl) {
     },
     /** 现在画着的结构标注和缺口（测试用）：{ segments, levels, marks, bands }，见 overlays.js。 */
     structure: () => structLayer.scene(),
+    /** 图上的小字摆在哪（测试用）：[{ text, left, top, width, height, hidden }] 和价位线的 y。 */
+    labels: () => ({ labels: structLayer.labels(), guides: guidePrices().map((p) => candles.priceToCoordinate(p)) }),
     /** 价位线：[{ kind: trigger | stop | target | invalid, price, title }]，来自 viz.js 的 chartLevels。 */
     setLevels(list) {
       levels = list;
       paintLevels();
     },
+    /** 各条线现在的样式（测试用）：{ MA20: { color, lineWidth, lineStyle, visible, lastValueVisible, title }, … }。 */
+    lineStyles: () => Object.fromEntries(SPECS.map((s) => {
+      const { color, lineWidth, lineStyle: style, visible, lastValueVisible, title } = series[s.key].options();
+      return [s.key, { color, lineWidth, lineStyle: style, visible, lastValueVisible, title }];
+    })),
+    /** 聚焦的线组（20 / 60 / 120）和色带（测试用）：{ group, band: [{ i, ma, ema }] }。 */
+    focus: () => ({ group: shownFocus(), band: structLayer.ribbon().points }),
     /** 当前画在图上的价位线（测试和问鸿雁用）。 */
     levels: () => (levelsShown() ? levels.map(({ kind, title, price }) => ({ kind, title, price })) : []),
     /** 自己画的线（价格列表）。 */

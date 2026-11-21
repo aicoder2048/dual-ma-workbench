@@ -85,6 +85,9 @@ const STRUCTURE = (() => {
 /** 缺口替身：第 150、270 根跳空向下，之后没补满（下沿是之后最高价够到的地方）。 */
 const GAPS = [150, 270].map((i) => ({ date: CHART.candles[i].time, top: CHART.candles[i - 1].low + 6, bottom: CHART.candles[i - 1].low + 1 }));
 
+/** 挤的替身（像 NVDA）：8 个没补的缺口挤在 200 ~ 220，和结论的价位线（触发 212.21、判断失效 206.26……）叠在一起；最远那个是目标位。 */
+const CROWD_GAPS = [60, 90, 110, 130, 160, 180, 200, 230].map((i, k) => ({ date: CHART.candles[i].time, bottom: 200 + k * 2.5, top: 202 + k * 2.5 }));
+
 const MP3 = readFileSync(resolve(import.meta.dir, "../test/fixtures/tts-sample.mp3"));
 const ttsCalls: { text: string; voice: string }[] = [];
 const wsSent: any[] = [];
@@ -126,6 +129,12 @@ beforeAll(async () => {
         const n = nvda as Analysis;
         const flat = { ...n.trade_plan.flat, targets: [{ price: GAPS[1].bottom, kind: "缺口", rule: "P25", source: "视频" as const, date: GAPS[1].date }] };
         return JSON.stringify({ analysis: { ...n, label: "STRUCT", structure: STRUCTURE, gaps: GAPS, trade_plan: { ...n.trade_plan, flat } }, chart: CHART });
+      }
+      if (args[0] === "CROWD") {
+        const n = nvda as Analysis;
+        const far = CROWD_GAPS.at(-1)!;
+        const flat = { ...n.trade_plan.flat, targets: [{ price: far.bottom, kind: "缺口", rule: "P25", source: "视频" as const, date: far.date }] };
+        return JSON.stringify({ analysis: { ...n, label: "CROWD", structure: STRUCTURE, gaps: CROWD_GAPS, trade_plan: { ...n.trade_plan, flat } }, chart: CHART });
       }
       if (args[0] === "EARN") { // 3 天后财报：图上标 E，结论卡片提醒跳空
         const n = nvda as Analysis;
@@ -646,6 +655,24 @@ describe("K 线图工具", () => {
     await page.close();
   }, 30_000);
 
+  test("均线都是实线：MA 粗、EMA 细；右端价格轴写 MA 的名字；换主题颜色跟着换", async () => {
+    const { page, errors } = await open();
+    await page.waitForSelector("#chart canvas");
+    const styles = () => page.evaluate(async () => (await import("/app.js")).getChart().lineStyles());
+    const light = await styles();
+    for (const [key, s] of Object.entries<any>(light)) expect({ key, style: s.lineStyle }).toEqual({ key, style: 0 });
+    for (const n of [20, 60, 120]) expect(light[`MA${n}`].lineWidth).toBeGreaterThan(light[`EMA${n}`].lineWidth);
+    expect(["MA20", "EMA20", "MA60", "MA120"].map((k) => light[k].title)).toEqual(["MA20", "", "MA60", "MA120"]);
+    // 图例和读数条的小样：EMA 也是实线
+    const swatches = await page.$$eval("#legend i, #chart-readout i", (els) => els.map((e) => getComputedStyle(e).borderTopStyle));
+    expect(new Set(swatches)).toEqual(new Set(["solid"]));
+    await page.click('#theme [data-value="dark"]');
+    await page.waitForFunction(async (c) => (await import("/app.js")).getChart().lineStyles().MA20.color !== c, light.MA20.color);
+    expect((await styles()).MA20.color).toBe("#e5e9f0");
+    expect(errors).toEqual([]);
+    await page.close();
+  }, 30_000);
+
   test("价位线：结论里的触发、止损、目标和推翻判断的价位画在图上，可以关掉", async () => {
     const { page } = await open();
     await page.waitForSelector("#chart canvas");
@@ -969,6 +996,122 @@ describe("缺口", () => {
     await page.click('[data-frame="week"]');
     expect(await page.isDisabled(".gaps-toggle")).toBe(true);
     expect(await bands()).toEqual([]);
+    expect(errors).toEqual([]);
+    await page.close();
+  }, 30_000);
+});
+
+describe("聚焦一组", () => {
+  const focus = (page: Page) => page.evaluate(async () => (await import("/app.js")).getChart().focus());
+  const styles = (page: Page) => page.evaluate(async () => (await import("/app.js")).getChart().lineStyles());
+
+  test("点「20 线组」：20 组的 MA、EMA 之间填色带，另外两组变淡；再点一次取消；按 Esc 也取消；刷新后还记得", async () => {
+    const { page, errors } = await open();
+    await page.waitForSelector("#chart canvas");
+    await scrollIntoCenter(page, ".chart-card");
+    for (const n of [20, 60, 120]) expect({ n, ok: await notCovered(page, `.group-focus[data-group="${n}"]`) }).toEqual({ n, ok: true });
+    expect(await focus(page)).toEqual({ group: null, band: [] });
+    const shot = () => page.locator("#chart").screenshot();
+    const plain = await shot();
+    await page.click('.group-focus[data-group="20"]');
+    const on = await focus(page);
+    expect(on.group).toBe(20);
+    // 色带从两条线都有值的第一根画到最新一根，值就是这两条线的值
+    expect(on.band).toHaveLength(CHART.candles.length);
+    expect(on.band.at(-1)).toEqual({ i: CHART.candles.length - 1, ma: CHART.lines.MA20.at(-1)!.value, ema: CHART.lines.EMA20.at(-1)!.value });
+    expect(await page.getAttribute('.group-focus[data-group="20"]', "aria-pressed")).toBe("true");
+    const s = await styles(page);
+    expect(s.MA20.color).toBe("#1c2430");
+    expect([s.MA60.color, s.EMA120.color].every((c: string) => c.startsWith("rgba(") && c.endsWith(",0.2)"))).toBe(true);
+    expect([s.EMA20.title, s.MA60.title]).toEqual(["EMA20", ""]);
+    expect(Buffer.compare(plain, await shot())).not.toBe(0); // 色带真的画在图上
+    // 图例里一条线的开关照常：隐藏 EMA20，色带没了；再打开，色带回来
+    await page.click('#legend button[data-line="EMA20"]');
+    expect((await focus(page)).band).toEqual([]);
+    await page.click('#legend button[data-line="EMA20"]');
+    expect((await focus(page)).band.length).toBeGreaterThan(0);
+    await page.click('.group-focus[data-group="20"]');
+    expect(await focus(page)).toEqual({ group: null, band: [] });
+    await page.click('.group-focus[data-group="60"]');
+    await page.reload();
+    await page.waitForSelector("#chart canvas");
+    expect((await focus(page)).group).toBe(60);
+    await page.keyboard.press("Escape");
+    expect(await focus(page)).toEqual({ group: null, band: [] });
+    expect((await styles(page)).MA20.color).toBe("#1c2430");
+    expect(errors).toEqual([]);
+    await page.close();
+  }, 30_000);
+
+  test("回放时色带跟着截到的那天走，往后放一根就多一根", async () => {
+    const { page, errors } = await open();
+    await page.waitForSelector("#chart canvas");
+    await scrollIntoCenter(page, ".chart-card");
+    await page.click('.group-focus[data-group="120"]');
+    await page.click(".replay-toggle");
+    await page.click(".replay-start");
+    await page.fill(".replay-menu input", CHART.candles[200].time);
+    await page.waitForFunction(async () => (await import("/app.js")).getChart().replay().mode === "replay");
+    await page.click(".replay-play"); // 暂停
+    const at = async () => (await focus(page)).band.at(-1)?.i;
+    const idx = (await page.evaluate(async () => (await import("/app.js")).getChart().replay())).index;
+    expect(await at()).toBe(idx);
+    expect((await focus(page)).band).toHaveLength(idx + 1); // 回放那天之后的线不画
+    await page.click(".replay-forward");
+    expect(await at()).toBe(idx + 1);
+    await page.click(".replay-exit");
+    expect(await at()).toBe(CHART.candles.length - 1);
+    expect(errors).toEqual([]);
+    await page.close();
+  }, 30_000);
+});
+
+describe("图面去杂：缺口只画要紧的，小字不压在一起", () => {
+  const api = <T,>(page: Page, fn: string) => page.evaluate(async (fn) => (await import("/app.js")).getChart()[fn](), fn) as Promise<T>;
+  const bandDates = async (page: Page) => (await api<any>(page, "structure")).bands.map((b: any) => b.date);
+  /** 画出来的小字两两不重叠，也不压在价位线上。 */
+  const tidy = async (page: Page) => {
+    const { labels, guides } = await api<any>(page, "labels");
+    const shown = labels.filter((l: any) => !l.hidden);
+    const hit = (a: any, b: any) => a.left < b.left + b.width && b.left < a.left + a.width && a.top < b.top + b.height && b.top < a.top + a.height;
+    const pairs = shown.flatMap((a: any, k: number) => shown.slice(k + 1).filter((b: any) => hit(a, b)).map((b: any) => [a.text, b.text]));
+    const onLine = shown.filter((l: any) => guides.some((y: number) => y > l.top && y < l.top + l.height)).map((l: any) => l.text);
+    return { count: shown.length, pairs, onLine };
+  };
+
+  test("默认只画目标位和离现价最近的缺口；「+6」看得见、没被挡，点开画全部、小字照样不重叠；再点收回", async () => {
+    const { page, errors } = await open(undefined, "CROWD");
+    await page.waitForSelector("#chart .struct-mark");
+    await scrollIntoCenter(page, ".chart-card");
+    expect(await bandDates(page)).toEqual([CROWD_GAPS[0].date, CROWD_GAPS[7].date]);
+    expect(await page.textContent(".gaps-all")).toBe("+6");
+    expect(await notCovered(page, ".gaps-all")).toBe(true);
+    const before = await tidy(page);
+    expect(before).toMatchObject({ pairs: [], onLine: [] });
+    expect(before.count).toBeGreaterThan(2);
+    await page.click(".gaps-all");
+    expect(await bandDates(page)).toEqual(CROWD_GAPS.map((g) => g.date));
+    expect(await page.getAttribute(".gaps-all", "aria-pressed")).toBe("true");
+    await page.waitForTimeout(100); // 等图重画一帧，小字重新摆过
+    const all = await tidy(page);
+    expect(all).toMatchObject({ pairs: [], onLine: [] });
+    // 目标位那条一定写出来
+    expect((await api<any>(page, "labels")).labels.find((l: any) => l.text.includes("目标位")).hidden).toBe(false);
+    await page.click(".gaps-all");
+    expect(await bandDates(page)).toHaveLength(2);
+    // 「缺口」关掉时「+6」也收起
+    await page.click(".gaps-toggle");
+    expect(await page.isVisible(".gaps-all")).toBe(false);
+    expect(errors).toEqual([]);
+    await page.close();
+  }, 30_000);
+
+  test("关掉价位线：小字就不用再躲它们", async () => {
+    const { page, errors } = await open(undefined, "CROWD");
+    await page.waitForSelector("#chart .struct-mark");
+    expect((await api<any>(page, "labels")).guides.length).toBeGreaterThan(0);
+    await page.click(".levels-toggle");
+    expect((await api<any>(page, "labels")).guides).toEqual([]);
     expect(errors).toEqual([]);
     await page.close();
   }, 30_000);
@@ -1940,7 +2083,8 @@ describe("盲测练习", () => {
   }, [REAL_TICKER, REAL[0].date, REAL.at(-1)!.date]);
 
   test("出题 → 记计划 → 往后放到进场、止损 → 揭晓；控件都在默认视图里，揭晓前看不到真实信息", async () => {
-    const { page, errors } = await open();
+    // 平时聚焦着 20 线组：练习时图例收起了，没法取消，所以不聚焦
+    const { page, errors } = await open((p) => p.addInitScript(() => localStorage.setItem("dma-focus", "20")));
     expect(await usable(page, "#practice-btn")).toBe(true);
     await page.click("#practice-btn");
     await page.click("#pp-tab-combo");
@@ -1965,6 +2109,7 @@ describe("盲测练习", () => {
     expect(await page.isDisabled(".gaps-toggle")).toBe(true);
     // 周线不能切（练习的图只到现在那根，周线会用到之后的 K 线）
     expect(await page.isDisabled('[data-frame="week"]')).toBe(true);
+    expect(await page.evaluate(async () => (await import("/app.js")).getChart().focus())).toEqual({ group: null, band: [] });
     for (const sel of ['[data-act="plan"]', '[data-act="step"]', '[data-act="play"]', '[data-act="reveal"]']) {
       expect({ sel, ok: await usable(page, `#practice ${sel}`) }).toEqual({ sel, ok: true });
     }
