@@ -19,6 +19,7 @@ import { SettingsStore } from "../src/settings.ts";
 import { PROJECT_ROOT, SourceLibrary } from "../src/sources.ts";
 import { Watchlist } from "../src/watchlist.ts";
 import { prices, REAL, REAL_TICKER } from "./fixtures/practice-prices.ts";
+import nvda from "./fixtures/nvda-analysis.json";
 
 const NOW = "2026-11-20T00:00:00.000Z";
 const SCAN_BARS = 60;
@@ -275,4 +276,14 @@ describe("接口", () => {
     expect((await call("/api/drills/next?kind=bogus")).status).toBe(400);
     expect((await call("/api/drills/next")).data.drill).not.toBeNull(); // 不指定题型：按弱项挑
   }, 30_000);
+});
+
+describe("看图题的依据：加速说的是出现在趋势哪一头，不和阶段打架", () => {
+  test("NVDA 加速下跌·延伸、加速起点：依据写「出现在趋势刚开始」，不写裸的「起点」", () => {
+    const a = nvda as Analysis;
+    const [d] = GENERATORS.chart({ a, dates: [], rand: seeded(1) });
+    expect(picked(d)).toBe("加速下跌·延伸");
+    expect(d.evidence).toContain("加速：按乖离判，出现在趋势刚开始");
+    expect(d.evidence.join("\n")).not.toContain("在起点");
+  });
 });

@@ -105,6 +105,11 @@ class Accel:
     by: str                   # 什么让它算加速：钟表 / 乖离
 
 
+# J8 的起点 / 末端是加速出现在趋势哪一头（视频 B 08:59「通常出现在趋势 刚开始的阶段」、09:03「或者是趋势 即将结束的阶段」），
+# 不是 J7 的阶段。给人读的文字一律写"出现在{ACCEL_WHERE[phase]}"，不写裸的"起点"，免得和"延伸"读成前后矛盾
+ACCEL_WHERE = {"起点": "趋势刚开始", "末端": "趋势即将结束"}
+
+
 @dataclass(frozen=True)
 class Regime:
     type: TrendType | None
