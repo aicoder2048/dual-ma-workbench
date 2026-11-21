@@ -155,9 +155,9 @@ def test_cli_rejects_a_bad_plan_with_the_reason(tmp_path):
     assert proc.returncode != 0 and "risk_pct = -1 不在" in proc.stderr
 
 
-# ---------- 和完整计划报告（2026-11-21 核心名单 v2）逐笔一样 ----------
+# ---------- 和完整计划报告（2026-11-21 核心名单，加了 P38 筹码山目标位之后）逐笔一样 ----------
 
-REPORT = pr.OUT / "2026-11-21-fullplan-core-p25.json"   # 网页的默认方案和 P25 改过之后的核心名单报告逐笔一样
+REPORT = pr.OUT / "2026-11-21-fullplan-core-p38.json"   # 网页的默认方案和 P38 接入之后的核心名单报告逐笔一样
 
 
 @pytest.mark.skipif(not REPORT.exists() or not (pr.OUT / "fullplan" / "daily" / "NVDA.jsonl").exists(),
