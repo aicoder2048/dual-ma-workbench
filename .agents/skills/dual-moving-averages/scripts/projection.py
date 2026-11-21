@@ -68,6 +68,7 @@ class EventKind(str, Enum):
     """每一种都是"某一天的状态"；事件发生 = 推演期内至少有一天处于这个状态。"""
     TURN_UP = "拐头向上"          # line{fast} 当天比前一天高
     TURN_DOWN = "拐头向下"
+    GROUP_TURN_UP = "一起拐头向上"  # MA{fast}、EMA{fast} 同一天都比前一天高
     ABOVE = "站上"                # line{fast} > line{slow}
     BELOW = "跌破"
     DOUBLE_ABOVE = "双双站上"     # MA、EMA 两对都 fast > slow
@@ -86,6 +87,8 @@ class Event:
     def describe(self) -> str:
         if self.kind in (EventKind.TURN_UP, EventKind.TURN_DOWN):
             return f"{self.line}{self.fast} {self.kind.value}"
+        if self.kind == EventKind.GROUP_TURN_UP:
+            return f"{self.fast} 线组{self.kind.value}"
         if self.kind in (EventKind.ABOVE, EventKind.BELOW):
             return f"{self.line}{self.fast} {self.kind.value} {self.line}{self.slow}"
         if self.kind in (EventKind.DOUBLE_ABOVE, EventKind.DOUBLE_BELOW):
@@ -96,7 +99,8 @@ class Event:
     def state(self, ext: pd.DataFrame, days: int) -> pd.Series:
         """推演期每一天是否处于这个状态（ext = 接上假设收盘价后的完整序列）。"""
         fut = ext.iloc[-days:]
-        up = self.kind in (EventKind.TURN_UP, EventKind.ABOVE, EventKind.DOUBLE_ABOVE, EventKind.ALIGN_UP)
+        up = self.kind in (EventKind.TURN_UP, EventKind.GROUP_TURN_UP, EventKind.ABOVE, EventKind.DOUBLE_ABOVE,
+                           EventKind.ALIGN_UP)
 
         def gap(kind: str) -> pd.Series:
             g = fut[f"{kind}{self.fast}"] - fut[f"{kind}{self.slow}"]
@@ -108,6 +112,8 @@ class Event:
 
         if self.kind in (EventKind.TURN_UP, EventKind.TURN_DOWN):
             return rising(f"{self.line}{self.fast}")
+        if self.kind == EventKind.GROUP_TURN_UP:
+            return rising(f"MA{self.fast}") & rising(f"EMA{self.fast}")
         if self.kind in (EventKind.ABOVE, EventKind.BELOW):
             return gap(self.line)
         both = gap("MA") & gap("EMA")

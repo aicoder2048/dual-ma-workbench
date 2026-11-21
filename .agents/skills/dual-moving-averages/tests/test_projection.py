@@ -116,6 +116,19 @@ def test_solved_level_makes_the_event_just_hold(event):
     assert not occurs(df, event, r.level * (1 - 1e-4), 10)
 
 
+def test_group_turn_up_needs_ma20_and_ema20_up_on_the_same_day():
+    """收盘持平在 L：EMA20 在 L 高于今天的 EMA20 时天天向上，MA20 在扣掉的收盘价低于 L 的那天向上。
+    两条同一天向上的最低价位 = max(EMA20, 前 10 天里最低的抵扣价)。"""
+    closes = [100.0] * 200 + [120, 121, 119, 118, 115, 100, 85, 84, 83, 82] + [80.0] * 10
+    df = add_indicators(pd.DataFrame({"Close": closes}, index=pd.bdate_range("2023-01-02", periods=len(closes))))
+    event = Event(EventKind.GROUP_TURN_UP, 20)
+    r = solve(df, event, days=10)
+    ema20 = float(df["EMA20"].iloc[-1])
+    assert ema20 > 82   # 门槛是 EMA20，不是 10 天里最低的抵扣价 82
+    assert r.level == pytest.approx(ema20, rel=1e-6) and r.side == "以上"
+    assert event.describe() == "20 线组一起拐头向上"
+
+
 def test_golden_cross_from_a_falling_ma60_is_not_alignment():
     # TSLA 2021-04-14：持平在 247 时 10 天内 20 线组双双站上 60 线组，但那是 MA60 下行"让"出来的
     df = load_fixture("TSLA", "2021-04-14")

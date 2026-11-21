@@ -887,6 +887,9 @@ def p24_reward_risk(c: Ctx) -> Result:
     if f.rr is None:
         return Result(Status.CHART, "盈亏比算不了：" + ("；".join(f.notes) or "没有目标位或止损"))
     lv = {"进场": f.entry.price, "止损": f.stop.price, "目标 1": f.targets[0].price}
+    if f.entry.far is not None:   # 只改说明，状态照旧按明天的触发价算：P19、P20 让位给它，回测读状态（docs/adr/0026.md）
+        from tradeplan import RR_FAR, far_text   # tradeplan 导入本模块，这里晚一点导入
+        return _met(f.rr_verdict == "不做", f"{RR_FAR}：按明天的触发价算是 {f.rr:.2f}:1；{far_text(f.entry.far, f.entry.price)}", lv)
     if f.rr_verdict == "不做":
         return _met(True, f"{f.rr:.2f}:1 < 3:1，不做；要 3:1 目标得到 {_f(f.rr_gap['target_for_min'])}，"
                           f"或止损收紧到 {_f(f.rr_gap['stop_for_min'])}", lv)

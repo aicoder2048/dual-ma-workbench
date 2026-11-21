@@ -14,6 +14,9 @@
 - 到第一目标是检查点（P25）：中长线（60/120）完好就继续拿，按止损和失效离场；不完好就在目标位走。
   完好的判断只在这里（holds_past_target），回测（fullplan、plansim）和网页都读它。
 - 盈亏比 = (第一目标 − 进场) ÷ (进场 − 止损)。< 3 不做，≥ 5 理想（P24）。
+- 触发价离现价还远（docs/adr/0026.md）：20 线组拐头的触发价只看明天的抵扣价。按收盘持平推演，TURN_DAYS 天内
+  两条一起拐头的最低价位比它低 FAR_PCT 以上时，进场记下推演（entry.far），盈亏比显示成"到时重算"。
+  进场价、止损、rr、rr_verdict 照旧按明天算：回测每天重算计划、挂明天的单，读的就是这几个。
 - 股数 = 每笔可承受亏损 ÷ (进场 − 止损)，向下取整（A6）。没填账户只给每 1 万元风险对应多少股。
 """
 from __future__ import annotations
@@ -24,7 +27,7 @@ from dataclasses import asdict, dataclass, field
 import pandas as pd
 
 import rules as rl
-from projection import Event, EventKind, SolveStatus, solve
+from projection import Event, EventKind, SolveStatus, extend, solve
 from regime import CLOCK_WINDOW, DENSE_PCT
 from structure import Structure
 from volprofile import Profile
@@ -34,6 +37,18 @@ RR_IDEAL = 5.0           # 视频 I 13:06：至少 5:1 或更高
 RISK_UNIT = 10_000       # 没填账户时：每 1 万元风险对应多少股
 TICK = 0.01              # 美股最小报价单位：进场和止损相差不到 1 分钱，止损没法执行
 HOLD_STOP_DAYS = 30      # 多头结构回撤中持仓的止损：30 天内避免 20/60 双死叉（和推演的跨度一样）
+# 脚本自定（docs/adr/0026.md）：触发价离现价还远的判断
+TURN_DAYS = 10           # 推演 20 线组一起拐头看几天：推演求解最短的跨度（SOLVE_DAYS），也是 MA20 窗口的一半
+FAR_PCT = 2.0            # 明天的触发价比推演门槛高出这么多（%）算远：和均线"相差 < 2% 算密集"（DENSE_PCT）同一个尺度
+RR_FAR = "触发价离现价还远，到时重算"
+
+
+@dataclass(frozen=True)
+class FarTrigger:
+    """按收盘持平推演，TURN_DAYS 天内 MA20、EMA20 同一天都向上的最低价位，和持平在那里时最早哪天一起向上。"""
+    level: float
+    day: int               # 第几个交易日（推演的第 k 天，k 从 1 起）
+    days: int              # 推演跨度 TURN_DAYS
 
 
 @dataclass(frozen=True)
@@ -41,6 +56,7 @@ class Entry:
     price: float | None    # 进场触发价；条件里没有日线价位（等小时线、等末期条件）时为 None
     condition: str
     rule: str
+    far: FarTrigger | None = None   # 触发价离现价还远时的推演；只给显示用，回测不读
 
 
 @dataclass(frozen=True)
@@ -276,22 +292,42 @@ def _drop(c: rl.Ctx, n: int, ahead: int = 0) -> float:
     return float(c.df["Close"].iloc[-n + ahead])
 
 
+def far_trigger(df: pd.DataFrame, gate: float) -> FarTrigger | None:
+    """明天的触发价 gate 比推演门槛高出 FAR_PCT 以上时给出推演，否则 None。"""
+    ema20 = float(df["EMA20"].iloc[-1])
+    if gate <= ema20 * (1 + FAR_PCT / 100):
+        return None   # 门槛不会低于 EMA20（持平在 EMA20 下方，EMA20 天天向下），不用求解
+    event = Event(EventKind.GROUP_TURN_UP, 20)
+    res = solve(df, event, TURN_DAYS)
+    if res.status != SolveStatus.LEVEL or gate <= res.level * (1 + FAR_PCT / 100):
+        return None
+    together = event.state(extend(df, [res.level] * TURN_DAYS), TURN_DAYS).tolist()
+    return FarTrigger(res.level, together.index(True) + 1, TURN_DAYS)
+
+
+def far_text(far: FarTrigger, gate: float) -> str:
+    return f"按收盘持平推演，20 线组最早约 {far.day} 个交易日后、收盘站上 {_f(far.level)} 才会一起拐头；明天要拐头得站上 {_f(gate)}"
+
+
 def _turn20(c: rl.Ctx, rule: str, extra: float | None = None, extra_text: str = "") -> tuple[Entry, Stop]:
     """20 线组拐头向上进场：收盘站上 EMA20 和 MA20 抵扣价中较高的那个（两条都拐上来）。
 
     止损是拐头失败（P23）：进场后收盘跌回 EMA20 和进场次日抵扣价中较低的那个之下，两条线又都向下。
+    触发价是明天的；离推演门槛还远时记下推演（far_trigger），进场价不变。
     """
     ema20, drop, next_drop = _row(c, "EMA20"), _drop(c, 20), _drop(c, 20, 1)
     gate = max(ema20, drop)
     price = max(gate, c.close)
     if extra is not None and extra > price:
         price = extra
-    cond = (f"收盘站上 EMA20 {_f(ema20)} 和 MA20 抵扣价 {_f(drop)}，20 线组一起拐头向上" if c.close < gate
+    far = far_trigger(c.df, gate) if c.close < gate == price else None
+    cond = (f"{far_text(far, gate)}（推演求解，辅助，评估 H4）" if far is not None
+            else f"收盘站上 EMA20 {_f(ema20)} 和 MA20 抵扣价 {_f(drop)}，20 线组一起拐头向上" if c.close < gate
             else f"已经在 EMA20 {_f(ema20)} 和 MA20 抵扣价 {_f(drop)} 上方，按收盘进")
     stop = min(ema20, next_drop)
     reason = (f"20 线组拐头失败：进场后收盘跌回 {_f(stop)} 下方（EMA20 {_f(ema20)}、进场次日要扣的 {_f(next_drop)} 里较低的），"
               "两条线重新向下")
-    return Entry(price, cond + extra_text, rule), Stop(stop, reason, "P23", "视频")
+    return Entry(price, cond + extra_text, rule, far), Stop(stop, reason, "P23", "视频")
 
 
 def _turn60_stop(c: rl.Ctx) -> Stop:
@@ -464,8 +500,10 @@ def build(c: rl.Ctx, sizing: Sizing | None = None) -> PlanSet:
 
 
 def verdict_line(p: PlanSet) -> str | None:
-    """盈亏比不够 3:1 时写进打法的一句话：差多少。"""
+    """盈亏比不够 3:1 时写进打法的一句话：差多少。触发价离现价还远时只说到时重算。"""
     f = p.flat
+    if f.entry is not None and f.entry.far is not None:
+        return f"触发价离现价还远，盈亏比到时重算（P24）：{far_text(f.entry.far, f.entry.price)}。"
     if f.rr_verdict != "不做":
         return None
     t1 = f.targets[0]
