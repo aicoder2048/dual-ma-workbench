@@ -517,12 +517,16 @@ body.offline .status-pill .dot { background: var(--bad); }
 .chart-tools .levels-toggle { margin-left: auto; }
 .chart-readout { display: grid; gap: 2px; font: 12px var(--mono); color: var(--muted); min-height: 36px; margin-bottom: 4px; }
 /* 两行：开高低收 + 涨跌一行，均线值一行；放不下就横向省略，不折行把图往下挤 */
-.chart-readout > div { display: flex; gap: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.chart-readout > div { display: flex; gap: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .chart-readout .up { color: var(--up); }
 .chart-readout .down { color: var(--down); }
 .chart-readout b { color: var(--fg); font-weight: 600; }
 .chart-readout i { display: inline-block; width: 12px; border-top: 2px solid var(--c); margin-right: 4px; vertical-align: middle; }
 .chart-readout i.dash { border-top-style: dashed; }
+.chart-readout .ro-ohlc span > b { margin-left: 2px; }  /* 开152.00：标签和数紧挨着（照 TradingView 的 O152.00），省出地方放量 */
+.chart-readout .ro-ratio { margin-left: 4px; }
+.chart-readout .ro-ohlc.tight .ro-abs { display: none; }
+.chart-readout .ro-ratio.spike { color: var(--fg); background: color-mix(in srgb, var(--drop) 35%, transparent); border-radius: 4px; padding: 0 4px; }
 .chart-help { font-size: 13px; line-height: 1.7; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 4px 14px; margin-bottom: 8px; }
 .chart-help p { margin: 8px 0; }
 .chart.drawing { cursor: crosshair; outline: 2px dashed var(--accent); outline-offset: 2px; }

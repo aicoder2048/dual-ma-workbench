@@ -34,7 +34,8 @@ const CHART = (() => {
   const line = (k: number) => days.map((time, i) => ({ time, value: close[i] + k }));
   return {
     candles: days.map((time, i) => ({ time, open: close[i] - 1, high: close[i] + 2, low: close[i] - 2, close: close[i] })),
-    volume: days.map((time) => ({ time, value: 1e6, spike: false })),
+    // 量 33.8M、1.2 倍均量；最后一根是大量（2.4 倍，读数条标黄）
+    volume: days.map((time, i) => (i === 299 ? { time, value: 81.1e6, spike: true, ratio: 2.4 } : { time, value: 33.8e6, spike: false, ratio: 1.2 })),
     lines: { MA20: line(5), EMA20: line(4), MA60: line(10), EMA60: line(9), MA120: line(15), EMA120: line(14), MA200: line(20).slice(199) },
     drops: [{ time: days[280], period: 20 }],
   };
@@ -575,24 +576,32 @@ describe("K 线图工具", () => {
     await page.close();
   });
 
-  test("读数条照 TradingView：开高低收和涨跌一行，均线值一行，各占一行不挤", async () => {
+  test("读数条照 TradingView：开高低收、涨跌、量和量比一行，均线值一行，各占一行不挤；第一行不被截掉", async () => {
     const { page } = await open();
     await page.waitForSelector("#chart canvas");
     await page.locator("#chart-readout").scrollIntoViewIfNeeded();  // 图在结论卡片下面，用户往下滚就看到读数条
     const c = CHART.candles.at(-1)!, prev = CHART.candles.at(-2)!;
     const ohlc = (await page.textContent("#chart-readout .ro-ohlc"))!;
-    for (const [k, v] of [["开", c.open], ["高", c.high], ["低", c.low], ["收", c.close]] as const) expect(ohlc).toContain(`${k} ${v.toFixed(2)}`);
+    for (const [k, v] of [["开", c.open], ["高", c.high], ["低", c.low], ["收", c.close]] as const) expect(ohlc).toContain(`${k}${v.toFixed(2)}`);
     const chg = c.close - prev.close;
     expect(ohlc).toContain(`${chg >= 0 ? "+" : "−"}${Math.abs(chg).toFixed(2)}`);
     expect(ohlc).toContain(`${((chg / prev.close) * 100).toFixed(2).replace("-", "−")}%`);
+    expect(ohlc).toContain("量81.1M2.4× 均量");
+    expect(await page.getAttribute("#chart-readout .ro-ratio", "class")).toContain("spike"); // 大量标黄
     expect(await page.textContent("#chart-readout .ro-lines")).toContain("MA20");
-    // 两行各自不换行（默认视图下），且都没被挡住
-    const rows = await page.$$eval("#chart-readout > div", (els) => els.map((el) => {
+    // 两行各自不换行（默认视图下），且都没被挡住；第一行放得下（窄栏收起涨跌额，量和量比不被省略号截掉）
+    const rows = () => page.$$eval("#chart-readout > div", (els) => els.map((el) => {
       const r = el.getBoundingClientRect(), lh = parseFloat(getComputedStyle(el).lineHeight) || 16;
       const hit = document.elementFromPoint(r.x + 4, r.y + r.height / 2);
-      return { lines: Math.round(r.height / lh), visible: !!hit && el.contains(hit) };
+      return { lines: Math.round(r.height / lh), fits: el.scrollWidth <= el.clientWidth, visible: !!hit && el.contains(hit) };
     }));
-    expect(rows).toEqual([{ lines: 1, visible: true }, { lines: 1, visible: true }]);
+    expect((await rows()).map(({ fits, ...r }, i) => (i === 0 ? { ...r, fits } : r))).toEqual([{ lines: 1, fits: true, visible: true }, { lines: 1, visible: true }]);
+    // 悬停到普通的一天：1.2× 均量，不标黄
+    const box = (await page.locator("#chart").boundingBox())!;
+    await page.mouse.move(box.x + box.width * 0.5, box.y + box.height * 0.4);
+    await page.waitForFunction(() => document.querySelector("#chart-readout .ro-vol")?.textContent?.includes("1.2×"));
+    expect(await page.getAttribute("#chart-readout .ro-ratio", "class")).not.toContain("spike");
+    expect((await rows()).map(({ fits, ...r }, i) => (i === 0 ? { ...r, fits } : r))).toEqual([{ lines: 1, fits: true, visible: true }, { lines: 1, visible: true }]);
     await page.close();
   }, 30_000);
 

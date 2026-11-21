@@ -25,6 +25,7 @@ from pathlib import Path
 import pandas as pd
 
 from indicators import NAIVE_MA
+from rules import VOLUME_SPIKE
 
 CHART_BARS = 260  # 图上显示最近多少根日 K 线
 CHART_LIB = "https://cdn.jsdelivr.net/npm/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"
@@ -81,8 +82,9 @@ def chart_data(df: pd.DataFrame, a: dict, bars: int = CHART_BARS) -> dict:
             c["tone"] = tone
     volume = []
     if "Volume" in view.columns:
+        # ratio：当天量 / 50 日均量（和 analysis.volume、大量同一个口径），读数条显示；不到 50 根没有
         ratio = view["Volume"] / df["Volume"].rolling(50).mean().reindex(view.index)
-        volume = [{"time": t, "value": float(v), "spike": bool(r > 2)}
+        volume = [{"time": t, "value": float(v), "spike": bool(r > VOLUME_SPIKE), **({"ratio": round(float(r), 2)} if pd.notna(r) else {})}
                   for t, v, r in zip(dates, view["Volume"], ratio) if pd.notna(v)]
     # 明天要扣的那根 K 线 = 倒数第 N 根（见 drop_off）
     drops = [{"time": df.index[-n].strftime("%Y-%m-%d"), "period": n}

@@ -1,6 +1,7 @@
 // K 线 + 6 条均线 + 抵扣价小黄点 + 成交量（TradingView lightweight-charts 4.2.0）。
 import { baseCandleStyle, candleBar as styledBar } from "./candles.js";
 import { earningsMarks, logicalOf } from "./earnings.js";
+import { volumeCell } from "./readout.js";
 import { DEFAULT_SPEED, OFF, SPEEDS, appendDelta, earliestIndex, indexOnOrBefore, randomIndex, sliceAt, speedMs, step } from "./replay.js";
 
 const SPECS = [];
@@ -108,16 +109,21 @@ export function createChart(box, legendEl) {
     const c = view.candles.find((x) => x.time === time) ?? view.candles.at(-1);
     const prev = view.candles[view.candles.indexOf(c) - 1];
     const at = (k) => (view.lines[k] || []).find((p) => p.time === c.time)?.value;
-    // 照 TradingView：第一行日期 + 开高低收 + 比前一天涨跌，第二行各条均线的值
+    // 照 TradingView：第一行日期 + 开高低收 + 比前一天涨跌 + 量和量比，第二行各条均线的值
     const chg = prev ? c.close - prev.close : null;
     const tone = chg == null ? "" : chg >= 0 ? "up" : "down";
     const sign = (x) => (x >= 0 ? "+" : "−") + Math.abs(x).toFixed(2);
-    const chgText = chg == null ? "" : `<span class="ro-chg ${tone}">${sign(chg)}（${sign((chg / prev.close) * 100)}%）</span>`;
+    // 涨跌额放括号外的 ro-abs：一行放不下时先收起涨跌额，留涨跌幅（见下面的 tight）
+    const chgText = chg == null ? ""
+      : `<span class="ro-chg ${tone}"><span class="ro-abs">${sign(chg)}（</span>${sign((chg / prev.close) * 100)}%<span class="ro-abs">）</span></span>`;
     const ohlc = [["开", c.open], ["高", c.high], ["低", c.low], ["收", c.close]]
-      .map(([k, v]) => `<span>${k} <b class="${tone}">${f2(v)}</b></span>`).join("");
+      .map(([k, v]) => `<span>${k}<b class="${tone}">${f2(v)}</b></span>`).join("");
     const lines = SPECS.filter((sp) => series[sp.key].options().visible)
       .map((sp) => `<span><i class="${sp.dashed ? "dash" : ""}" style="--c: var(${sp.token})"></i>${sp.key} ${f2(at(sp.key))}</span>`).join("");
-    readout.innerHTML = `<div class="ro-ohlc"><b>${showTime(c.time)}</b>${ohlc}${chgText}</div><div class="ro-lines">${lines}</div>`;
+    const vol = volumeCell(view.volume.find((v) => v.time === c.time));
+    readout.innerHTML = `<div class="ro-ohlc"><b>${showTime(c.time)}</b>${ohlc}${chgText}${vol}</div><div class="ro-lines">${lines}</div>`;
+    const row = readout.firstChild;
+    if (row.scrollWidth > row.clientWidth) row.classList.add("tight"); // 窄栏（默认视口）：量和量比比涨跌额要紧
   };
   chart.subscribeCrosshairMove((param) => showReadout(param.time));
 
@@ -204,7 +210,7 @@ export function createChart(box, legendEl) {
   help.className = "chart-help";
   help.hidden = true;
   help.innerHTML = `
-    <p><b>悬停读数</b>：鼠标停在某天，上方显示那天的收盘和 6 条线。用来看"那次回调碰到了哪条线、守没守住"。</p>
+    <p><b>悬停读数</b>：鼠标停在某天，上方显示那天的开高低收、涨跌、成交量（"1.2× 均量"是和 50 日均量比，超过 2 倍的大量标黄）和 6 条线。用来看"那次回调碰到了哪条线、守没守住"。</p>
     <p><b>缩放</b>：按住 ⌘（或 Ctrl）滚轮，或触控板双指捏合，以最新一天为准放大缩小；按住拖动可以左右平移。只滚轮时滚动的是页面。</p>
     <p><b>固定范围</b>（1 周 / 1 月 / 半年 / 1 年 / 全部）：均线的斜率（几点钟方向）只有在同样长的时间里比才不失真，所以要固定时长、用对数坐标。
       <b>1 年</b>（默认）判断现在是几点钟、属于哪种趋势；<b>全部</b>看大周期和横盘有多长（"横有多长，竖有多高"）；<b>半年</b>看最近的细节，比如这次回调比上次深还是浅；<b>1 周、1 月</b>看最近几根 K 线怎么走。</p>

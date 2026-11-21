@@ -18,7 +18,8 @@ export type Tone = "bull" | "bear" | "mixed";
 
 export interface ChartData {
   candles: { time: string; open: number; high: number; low: number; close: number; tone?: Tone }[];
-  volume: { time: string; value: number; spike: boolean }[];
+  /** ratio：当天量 / 50 日均量（不到 50 根没有）；spike：超过 VOLUME_SPIKE 倍的大量。 */
+  volume: { time: string; value: number; spike: boolean; ratio?: number }[];
   lines: Record<string, { time: string; value: number }[]>;
   drops: { time: string; period: number }[];
 }

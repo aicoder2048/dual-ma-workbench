@@ -291,3 +291,19 @@ def test_chart_has_ma200_line_only_where_200_bars_exist(rising_long):
     a = dma.analyze(rising_long, "TEST", "synthetic")
     line = chart_data(rising_long, a, 300)["lines"]["MA200"]
     assert len(line) == 101 and line[0]["value"] == 100.5 and line[-1]["value"] == 200.5
+
+
+def test_csv_mode_has_no_earnings(json_out):
+    assert json_out["analysis"]["earnings"] == {"available": False, "reason": "CSV 模式不取财报日"}
+
+
+def test_chart_volume_carries_the_ratio_to_the_50_day_average():
+    from conftest import load_fixture
+    from html_report import chart_data
+
+    df = load_fixture("TSLA", "2021-04-14")
+    a = dma.analyze(df, "TSLA", "fixture")
+    vol = chart_data(df, a)["volume"]
+    assert vol[-1]["ratio"] == round(a["volume"]["ratio"], 2)   # 和 analysis.volume 同一个口径
+    assert all(v["spike"] == (v["ratio"] > rules.VOLUME_SPIKE) for v in vol if "ratio" in v)
+    assert any(v["spike"] for v in vol)
