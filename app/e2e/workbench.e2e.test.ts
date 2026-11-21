@@ -975,7 +975,7 @@ describe("财报日", () => {
     const sel = "#verdict [data-item=earnings]";
     expect(await notCovered(page, sel)).toBe(true);
     expect((await page.textContent(sel))!.replace(/\s+/g, "")).toContain(`3天后财报（${EARN_NEXT}）：跳空可能越过止损价183.08`);
-    expect(await page.textContent('#verdict .concl-row[data-situation="flat"]')).toContain("不做：盈亏比 0.6:1"); // 和 NVDA 一样
+    expect(await page.textContent('#verdict .concl-row[data-situation="flat"]')).toContain("不做：盈亏比 0.57:1"); // 和 NVDA 一样
     expect(errors).toEqual([]);
     await page.close();
   }, 30_000);
@@ -1579,7 +1579,7 @@ describe("中栏：结论 → 看大局 → 找打法 → 做推演", () => {
       expect({ sel, ok: await notCovered(page, sel) }).toEqual({ sel, ok: true });
     }
     const flat = (await page.textContent('#verdict .concl-row[data-situation="flat"]'))!;
-    expect(flat).toContain("不做：盈亏比 0.6:1"); // 加速下跌等构造和 20 线组拐头再进，但到缺口的空间不够 3:1
+    expect(flat).toContain("不做：盈亏比 0.57:1"); // 加速下跌等构造和 20 线组拐头再进，但到缺口的空间不够 3:1
     expect(flat).toContain("触发");
     expect(flat).toContain("212.21");
     const holding = (await page.textContent('#verdict .concl-row[data-situation="holding"]'))!;
@@ -1599,7 +1599,7 @@ describe("中栏：结论 → 看大局 → 找打法 → 做推演", () => {
       expect({ sel, ok: await notCovered(page, sel) }).toEqual({ sel, ok: true });
     }
     const f = (await page.textContent(flat))!.replace(/\s+/g, "");
-    expect(f).toContain("不做：盈亏比1.9:1");
+    expect(f).toContain("不做：盈亏比1.94:1");
     expect(f).toContain("触发500.45");
     expect(f).toContain("止损488.03-2.5%"); // 60 线组拐头（解读），风险按触发价算
     expect(f).toContain("目标524.61"); // 前高（解读），说明在悬停里
@@ -1667,7 +1667,7 @@ describe("中栏：结论 → 看大局 → 找打法 → 做推演", () => {
     await page.waitForSelector("#chart canvas");
     const plan = page.locator('[data-step="play"] .plan-body');
     const titles = () => page.evaluate(async () => (await import("/app.js")).getChart().levels().map((l: { title: string }) => l.title));
-    expect(await plan.textContent()).toContain("不做：盈亏比 0.6:1");
+    expect(await plan.textContent()).toContain("不做：盈亏比 0.57:1");
     expect(await titles()).toEqual(["触发", "进场后止损", "目标", "判断失效"]);
     await page.click('[data-pos="holding"]');
     expect(await plan.textContent()).toContain("反弹再减仓");
@@ -1921,7 +1921,7 @@ describe("看大局的证据：按判断顺序的五问", () => {
     const verdicts = await step.locator(".check .judge").allTextContents();
     expect(verdicts[0]).toContain("有类型");
     expect(verdicts[1]).toContain("点");
-    expect(verdicts[2]).toContain("加速起点");
+    expect(verdicts[2]).toContain("加速出现在趋势刚开始");
     expect(verdicts[3]).toContain("延伸");
     expect(verdicts[4]).toContain("周线 MA 多头");
     expect(verdicts[4]).toContain("小时线 MA 空头");
