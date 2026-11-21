@@ -12,6 +12,7 @@
 用法：
   uv run holdout.py build --out <reports/replay>     # 冻结代码和口径，按规则生成名单，写 references/holdout.json（看结果之前）
   uv run holdout.py run --out <reports/replay>       # 跑一次：完整计划 + 对照，按事先定的三条判定，写报告；计数加一
+  uv run holdout.py render --out <reports/replay>    # 按存下的 JSON 重写报告（不重跑、不计数）
 
 - 名单写进 references/holdout.json（进仓库），判定标准也写在里面，跑之前就提交。
 - 每跑一次（holdout.py run，或工作台回测碰到这些票）在 references/holdout-runs.json 记一笔。第二次起 run 要加 --rerun，报告醒目标出。
@@ -275,7 +276,7 @@ def random_dist(recs: dict[str, list[dict]], cal: list[str], bars: dict[str, ps.
 POOLED, ETF, STOCK = "合并", "ETF", "个股"
 
 
-def run(out: Path, data: Path, jobs: int, rerun: bool) -> tuple[str, dict]:
+def run(out: Path, data: Path, jobs: int, rerun: bool) -> dict:
     cfg = es.load_config(ev.CONFIG)
     doc = load_list()
     if doc is None:
@@ -317,7 +318,7 @@ def run(out: Path, data: Path, jobs: int, rerun: bool) -> tuple[str, dict]:
                               "reps": [{k: r[k] for k in ("trades", "mean_r", "mar")} for r in reps]},
               "slices": {g: slice_rows(groups[g]["trades"], cal, cfg) for g in groups},
               "groups": groups, "card_check": checks}
-    return render(result), result
+    return result
 
 
 # ---------- 报告 ----------
@@ -418,7 +419,7 @@ def render(r: dict) -> str:
 
 def main() -> None:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("cmd", choices=("build", "run"))
+    p.add_argument("cmd", choices=("build", "run", "render"))
     p.add_argument("--out", type=Path, required=True, help="reports/replay：读 eval/universe-<快照>.json，写报告和每天计划的缓存")
     p.add_argument("--data", type=Path, help="行情，默认 <out>/data/eval")
     p.add_argument("--jobs", type=int, default=14)
@@ -430,9 +431,13 @@ def main() -> None:
         print(json.dumps({"etfs": doc["etfs"], "stocks": [s["ticker"] for s in doc["stocks"]],
                           "excluded": len(doc["excluded"])}, ensure_ascii=False))
         return
-    md, result = run(a.out, data, a.jobs, a.rerun)
-    (a.out / f"{STEM}.md").write_text(md)
+    if a.cmd == "render":                     # 只按存下的 JSON 重写报告，不重跑、不计数
+        (a.out / f"{STEM}.md").write_text(render(json.loads((a.out / f"{STEM}.json").read_text())))
+        return
+    result = run(a.out, data, a.jobs, a.rerun)
     (a.out / f"{STEM}.json").write_text(json.dumps(result, ensure_ascii=False, indent=1, default=str) + "\n")
+    md = render(json.loads((a.out / f"{STEM}.json").read_text()))
+    (a.out / f"{STEM}.md").write_text(md)
     print(md)
     if not all(c["same"] for c in result["card_check"]):
         sys.exit("有交易和结论卡片对不上，见报告")

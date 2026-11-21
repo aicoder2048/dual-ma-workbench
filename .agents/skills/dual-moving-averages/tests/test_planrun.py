@@ -125,7 +125,7 @@ def test_cli_estimates_runs_streams_progress_and_reuses_the_cache(tmp_path, mark
     est = json.loads(cli(str(plan), "--estimate", "--data", str(market), "--cache", str(cache), "--jobs", "4").stdout)
     assert [r["status"] for r in est["rows"]] == ["compute", "compute", "download"]   # ZZZZ 没有行情：要下载
     assert est["rows"][0]["days"] == len(pd.read_csv(market / "SPY.csv").query("Date >= '2024-01-02'"))
-    assert est["holdout"] == {"locked": False, "overlap": []}
+    assert (est["holdout"]["locked"], est["holdout"]["overlap"]) == (True, [])
 
     text = edit(r'^tickers = \["NVDA"\]', 'tickers = ["SPY", "GOOGL", "AAPL"]', edit(r'^start = "2013-01-02"', 'start = "2024-01-02"'))
     plan.write_text(text)

@@ -108,6 +108,13 @@ describe("回测结果：和 CLI 的 JSON 对得上", () => {
     expect(errorOf(() => parseResult(broken)).message).toContain("净值曲线 买入持有 和日期对不上");
   });
 
+  test("新验证集的次数：新结果带上，旧结果没有也读得进", () => {
+    const touched = structuredClone(nvdaResult) as any;
+    touched.holdout = { locked: true, overlap: ["VTI"], runs: 2 };
+    expect(parseResult(touched).holdout).toEqual({ locked: true, overlap: ["VTI"], runs: 2 });
+    expect(parseResult(nvdaResult).holdout.runs).toBeUndefined();
+  });
+
   test("不是回测结果的 JSON：报错", () => {
     expect(errorOf(() => parseResult({ hello: 1 })).message).toContain("格式不对");
   });
@@ -192,6 +199,12 @@ describe("回测服务", () => {
     const est = await bt.estimate(plan((p) => { p.universe = { kind: "watchlist", tickers: [] }; }));
     expect(est.tickers).toEqual(["NVDA", "TSLA", "META"]);
     expect(est.counts).toMatchObject({ cached: 1, compute: 2 });
+  });
+
+  test("估计：方案碰到新验证集的票，带回是哪几只、已经跑过几次", async () => {
+    const { bt } = service([]);
+    const est = await bt.estimate(plan((p) => { p.universe = { kind: "tickers", tickers: ["NVDA", "VTI"] }; }));
+    expect(est.holdout).toEqual({ locked: true, overlap: ["VTI"], runs: 1 });
   });
 
   test("运行：排队 → 运行中（进度一行行更新）→ 完成，结果和摘要可以读", async () => {

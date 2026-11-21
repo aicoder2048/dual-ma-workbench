@@ -48,7 +48,7 @@ async function main() {
     emit({
       tickers, rows: tickers.map((t, i) => ({ ticker: t, status: i ? "compute" : "cached", days: 975 })),
       counts: { cached: 1, compute: tickers.length - 1, download: 0, short: 0 }, days: 975 * tickers.length,
-      compute_days: 3500 * (tickers.length - 1), jobs: 8, seconds: 2 + 30 * (tickers.length - 1), holdout: { locked: false, overlap: [] },
+      compute_days: 3500 * (tickers.length - 1), jobs: 8, seconds: 2 + 30 * (tickers.length - 1), holdout: { locked: true, overlap: tickers.filter((t) => t === "VTI"), runs: 1 },
     });
     return;
   }

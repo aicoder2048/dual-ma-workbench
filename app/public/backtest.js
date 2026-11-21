@@ -184,7 +184,9 @@ async function estimate() {
     if (c.download) parts.push(`${c.download} 只要先下载行情再算`);
     if (c.short) parts.push(`${c.short} 只历史不足 3 年，会跳过`);
     const list = plan.universe.kind === "tickers" && n <= 3 ? "" : `<p class="bt-hint">${esc(est.tickers.join(" "))}</p>`;
-    const overlap = est.holdout.overlap.length ? `<p class="bad">${esc(est.holdout.overlap.join(" "))} 在新验证集里。</p>` : "";
+    const overlap = est.holdout.overlap.length
+      ? `<p class="bad">${esc(est.holdout.overlap.join(" "))} 在新验证集里（已经跑过 ${est.holdout.runs} 次）。照跑，但会记为第 ${est.holdout.runs + 1} 次；拿它调参数，验证集就作废了。</p>`
+      : "";
     $("bt-estimate").innerHTML = `<p><b>${n} 只 × 这段时间 = ${est.days.toLocaleString()} 个决定点</b>（每只票每个交易日一份计划）</p>
       <p>${parts.join("，")}。预计 ${fmtSec(est.seconds)}${c.compute + c.download ? `（${est.compute_days.toLocaleString()} 天的计划要算，${est.jobs} 个进程并行；算过的下次直接用缓存）` : ""}。</p>
       ${list}${overlap}
@@ -297,7 +299,10 @@ function flags(run, r) {
   if (run.source === "imported") out.push(`<span class="bt-flag">导入的结果（${esc(r.meta.generated)}，代码 ${esc(r.meta.head.slice(0, 8))}）</span>`);
   const skipped = Object.entries(r.meta.skipped);
   if (skipped.length) out.push(`<span class="bt-flag warn">没测：${esc(skipped.map(([t, why]) => `${t} ${why}`).join("；"))}</span>`);
-  if (r.holdout.overlap.length) out.push(`<span class="bt-flag warn">含新验证集的票：${esc(r.holdout.overlap.join(" "))}</span>`);
+  if (r.holdout.overlap.length) {
+    const nth = r.holdout.runs ? `，这是第 ${r.holdout.runs} 次跑验证集` : "";
+    out.push(`<span class="bt-flag warn">含新验证集的票：${esc(r.holdout.overlap.join(" "))}${nth}</span>`);
+  }
   return out.join("");
 }
 

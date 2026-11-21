@@ -1800,6 +1800,22 @@ describe("回测页", () => {
     await page.close();
   }, 60_000);
 
+  test("方案碰到新验证集的票：规模那里标出来、说已经跑过几次，照样能开始", async () => {
+    const { page, errors } = await open();
+    await page.click("#backtest-btn");
+    await page.waitForFunction(() => (document.getElementById("bt-name") as HTMLInputElement).value !== "");
+    await page.fill("#bt-tickers", "nvda vti");
+    await page.click("#bt-run");
+    await page.waitForSelector("#bt-go", { state: "visible" });
+    const warn = page.locator("#bt-estimate .bad");
+    expect(await warn.textContent()).toBe("VTI 在新验证集里（已经跑过 1 次）。照跑，但会记为第 2 次；拿它调参数，验证集就作废了。");
+    expect(await usable(page, "#bt-estimate .bad")).toBe(true);
+    expect(await usable(page, "#bt-go")).toBe(true);
+    await shot(page, "5-holdout-warning");
+    expect(errors).toEqual([]);
+    await page.close();
+  }, 30_000);
+
   test("填错了：底部直接说哪里不对，不开始", async () => {
     const { page } = await open();
     await page.click("#backtest-btn");
