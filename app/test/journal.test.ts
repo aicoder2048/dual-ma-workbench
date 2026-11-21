@@ -26,7 +26,7 @@ describe("快照：记入时从当时的分析里取", () => {
     const r = buildReport(spy);
     const s = snap();
     expect(s).toMatchObject({ ticker: "SPY", asof: "2024-04-19", date: "2024-04-19", close: 495.16, trend: "稳定上涨·回撤中",
-      playKey: "稳定上涨", situation: "flat", cost: null, source: "Polygon/Massive（复权日线）" });
+      playKey: "稳定上涨", situation: "flat", cost: null, source: "Polygon/Massive（日线，只按拆股复权）" });
     expect(s.action).toBe(r.plans.flat.action);
     expect(s.trigger).toEqual(r.plans.flat.trigger);
     expect(s.stop).toEqual(r.plans.flat.stop);

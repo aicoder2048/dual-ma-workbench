@@ -108,7 +108,7 @@ export function analyzeTool(opts: {
     name: "dma_analyze",
     label: "双均线取数",
     description:
-      "运行 dual-moving-averages skill 的分析脚本（Polygon 复权日线，失败回退 yfinance）。返回规则版三步报告和可引用数据。" +
+      "运行 dual-moving-averages skill 的分析脚本（Polygon 日线，只按拆股复权，失败回退 yfinance）。返回规则版三步报告和可引用数据。" +
       "调用后网页中间的图表和报告会自动切到这只股票。回放历史时传 asof（YYYY-MM-DD）。",
     parameters: Type.Object({
       ticker: Type.String({ description: "股票代码，如 NVDA" }),

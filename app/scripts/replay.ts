@@ -4,7 +4,7 @@
  *   cd app && bun scripts/replay.ts [NVDA TSLA ...] [--years 2] [--step 20] [--horizon 20] [--jobs 6] [--refresh]
  *                                   [--compare reports/replay/<改造前>.json]
  *
- * 每只票取一次日线（yfinance 复权开高低收量，只取到昨天，存 reports/replay/data/<票>.csv），取数交给
+ * 每只票取一次日线（yfinance 开高低收量，只按拆股复权，只取到昨天，存 reports/replay/data/<票>.csv），取数交给
  * skill 的 backtest.py --fetch-only（缓存覆盖不到所需历史、超过 7 天没更新、或给了 --refresh 就重新取）。
  * 每个回放点切出"当天往前 5 年"交给 dma_analyze.py --csv --asof --json，和工作台实时取数一样（日线看最近 3 年，周线用 5 年）。
  * 报告写到 reports/replay/<今天>-20d.md（不进仓库）；--compare 给另一次回放的样本 JSON，报告末尾加一节前后对照。
@@ -138,7 +138,7 @@ const samples = (await pool(points, JOBS, async ({ t, i }): Promise<Sample | nul
 
 if (!samples.length) throw new Error("一个回放点都没有：检查股票代码和数据");
 const dates = samples.map((s) => s.date).sort();
-const meta = { tickers: TICKERS, from: dates[0], to: dates.at(-1)!, horizon: HORIZON, source: "yfinance 复权日线（每个点只用当天往前 3 年）" };
+const meta = { tickers: TICKERS, from: dates[0], to: dates.at(-1)!, horizon: HORIZON, source: "yfinance 日线，只按拆股复权（每个点只用当天往前 3 年）" };
 let md = renderReport(summarize(samples), meta);
 if (COMPARE) md += "\n" + renderCompare(JSON.parse(readFileSync(resolve(COMPARE), "utf8")) as Sample[], samples, HORIZON);
 const file = resolve(OUT, `${new Date().toISOString().slice(0, 10)}-20d.md`);

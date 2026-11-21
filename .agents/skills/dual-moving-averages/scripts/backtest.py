@@ -13,7 +13,8 @@
   uv run backtest.py NVDA INTC --from 2022-01-01 --jobs 8
   uv run backtest.py --fetch-only --history-from 2017-12-01 SPY   # 只取数（app 的 20 日回放也用这个）
 
-- 行情：yfinance 复权日线（开高低收量），缓存在 --data/<票>.csv；覆盖不到所需历史、超过 7 天没更新、或 --refresh 就重取。
+- 行情：yfinance 日线，开高低收量只按拆股复权（和工作台一样），另存 Adj Close，缓存在 --data/<票>.csv；
+  覆盖不到所需历史、超过 7 天没更新、不是这个口径（没有 Adj Close 列）、或 --refresh 就重取。
 - 每天的分析：切出"当天往前 3 年"，调 dma_analyze.analyze，和 `dma_analyze.py --csv <同一段> --asof <那天>` 完全一样
   （tests/test_backtest.py 断言）。没有历史小时线，P13 一律"需看图"，按两种口径各跑一遍（trades.Chart）。
 - 每天的结果缓存在 --out/daily/<票>.jsonl，脚本或行情变了自动重算。
@@ -48,6 +49,7 @@ PROJECT = SCRIPTS.parents[3]
 WINNERS = ("NVDA", "TSLA", "AAPL", "GOOG", "META", "MSFT", "AMZN", "SPY", "QQQ")   # app 回放的默认 9 只
 LOSERS = ("INTC", "PYPL", "NKE", "BA", "DIS")      # 2021 年以来大跌或长期落后的，抵消只挑赢家的偏差
 OHLCV = ["Open", "High", "Low", "Close", "Volume"]
+CACHED = OHLCV + ["Adj Close"]   # --data 缓存的列：拆股复权开高低收量 + 含分红复权收盘
 CSV_HOURLY = {"available": False, "reason": "CSV 模式不取小时线"}   # 和 dma_analyze.py --csv 一样
 POLYGON_30M = "Polygon/Massive（30 分钟线合成）"   # 和 hourly.load_hourly 写的来源一样
 HOURLY_CHUNK_DAYS = 30   # Polygon 每次最多 5 万根分钟线（30 分钟线按分钟线计），盘前盘后算上一天约 960 根
@@ -59,24 +61,28 @@ DAY = pd.Timedelta(days=1)
 # ---------- 行情 ----------
 
 def ensure_data(ticker: str, data: Path, need_from: pd.Timestamp, refresh: bool = False) -> Path:
-    """缓存够用就直接用；否则从 need_from 取到昨天（只要已经收盘的日线）。"""
+    """缓存够用就直接用；否则从 need_from 取到昨天（只要已经收盘的日线）。
+
+    开高低收只按拆股复权（auto_adjust=False），和工作台、fullplan 同一口径；Adj Close 一起存，表明缓存是这个口径。
+    改口径之前的缓存（含分红复权，没有 Adj Close 列）不认，重取。
+    """
     path = data / f"{ticker}.csv"
     today = pd.Timestamp.today().normalize()
     if path.exists() and not refresh:
         df = load(path, check=False)
-        if set(OHLCV) <= set(df.columns) and df.index[0] <= need_from + 7 * DAY and df.index[-1] >= today - 7 * DAY:
+        if set(CACHED) <= set(df.columns) and df.index[0] <= need_from + 7 * DAY and df.index[-1] >= today - 7 * DAY:
             return path
-        print(f"{ticker}：缓存 {df.index[0].date()} ~ {df.index[-1].date()} 不够用，重新取", file=sys.stderr)
+        print(f"{ticker}：缓存 {df.index[0].date()} ~ {df.index[-1].date()} 不够用或不是拆股复权口径，重新取", file=sys.stderr)
     import yfinance as yf
 
     df = yf.download(ticker, start=need_from.strftime("%Y-%m-%d"), end=today.strftime("%Y-%m-%d"),
-                     auto_adjust=True, progress=False)
+                     auto_adjust=False, progress=False)
     if isinstance(df.columns, pd.MultiIndex):
         df.columns = df.columns.get_level_values(0)
     expect = int(len(pd.bdate_range(need_from, today)) * 0.9)
-    if len(df) < expect or not set(OHLCV) <= set(df.columns):
+    if len(df) < expect or not set(CACHED) <= set(df.columns):
         sys.exit(f"{ticker}：只取到 {len(df)} 根日线（至少要 {expect} 根），列 {list(df.columns)}")
-    df = df[OHLCV].dropna()
+    df = df[CACHED].dropna()
     df.index.name = "Date"
     data.mkdir(parents=True, exist_ok=True)
     df.to_csv(path)
@@ -84,10 +90,13 @@ def ensure_data(ticker: str, data: Path, need_from: pd.Timestamp, refresh: bool 
 
 
 def load(path: Path, check: bool = True) -> pd.DataFrame:
+    """check=True：只留开高低收量（拆股复权价），缺列报错。"""
     df = pd.read_csv(path, parse_dates=["Date"]).set_index("Date").sort_index()
-    if check and not set(OHLCV) <= set(df.columns):
+    if not check:
+        return df
+    if not set(OHLCV) <= set(df.columns):
         raise ValueError(f"{path} 缺列：要 {OHLCV}，只有 {list(df.columns)}")
-    return df
+    return df[OHLCV]
 
 
 def ensure_hourly(ticker: str, data: Path, start: pd.Timestamp, refresh: bool = False) -> Path | None:
@@ -359,7 +368,7 @@ def render(series, runs, holds, ma60s, chart_days, meta) -> str:
         + (f"；{' '.join(l_)}（同期大跌或长期落后，用来抵消只挑赢家的偏差）" if l_ else "") + "。",
         f"决定点：每只票每个交易日一次，共 {sum(len(d) for _, _, d in series.values())} 个。"
         "每天收盘后用当天往前 3 年的数据跑一遍分析（和 `dma_analyze.py --csv --asof` 完全一样，测试断言），"
-        f"次日开盘成交，每边扣 {tr.COST * 100:.2f}%。只做多。数据：yfinance 复权日线。",
+        f"次日开盘成交，每边扣 {tr.COST * 100:.2f}%。只做多。数据：yfinance 日线，只按拆股复权，收益不含分红。",
         "",
         "进场和离场（出处 `references/playbooks.md` 的空仓、持仓两列，代码在 `scripts/trades.py` 的 SETUPS）：",
         "",
@@ -449,7 +458,7 @@ def render(series, runs, holds, ma60s, chart_days, meta) -> str:
             "- **一段时间、一种行情**：2021 年起不到 6 年，只有 2022 一次熊市。",
             "- **小时线不全**：2021 年到约 2022 年初没有小时线，那段 P13 需看图；三种口径的差就是它的影响范围。",
             "- **离场条件是解读**：rules.md 没给吃回撤和双线系统进场之后的底线，这里用 plan.ts 计划里写给用户的止损（见上表）。换一种解读结果会变；没有为了数字去调。",
-            "- **复权价**：yfinance 复权价会用之后的分红、拆股回溯调整历史价，对涨跌幅和均线方向的影响可以忽略。",
+            "- **复权价**：只按拆股复权，之后再拆股会回溯调整历史价，不影响涨跌幅和均线方向；不按分红调，收益不含分红。",
             "- **成本**：每边 0.05%，没算税和融资。",
             "",
             "20 日涨跌表（和 2026-11-19 的报告同一格式）和改造前后对照在同目录的 `<日期>-20d.md`（app 的 `bun scripts/replay.ts --compare`）。",

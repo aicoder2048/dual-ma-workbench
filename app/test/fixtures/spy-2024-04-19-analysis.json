@@ -3,7 +3,7 @@
  "date": "2024-04-19",
  "close": 495.16,
  "change_pct": -0.8728379244074214,
- "source": "Polygon/Massive（复权日线）",
+ "source": "Polygon/Massive（日线，只按拆股复权）",
  "warning": null,
  "lines": [
   {

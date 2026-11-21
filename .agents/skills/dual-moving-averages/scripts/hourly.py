@@ -74,7 +74,7 @@ def fetch_yfinance_1h(ticker: str, start: str, end: str) -> pd.DataFrame:
     import yfinance as yf
 
     end_excl = (pd.Timestamp(end) + pd.Timedelta(days=1)).strftime("%Y-%m-%d")
-    df = yf.download(ticker, start=start, end=end_excl, interval="1h", auto_adjust=True, progress=False)
+    df = yf.download(ticker, start=start, end=end_excl, interval="1h", auto_adjust=False, progress=False)
     if isinstance(df.columns, pd.MultiIndex):
         df.columns = df.columns.get_level_values(0)
     if df.empty:

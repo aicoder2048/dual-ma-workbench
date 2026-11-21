@@ -12,7 +12,7 @@ import { PROJECT_ROOT } from "./sources.ts";
 export type DataSource = "polygon" | "yfinance";
 
 export const DATA_OPTIONS: { id: DataSource; label: string; note: string }[] = [
-  { id: "polygon", label: "Polygon / Massive", note: "付费 API，复权日线。失败或超出约 5 年历史时自动回退 yfinance，报告会写明。" },
+  { id: "polygon", label: "Polygon / Massive", note: "付费 API，日线只按拆股复权。失败或超出约 5 年历史时自动回退 yfinance（同一口径），报告会写明。" },
   { id: "yfinance", label: "yfinance", note: "免费，非官方接口，偶尔不稳定。" },
 ];
 
