@@ -8,7 +8,7 @@ import { LAYERS_KEY, layerRows, parseLayers, presetOf, presetState, shownLayers,
 import { measure, measureLines } from "./measure.js";
 import { BAND_ALPHA, CANDLE_ALPHA, GROUPS, SPECS, alpha, bandPoints, lineStyle, nextFocus } from "./lines.js";
 import { gapBands, pickGaps, structureScene } from "./overlays.js";
-import { createProfileLayer } from "./profilelayer.js";
+import { createProfileLayer, profileWidth } from "./profilelayer.js";
 import { ohlcRow, weekLabel } from "./readout.js";
 import { DEFAULT_SPEED, OFF, SPEEDS, appendDelta, earliestIndex, indexOnOrBefore, randomIndex, sliceAt, speedMs, step } from "./replay.js";
 import { toneInfo, toneTurns } from "./tones.js";
@@ -25,6 +25,8 @@ function isoDate(t) {
 const RIGHT_ROOM = 4;
 /** 下一次财报在这么多根之内，右边的空位留到能看见它（覆盖 10 个交易日的财报提醒）。 */
 const NEXT_EARNINGS_ROOM = 15;
+/** 开着筹码时，最新一根 K 线和直方图之间再空几像素。 */
+const PROFILE_GAP = 6;
 
 const css = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
 
@@ -208,12 +210,15 @@ export function createChart(box, legendEl) {
     const from = new Date(view.candles[last].time);
     from.setDate(from.getDate() - (days ?? Infinity));
     const first = days ? Math.max(0, view.candles.findIndex((c) => c.time >= from.toISOString().slice(0, 10))) : 0;
-    // 右边留几根的空位；下一次财报在三周内就留到能看见它的 E
+    chart.timeScale().setVisibleLogicalRange({ from: first, to: shown().profile ? profileTo(first) : last + baseRoom() });
+  };
+  /** 最新一根右边留几根的空位；下一次财报在三周内就留到能看见它的 E。 */
+  function baseRoom() {
+    const last = view.candles.length - 1;
     const next = frame === "day" && earningsMarks(earnings, view.candles[last].time).find((m) => m.next);
     const ahead = next ? logicalOf(next.date, view.candles) - last : 0;
-    const room = ahead > 0 && ahead <= NEXT_EARNINGS_ROOM ? Math.max(RIGHT_ROOM, ahead + 1) : RIGHT_ROOM;
-    chart.timeScale().setVisibleLogicalRange({ from: first, to: last + room });
-  };
+    return ahead > 0 && ahead <= NEXT_EARNINGS_ROOM ? Math.max(RIGHT_ROOM, ahead + 1) : RIGHT_ROOM;
+  }
   tools.addEventListener("click", (e) => {
     const b = e.target.closest(".range-btn");
     if (!b) return;
@@ -230,7 +235,12 @@ export function createChart(box, legendEl) {
     if (!r) return;
     const span = r.to - r.from;
     const next = Math.min(Math.max(span * Math.exp(e.deltaY / 300), 5), (view?.candles.length ?? 500) + 10);
-    ts.setVisibleLogicalRange({ from: r.to - next, to: r.to }); // 以最右边（最新一天）为锚
+    // 开着筹码、最新一根停在直方图左边：以最新一根为锚，右边照样只让出直方图那一截
+    const last = (view?.candles.length ?? 0) - 1;
+    if (profileNow && parkedRoom !== null && Math.abs(r.to - last - parkedRoom) < 0.01) {
+      const from = last + 0.5 - (last + 0.5 - r.from) * next / span;
+      ts.setVisibleLogicalRange({ from, to: profileTo(from) });
+    } else ts.setVisibleLogicalRange({ from: r.to - next, to: r.to }); // 以最右边（最新一天）为锚
   }, { passive: false });
 
   // ---------- 价位线：结论里的触发价、止损、目标位，和做推演里推翻判断的价位 ----------
@@ -311,6 +321,51 @@ export function createChart(box, legendEl) {
       guides: guidePrices(),
       colors: { bin: css("--muted"), mountain: css("--neutral"), ref: css("--accent"), muted: css("--muted"), bg: css("--card"), font: css("--mono") },
     });
+    settleRoom();
+  }
+
+  // ---------- 开着筹码时右边让出直方图那一截：最新一根停在直方图左边，不被压住 ----------
+  // 空位按根数算（右边缘 - 最新一根），直方图按像素算，每次可见范围变了都换算一遍；挪的时候左边缘不动，只放宽右边。
+  // parkedRoom：上一次停好时的空位（根数）。空位没被用户改过（缩放、改窗口宽度、关掉筹码）就按新的情况重新停；
+  // 用户拖过（空位变了）只在最新一根压进直方图时推回来，拖得最新一根出了右边就不管：那是在看以前的 K 线。
+  let parkedRoom = null;
+  let panning = false; // 按着鼠标拖图时不动它，松手再停，不然往右拖不动
+  box.addEventListener("pointerdown", () => { panning = true; }, true);
+  addEventListener("pointerup", () => { if (panning) { panning = false; settleRoom(); } });
+  addEventListener("pointercancel", () => { panning = false; });
+  // 下一帧再停：在可见范围变化的回调里改范围，会被图表库正在应用的那次盖掉
+  let settling = 0;
+  function settleRoom() {
+    cancelAnimationFrame(settling);
+    settling = requestAnimationFrame(settleNow);
+  }
+  function settleNow() {
+    const ts = chart.timeScale();
+    const r = ts.getVisibleLogicalRange();
+    const width = ts.width();
+    if (panning || !r || !(width > 0) || !view?.candles.length) return;
+    const last = view.candles.length - 1;
+    const room = r.to - last, base = baseRoom();
+    const parked = parkedRoom !== null && Math.abs(room - parkedRoom) < 0.01;
+    let to = null;
+    if (profileNow) {
+      const want = Math.max(base, (profileWidth(width) + PROFILE_GAP) * (r.to - r.from) / width + 0.5);
+      if (room > 0 && (parked || room < want) && Math.abs(room - want) >= 0.01) to = profileTo(r.from);
+      parkedRoom = to !== null ? to - last : Math.abs(room - want) < 0.01 ? room : null;
+    } else {
+      if (parked && Math.abs(room - base) >= 0.01) to = last + base;
+      parkedRoom = null;
+    }
+    if (to !== null) ts.setVisibleLogicalRange({ from: r.from, to });
+  }
+  /**
+   * 左边缘停在 from 时，右边缘要到哪，最新一根才停在直方图左边：空位（根）= 让出的像素 / 每根宽 + 半根（最新一根的右半根），
+   * 每根宽 = 绘图区宽 / (to - from)，解出 to。不比平时的空位少。
+   */
+  function profileTo(from) {
+    const width = chart.timeScale().width(), last = view.candles.length - 1;
+    const px = profileWidth(width) + PROFILE_GAP;
+    return Math.max(last + baseRoom(), from + (last - from + 0.5) / (1 - px / width));
   }
 
   // ---------- 怎么用：每个工具、每个图层在这套方法里看什么（文字在 charthelp.js） ----------

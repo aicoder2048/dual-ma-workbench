@@ -1,4 +1,4 @@
-// 筹码分布画在 K 线图里：贴着价格轴（绘图区右边）横过来的直方图，筹码山描框、标山脚山顶，交易计划记下的上方最近那座（P38，只作参考）高亮成参考带。
+// 筹码分布画在 K 线图里：贴着价格轴（绘图区右边）横过来的直方图，筹码山描虚线框、标山脚山顶，交易计划记下的上方最近那座（P38，只作参考）描细实线、写「参考带」。
 // 画在图表画布里（series primitive，跟着缩放、平移、价格轴走），在 K 线下面一层；数是 volprofile.js 按可见范围算好的。
 import { layoutLabels } from "./labels.js";
 import { labeledMountains } from "./volprofile.js";
@@ -9,6 +9,9 @@ const MAX_WIDTH = 160;
 /** 山的框比直方图往左多出几像素；山脚、山顶、参考带的小字写在这一条里面，不伸进 K 线和结构标注。 */
 const FRAME_PAD = 4;
 const LABEL_H = 13;
+
+/** 直方图连山框从绘图区右边往左占多宽（像素）：图右边按它留白，最新一根 K 线停在它左边。 */
+export const profileWidth = (paneW) => Math.min(paneW * WIDTH_SHARE, MAX_WIDTH) + FRAME_PAD;
 
 /**
  * 返回 set({ profile, ref, close, guides, colors }) 和测试用的读数。profile 为 null 时不画。
@@ -34,7 +37,8 @@ export function createProfileLayer(chart, series) {
     drawn = null;
     if (!p) return;
     const paneW = size.width;
-    const maxW = Math.min(paneW * WIDTH_SHARE, MAX_WIDTH);
+    const left = paneW - profileWidth(paneW);
+    const maxW = paneW - left - FRAME_PAD;
     const peak = Math.max(...p.volumes);
     const inMountain = (j) => p.mountains.some((m) => m.foot <= p.edges[j] && p.edges[j + 1] <= m.top);
     for (let j = 0; j < p.volumes.length; j++) {
@@ -46,19 +50,7 @@ export function createProfileLayer(chart, series) {
       g.fillRect(paneW - w, top + 0.5, w, Math.max(bottom - top - 1, 1));
     }
     g.globalAlpha = 1;
-    const left = paneW - maxW - FRAME_PAD;
     const labels = [];
-    if (ref && ok(y(ref.top), y(ref.foot))) {
-      const top = y(ref.top), bottom = y(ref.foot);
-      g.globalAlpha = 0.16;
-      g.fillStyle = colors.ref;
-      g.fillRect(left, top, paneW - left, bottom - top);
-      g.globalAlpha = 0.8;
-      g.fillRect(left, top, paneW - left, 1);
-      g.fillRect(left, bottom - 1, paneW - left, 1);
-      g.globalAlpha = 1;
-      labels.push(label(g, "参考带（P38）", left + 2, top + 1, colors.ref, 0));
-    }
     g.strokeStyle = colors.mountain;
     g.lineWidth = 1;
     g.setLineDash([3, 2]);
@@ -67,6 +59,15 @@ export function createProfileLayer(chart, series) {
       if (ok(top, bottom)) g.strokeRect(left + 0.5, top + 0.5, paneW - left - 1, bottom - top - 1);
     }
     g.setLineDash([]);
+    // 参考带只描一圈细实线（压在同一座山的虚线框上），不填色：它只作参考，不该比 K 线抢眼
+    let refBox = null;
+    if (ref && ok(y(ref.top), y(ref.foot))) {
+      const top = y(ref.top), bottom = y(ref.foot);
+      g.strokeStyle = colors.ref;
+      g.strokeRect(left + 0.5, top + 0.5, paneW - left - 1, bottom - top - 1);
+      refBox = { top, bottom };
+      labels.push(label(g, "参考带（P38）", left + 2, top + 1, colors.ref, 0));
+    }
     for (const m of close == null ? [] : labeledMountains(p.mountains, close)) {
       if (ref && Math.abs(m.foot - ref.foot) < 1e-9 && Math.abs(m.top - ref.top) < 1e-9) continue; // 参考带已经写了
       if (ok(y(m.top))) labels.push(label(g, `山顶 ${m.top.toFixed(2)}`, left + 2, y(m.top) + 1, colors.mountain, 1));
@@ -86,7 +87,7 @@ export function createProfileLayer(chart, series) {
       g.fillStyle = l.color;
       g.fillText(l.text, l.left + 2, l.top + l.height);
     }
-    drawn = { left, right: paneW, labels: laid.map(({ text, left: x, top, width, height, hidden }) => ({ text, left: x, top, width, height, hidden })) };
+    drawn = { left, right: paneW, ref: refBox, labels: laid.map(({ text, left: x, top, width, height, hidden }) => ({ text, left: x, top, width, height, hidden })) };
   }
 
   const view = {
@@ -104,7 +105,7 @@ export function createProfileLayer(chart, series) {
       state = next;
       request?.();
     },
-    /** 上一次画在哪（测试用）：直方图和山框的左右边（绘图区坐标）和小字；没画时为 null。 */
+    /** 上一次画在哪（测试用）：直方图和山框的左右边、参考带的上下边（绘图区坐标）和小字；没画时为 null。 */
     drawn: () => drawn,
   };
 }
