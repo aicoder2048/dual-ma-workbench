@@ -16,6 +16,7 @@ from indicators import PERIODS, arrangement
 from projection import HURDLE_DAYS, Event, EventKind, SolveStatus, hurdle_path, solve
 from regime import ACCEL_WHERE, DENSE_PCT, RANGE_MIN_DAYS, PairProgress, Regime, Stage, Step, Transition, TrendType, Turn
 from structure import State, Structure
+from tones import BUILTIN, ToneSource
 from volprofile import Mountain, Profile, plan_profile
 
 if TYPE_CHECKING:
@@ -62,6 +63,8 @@ class Ctx:
     weekly: dict
     hourly: dict | None = None
     plan: PlanSet | None = None   # tradeplan.build 的结果：A6、P22–P25 读它
+    tones: pd.Series | None = None        # 每根 K 线的颜色（tones.bar_tones）：P40–P45 读它
+    tone_source: ToneSource = BUILTIN     # 颜色是谁算的：只有着色插件的颜色才判黑绿线
 
     @property
     def close(self) -> float:
@@ -75,6 +78,11 @@ class Ctx:
     def profile(self) -> Profile | None:
         """最近 1 年的筹码分布（volprofile.plan_profile）：J45–J49、P38、P39 和计划的参考筹码山读它。"""
         return plan_profile(self.df)
+
+    @cached_property
+    def bwl(self) -> Bwl:
+        """今天的黑绿线读数：P40–P45 和分析 JSON 的 bwl 读它。"""
+        return read_bwl(self)
 
 
 @dataclass(frozen=True)
@@ -715,6 +723,123 @@ def p39_in_mountain(c: Ctx) -> Result:
                 {"山脚": m.foot, "山顶": m.top})
 
 
+# ---------- 黑绿线（视频 P、M）：只在稳定上涨、稳定下跌里判，只认着色插件的颜色（docs/adr/0022.md） ----------
+
+BWL_TYPES = (TrendType.STEADY_UP, TrendType.STEADY_DOWN)
+_FAST_TURN = "视频 P 01:42「这种快速反转 它是来不及反应的」"
+BWL_UNFIT = {
+    TrendType.RANGE: "视频 P 01:25「这个指标的缺陷就是不适合在三点钟方向的」",
+    TrendType.ACCEL_UP: _FAST_TURN,
+    TrendType.ACCEL_DOWN: _FAST_TURN,
+}
+BWL_FIT = "只适合稳定上涨、稳定下跌，视频 P 01:59「这个指标最适合的趋势方向 其实是两点钟方向的上涨趋势」"
+BWL_COLOR = {"bull": "绿", "bear": "黑", "mixed": "灰"}
+BWL_IDS = ("P40", "P41", "P42", "P43", "P44", "P45")
+
+
+@dataclass(frozen=True)
+class Bwl:
+    """今天的黑绿线读数。blocked 不为 None 时判不了，P40–P45 的状态都是它，原因在 why。"""
+    source: ToneSource
+    applicable: bool                  # 类型是稳定上涨或稳定下跌
+    blocked: Status | None = None     # 不适用 → 不满足；没有着色插件的颜色 → 需看图
+    why: str = ""
+    color: str | None = None          # 绿 / 黑 / 灰
+    arrangement: str | None = None    # 20 线组对 60 线组：多头 / 空头 / 不一致
+    run: int = 0                      # 今天这个颜色连着几根
+
+    @property
+    def used(self) -> str:
+        return f"（颜色：{self.source.name}）"
+
+
+def read_bwl(c: Ctx) -> Bwl:
+    src, t = c.tone_source, c.regime.type
+    if t not in BWL_TYPES:
+        what = t.value if t is not None else c.regime.name
+        return Bwl(src, False, Status.UNMET, f"黑绿线不适合{what}：{BWL_UNFIT.get(t, BWL_FIT)}")
+    if src.key != "plugin" or c.tones is None:
+        why = "着色插件出错，退回了自带着色；" if src.warning else ""
+        return Bwl(src, True, Status.CHART, f"{why}自带着色不是黑绿线，配了着色插件才判")
+    tone = c.tones.iloc[-1]
+    if tone not in BWL_COLOR:
+        return Bwl(src, True, Status.CHART, "着色插件今天没给颜色")
+    r = c.row
+    up = r["MA20"] > r["MA60"] and r["EMA20"] > r["EMA60"]
+    down = r["MA20"] < r["MA60"] and r["EMA20"] < r["EMA60"]
+    run = next((k for k, x in enumerate(reversed(c.tones.tolist())) if x != tone), len(c.tones))
+    return Bwl(src, True, color=BWL_COLOR[tone], arrangement="多头" if up else "空头" if down else "不一致", run=run)
+
+
+def _bwl_pair(c: Ctx, arrangement: str, color: str, then: str) -> Result:
+    """P40–P43：20 线组对 60 线组的排列加今天的颜色。"""
+    b = c.bwl
+    if b.blocked:
+        return Result(b.blocked, b.why + b.used)
+    if b.arrangement == "不一致":
+        return _met(False, f"20、60 线组排列不一致，今天{b.color}{b.used}")
+    ok = b.arrangement == arrangement and b.color == color
+    where = "上" if b.arrangement == "多头" else "下"
+    return _met(ok, f"20 线组在 60 线组{where}方（{b.arrangement}排列），今天{b.color}" + (f"：{then}" if ok else "") + b.used)
+
+
+def p40_bwl_long(c: Ctx) -> Result:
+    return _bwl_pair(c, "多头", "绿", "做多 / 持有")
+
+
+def p41_bwl_exit(c: Ctx) -> Result:
+    return _bwl_pair(c, "多头", "黑", "平仓，不做空")
+
+
+def p42_bwl_short(c: Ctx) -> Result:
+    return _bwl_pair(c, "空头", "黑", "不做多、离场")
+
+
+def p43_bwl_no_long(c: Ctx) -> Result:
+    return _bwl_pair(c, "空头", "绿", "不做多")
+
+
+def p44_bwl_gray(c: Ctx) -> Result:
+    b = c.bwl
+    if b.blocked:
+        return Result(b.blocked, b.why + b.used)
+    if b.color != "灰":
+        return _met(False, f"今天{b.color}，不是灰{b.used}")
+    return _met(True, f"今天灰：警报，发生了关键性波动，想好对策，但不因为灰动手{b.used}")
+
+
+def p45_bwl_steady(c: Ctx) -> Result:
+    """多头一侧：稳定上涨里一直是绿；镜像：稳定下跌里一直是黑。"""
+    b = c.bwl
+    if b.blocked:
+        return Result(b.blocked, b.why + b.used)
+    up = c.regime.type == TrendType.STEADY_UP
+    want, alarm = ("绿", "灰或黑") if up else ("黑", "灰或绿")
+    if b.color != want:
+        return _met(False, f"{c.regime.type.value}里出现{b.color}，发生了关键性波动{b.used}")
+    after = "之前不用关心市场" if up else "才说明发生了关键性波动"
+    return _met(True, f"{c.regime.type.value}里今天{want}，已连续{want} {b.run} 根；没出现{alarm}{after}{b.used}")
+
+
+# 一句话说今天黑绿线怎么读：结论卡片和长风的数据字段用（只在照着色插件判了的时候）
+BWL_SAYS = {"P40": "多头排列里绿：做多 / 持有（P40）", "P41": "多头排列里变黑：平仓，不做空（P41）",
+            "P42": "空头排列里黑：不做多、离场（P42）", "P43": "空头排列里绿：不做多（P43）",
+            "P44": "灰：警报，发生了关键性波动，想好对策，不动手（P44）"}
+
+
+def bwl_json(b: Bwl, results: list[dict]) -> dict:
+    """分析 JSON 的 bwl：颜色来源、适不适用、今天的颜色和排列、一句话。判不了时一句话就是原因。"""
+    met = {r["id"] for r in results if r["id"] in BWL_IDS and r["status"] == Status.MET.value}
+    if b.blocked:
+        text = b.why
+    else:
+        text = next((BWL_SAYS[k] for k in BWL_SAYS if k in met), f"20、60 线组排列不一致，今天{b.color}，不给动作")
+        if "P45" in met:
+            text += f"；已连续{b.color} {b.run} 根" + ("，没出现灰或黑之前不用关心（P45）" if b.color == "绿" else "（P45）")
+    return {"source": {"key": b.source.key, "name": b.source.name}, "applicable": b.applicable,
+            "color": b.color, "arrangement": b.arrangement, "text": text}
+
+
 # ---------- 交易计划：价位在 tradeplan.build，这里只把空仓那份计划写成规则状态 ----------
 
 def _no_plan() -> Result:
@@ -893,12 +1018,12 @@ RULES: tuple[Rule, ...] = (
     Rule("P37", Kind.ACTION, "周线 2B 先看日线呼应", None),
     Rule("P38", Kind.ACTION, "筹码山也是目标位来源，和缺口、均线密集并列", p38_profile_reference),
     Rule("P39", Kind.ACTION, "进了目标筹码山照 P25 看中长线", p39_in_mountain),
-    Rule("P40", Kind.ACTION, "黑绿线：20 在 60 上方，绿色做多", None),
-    Rule("P41", Kind.ACTION, "黑绿线：20 在 60 上方，变黑平仓不做空", None),
-    Rule("P42", Kind.ACTION, "黑绿线：20 在 60 下方，黑色做空", None),
-    Rule("P43", Kind.ACTION, "黑绿线：20 在 60 下方，变绿平仓不做多", None),
-    Rule("P44", Kind.ACTION, "黑绿线：灰色不做动作", None),
-    Rule("P45", Kind.ACTION, "黑绿线：上升趋势里一直是绿，没出现灰或黑之前不用关心", None),
+    Rule("P40", Kind.ACTION, "黑绿线：20 在 60 上方，绿色做多", p40_bwl_long),
+    Rule("P41", Kind.ACTION, "黑绿线：20 在 60 上方，变黑平仓不做空", p41_bwl_exit),
+    Rule("P42", Kind.ACTION, "黑绿线：20 在 60 下方，黑色做空", p42_bwl_short),
+    Rule("P43", Kind.ACTION, "黑绿线：20 在 60 下方，变绿平仓不做多", p43_bwl_no_long),
+    Rule("P44", Kind.ACTION, "黑绿线：灰色不做动作", p44_bwl_gray),
+    Rule("P45", Kind.ACTION, "黑绿线：上升趋势里一直是绿，没出现灰或黑之前不用关心", p45_bwl_steady),
 )
 BY_ID = {r.id: r for r in RULES}
 
