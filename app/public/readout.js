@@ -41,6 +41,21 @@ export function ohlcRow(label, c, prev, v, turn = null) {
   return `<b>${label}</b>${turnText}${ohlc}${chgText}${volumeCell(v)}`;
 }
 
+/**
+ * 读数条第二行：各条均线的值。cells：[{ key, kind, token, group, value }]，按图例的顺序。
+ * 同一组的 MA、EMA 包在一个 ro-group 里：窄栏一行放不下时整组折到下一行，不把一组拆开，也不截掉哪条线。
+ */
+export function linesRow(cells) {
+  const groups = [];
+  for (const c of cells) {
+    const last = groups.at(-1);
+    if (last && c.group != null && last[0].group === c.group) last.push(c);
+    else groups.push([c]);
+  }
+  const cell = (c) => `<span class="ro-line"><i class="${c.kind.toLowerCase()}" style="--c: var(${c.token})"></i>${c.key} ${f2(c.value)}</span>`;
+  return groups.map((g) => `<span class="ro-group">${g.map(cell).join("")}</span>`).join("");
+}
+
 /** 周 K 线开头的日期：那一周最后一个交易日；最新一周没走完（今天不是周五）时注明。 */
 export function weekLabel(time, partial) {
   return `周 ${time}${partial ? "（本周未完）" : ""}`;

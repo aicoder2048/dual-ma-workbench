@@ -27,6 +27,17 @@ export function alpha(color, a) {
   return `rgba(${r},${g},${b},${a})`;
 }
 
+/** WCAG 对比度（1 ~ 21）：两个 "#rrggbb" 颜色。每条线对图表底色要 ≥ 3（非文字图形的标准），测试里按主题钉住。 */
+export function contrastRatio(a, b) {
+  const lum = (hex) => {
+    const [r, g, bl] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255)
+      .map((c) => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4));
+    return 0.2126 * r + 0.7152 * g + 0.0722 * bl;
+  };
+  const [hi, lo] = [lum(a), lum(b)].sort((x, y) => y - x);
+  return (hi + 0.05) / (lo + 0.05);
+}
+
 /**
  * 一条线的样式。colors：token → 颜色（当前主题）；focus：聚焦的线组（20 / 60 / 120）或 null。
  * 右端价格轴上用线的颜色写 MA 的值（图表库自己会错开重叠的标签）；EMA 只在聚焦它那组时写，免得 6 个标签挤在一起。
