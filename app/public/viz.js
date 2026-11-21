@@ -460,7 +460,7 @@ export function bwlLine(r) {
   const b = r.bwl;
   if (!b) return "";
   return `<p class="naive bwl-line" data-item="bwl" ${tip(`黑绿线（${b.source}）：${b.text}。只是读数，交易计划没用它（ADR 0022）`)}>`
-    + `<span class="pl">黑绿线</span>（${esc(b.source)}）：${esc(b.text)}</p>`;
+    + `<span class="pl">黑绿线 · 仅参考</span>（${esc(b.source)}）：${esc(b.text)}。交易计划没用它</p>`;
 }
 
 /** 对照一行：MA200 朴素规则怎么说、双均线怎么说、一不一致，带评估的出处（悬停看整句）。 */

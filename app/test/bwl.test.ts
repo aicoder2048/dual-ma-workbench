@@ -26,6 +26,8 @@ describe("结论卡片的黑绿线一行", () => {
     const html = card(withBwl(PLUGIN));
     expect(html).toContain('data-item="bwl"');
     expect(html).toContain(`（${FAKE}）：多头排列里绿：做多 / 持有（P40）`);
+    expect(html).toContain("黑绿线 · 仅参考"); // 交易计划没用它，卡片上直接看得见，不只靠悬停
+    expect(html).toContain("交易计划没用它");
   });
 
   test("自带着色、类型不适用、旧数据：没有这一行", () => {
