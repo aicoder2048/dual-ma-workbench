@@ -1,5 +1,6 @@
 // K 线 + 6 条均线 + 抵扣价小黄点 + 成交量（TradingView lightweight-charts 4.2.0）。
 import { baseCandleStyle, candleBar as styledBar } from "./candles.js";
+import { earningsMarks, logicalOf } from "./earnings.js";
 import { DEFAULT_SPEED, OFF, SPEEDS, appendDelta, earliestIndex, indexOnOrBefore, randomIndex, sliceAt, speedMs, step } from "./replay.js";
 
 const SPECS = [];
@@ -14,6 +15,9 @@ function isoDate(t) {
   if (typeof t === "number") return new Date(t * 1000).toISOString().slice(0, 10);
   return `${t.year}-${String(t.month).padStart(2, "0")}-${String(t.day).padStart(2, "0")}`;
 }
+
+/** 最新一根右边留几根的空位（下一次财报的 E 标在这里）。 */
+const RIGHT_ROOM = 4;
 
 const css = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
 
@@ -39,7 +43,7 @@ export function createChart(box, legendEl) {
     autoSize: true,
     rightPriceScale: { scaleMargins: { top: 0.06, bottom: 0.24 } },
     // 练习时坐标轴的刻度也写 T+n；返回 null 用默认刻度
-    timeScale: { rightOffset: 4, tickMarkFormatter: (t) => (timeLabel ? showTime(t) : null) },
+    timeScale: { rightOffset: RIGHT_ROOM, tickMarkFormatter: (t) => (timeLabel ? showTime(t) : null) },
     // 十字线底部的日期统一写成 2026-10-22（默认按浏览器语言写成 "22 10月 '26"，不好读）
     localization: { timeFormatter: showTime },
     crosshair: { mode: 0 },
@@ -149,12 +153,12 @@ export function createChart(box, legendEl) {
     tools.querySelectorAll(".range-btn").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.range === rangeKey)));
     if (!view?.candles.length) return;
     const days = RANGES.find(([k]) => k === rangeKey)[2];
-    const last = view.candles.at(-1).time; // 回放时以回放到的那天为准
-    if (!days) { chart.timeScale().fitContent(); return; }
-    const from = new Date(last);
-    from.setDate(from.getDate() - days);
-    const first = view.candles.find((c) => c.time >= from.toISOString().slice(0, 10))?.time ?? view.candles[0].time;
-    chart.timeScale().setVisibleRange({ from: first, to: last });
+    const last = view.candles.length - 1; // 回放时以回放到的那天为准
+    const from = new Date(view.candles[last].time);
+    from.setDate(from.getDate() - (days ?? Infinity));
+    const first = days ? Math.max(0, view.candles.findIndex((c) => c.time >= from.toISOString().slice(0, 10))) : 0;
+    // 右边留几根的空位：下一次财报的 E 标在那里
+    chart.timeScale().setVisibleLogicalRange({ from: first, to: last + RIGHT_ROOM });
   };
   tools.addEventListener("click", (e) => {
     const b = e.target.closest(".range-btn");
@@ -208,6 +212,8 @@ export function createChart(box, legendEl) {
       图上的<b>虚线价位线</b>是自动画的：绿色是结论里的触发价（不买的打法是"先看"），红色是止损，黄色是推翻判断的价位。</p>
     <p><b>着色</b>：绿 = 收盘在 MA20 上方且高于 20 日抵扣价（MA20 向上）；黑 = 两样都不满足（MA20 向下）；灰 = 只满足一样。
       第一根黑柱就是 20 线破线拐头；连续黑柱、收不回去，才说明拐头确认了。点工具栏里的「着色」可以关掉。</p>
+    <p><b>财报 E</b>：时间轴上方的小 E 是财报日，实心的是下一次。财报后常常跳空开盘，止损单按开盘价成交，可能比止损价差很多；
+      下一次财报在 10 个交易日内时，结论卡片会提醒。只是提醒，不改打法。</p>
     <p><b>看量</b>：底部的量柱，黄色是超过 50 日均量 2 倍的大量。看两种情况：横盘末期突然放量，是要变盘的信号；
       急涨或急跌的末端连续放量，说明多空分歧在化解，行情往往快要转向，并不代表强势。看到放量先提高警惕，动手还是要等均线拐头。</p>
     <p><b>回放</b>：点「回放」，再点图上的一天（或在「选起点」里选日期、最早一天、随机一天），图上就只剩那天及以前的 K 线，
@@ -289,7 +295,30 @@ export function createChart(box, legendEl) {
     candles.setMarkers(view.drops.slice().sort((a, b) => (a.time < b.time ? -1 : 1)).map((d) => ({
       time: d.time, position: "belowBar", color: drop, shape: "circle", text: `${d.period}扣`,
     })));
+    paintEarnings();
   }
+
+  // ---------- 财报日：时间轴上方的小 E（照 TradingView）；之后的第一次在右边留白里也标 ----------
+  let earnings = null;
+  const eLayer = document.createElement("div");
+  eLayer.className = "earnings-layer";
+  box.append(eLayer);
+  function paintEarnings() {
+    const ts = chart.timeScale();
+    const width = ts.width();
+    eLayer.style.bottom = `${ts.height()}px`;
+    eLayer.style.width = `${width}px`;
+    const marks = view?.candles.length ? earningsMarks(earnings, view.candles.at(-1).time) : [];
+    eLayer.innerHTML = marks.map(({ date, next }) => {
+      const i = logicalOf(date, view.candles);
+      const x = i === null ? null : ts.logicalToCoordinate(i);
+      if (x === null || x < 0 || x > width) return "";
+      const what = next ? `下次财报 ${date}：财报后常跳空，止损可能按不到原价` : `财报 ${date}`;
+      return `<span class="e-mark${next ? " next" : ""}" style="left:${x}px" data-date="${date}" title="${what}">E</span>`;
+    }).join("");
+  }
+  chart.timeScale().subscribeVisibleLogicalRangeChange(() => paintEarnings());
+  chart.timeScale().subscribeSizeChange(() => paintEarnings());
   /** 把一份图表数据（完整的，或回放截到某天的）画到图上。 */
   function show(v) {
     view = v;
@@ -552,6 +581,11 @@ export function createChart(box, legendEl) {
     },
     /** 停止回放、回到完整数据（取数失败、中栏收起图表时用）。 */
     stopReplay() { dispatch({ type: "exit" }); },
+    /** 财报日（分析 JSON 的 earnings）：图上标 E；练习里没有，传 null 清掉。 */
+    setEarnings(e) {
+      earnings = e ?? null;
+      paintEarnings();
+    },
     /** 价位线：[{ kind: trigger | stop | target | invalid, price, title }]，来自 viz.js 的 chartLevels。 */
     setLevels(list) {
       levels = list;

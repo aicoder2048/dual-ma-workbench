@@ -534,6 +534,10 @@ body.offline .status-pill .dot { background: var(--bad); }
 
 /* K 线回放：选起点的覆盖层、「回放」按钮下方的控制条（菜单向下展开，盖在图上）、标题旁的「回放中」 */
 .chart.replay-selecting { cursor: crosshair; }
+.earnings-layer { position: absolute; left: 0; height: 0; pointer-events: none; z-index: 2; }
+.e-mark { position: absolute; bottom: 3px; transform: translateX(-50%); width: 15px; height: 15px; border-radius: 50%; pointer-events: auto; cursor: default;
+  font: 600 10px/13px var(--mono); text-align: center; color: var(--neutral); background: var(--card); border: 1px solid var(--neutral); }
+.e-mark.next { color: var(--card); background: var(--neutral); }
 .replay-overlay { position: absolute; left: 0; top: 0; pointer-events: none; z-index: 3; }
 .replay-dim { position: absolute; top: 0; bottom: 0; background: color-mix(in srgb, var(--card) 65%, transparent); }
 .replay-line { position: absolute; top: 0; bottom: 0; width: 0; border-left: 2px solid var(--accent); transform: translateX(-1px); }
@@ -644,11 +648,13 @@ ul.solves li { display: flex; justify-content: space-between; gap: 12px; padding
 .pchip.rr.good { border-color: var(--up); color: var(--up); }
 .pchip .muted { color: var(--muted); font-size: 11.5px; }
 .verdict .pos-cost { padding-left: calc(5.5em + 10px); }
-.verdict .record, .verdict .naive { margin: 0; font-size: 12.5px; color: var(--muted); border-top: 1px dashed var(--line); padding-top: 6px; }
+.verdict .record, .verdict .naive, .verdict .earnings-warn { margin: 0; font-size: 12.5px; color: var(--muted); border-top: 1px dashed var(--line); padding-top: 6px; }
 .verdict .naive-agree { margin-left: 4px; font-weight: 600; white-space: nowrap; } .naive-agree.same { color: var(--up); } .naive-agree.differ { color: var(--neutral); }
 .verdict .naive { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } /* 只占一行：窄屏截掉的部分悬停看整句 */
 .verdict .naive-ev { font-size: 11.5px; margin-left: 8px; }
-.verdict .record .pl, .verdict .naive .pl, .answer .missing .pl { display: inline-block; font-size: 11.5px; color: var(--muted); border: 1px solid var(--line); border-radius: 6px; padding: 0 6px; margin-right: 8px; }
+.verdict .earnings-warn { color: var(--fg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.verdict .record .pl, .verdict .naive .pl, .verdict .earnings-warn .pl, .answer .missing .pl { display: inline-block; font-size: 11.5px; color: var(--muted); border: 1px solid var(--line); border-radius: 6px; padding: 0 6px; margin-right: 8px; }
+.verdict .earnings-warn .pl { color: var(--neutral); border-color: var(--neutral); }
 
 /* 找打法：条件清单 */
 .checklist { list-style: none; padding: 0; margin: 2px 0; font-size: 13.5px; }

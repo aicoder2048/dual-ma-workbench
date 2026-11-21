@@ -140,6 +140,12 @@ export type Ma200 = Unavailable | {
   stance: HoldStance; dual_ma_stance: HoldStance; agrees: boolean;
 };
 
+/**
+ * 财报日（skill 的 earnings.py）：只是信息，不进规则。past 是日线窗口里 asof 及以前的，next 是之后第一次，
+ * days_to_next 是 asof 之后到那天的工作日数。盲测练习没有这个字段（日期会泄露是哪只票）。
+ */
+export type Earnings = Unavailable | { available: true; past: string[]; next: string | null; days_to_next: number | null; source: string };
+
 /** 唯一的打法：key 选 plan.ts 里按仓位的措辞，text 是脚本生成的那段话，rules 是用到的规则编号。 */
 export interface Play { key: string; text: string; rules: string[] }
 
@@ -199,12 +205,22 @@ export interface Analysis {
   weekly: Weekly;
   hourly: Hourly;
   ma200: Ma200;
+  /** 盲测练习里拿掉（blind.ts 的 blindAnalysis）。 */
+  earnings?: Earnings;
   lean: Lean;
   drops: {
     period: number; tomorrow: number; mean: number; max: number; below: number; count: number;
     first_low: number | null; ma_flat_change_pct: number; direction: string;
     path: { date: string; close: number }[];
   }[];
+}
+
+/** 下次财报在提醒窗口（thresholds.EARNINGS_WARN_DAYS 个交易日）内：返回日期和天数，否则 null。 */
+export function earningsSoon(a: Pick<Analysis, "earnings" | "thresholds">): { next: string; days: number } | null {
+  const e = a.earnings;
+  const warn = a.thresholds.EARNINGS_WARN_DAYS?.value;
+  if (!e?.available || !e.next || e.days_to_next === null || warn === undefined || e.days_to_next > warn) return null;
+  return { next: e.next, days: e.days_to_next };
 }
 
 const f2 = (x: number) => x.toFixed(2);
@@ -294,6 +310,13 @@ export function buildFacts(a: Analysis): Facts {
       `${f2(m.value)}，向${m.direction}；${x ? `${x.date} 收盘${x.kind}（${x.bars_ago} 根前）` : "窗口内收盘没穿过"}`);
   }
   put("MA200.对照", "MA200 朴素规则（收盘在上方持有，否则空仓）和双均线照方向持有一不一致", naiveCompare(m).text);
+  const e = a.earnings;
+  if (e) {
+    const soon = earningsSoon(a);
+    put("财报.下次", `下次财报（只是信息，不进规则；${a.thresholds.EARNINGS_WARN_DAYS?.value ?? "—"} 个交易日内提醒跳空风险）`,
+      !e.available ? e.reason : e.next ? `${e.next}（${e.days_to_next} 个交易日后${soon ? "，在提醒窗口内：跳空可能越过止损价" : ""}）` : "还没公布");
+    if (e.available && e.past.length) put("财报.上次", "上一次财报", e.past.at(-1)!);
+  }
   return facts;
 }
 

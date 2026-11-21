@@ -40,6 +40,14 @@ const CHART = (() => {
   };
 })();
 
+/** 财报日替身：图上三次过去的财报，下一次在最后一根之后 3 个交易日（提醒窗口 10 天内）。 */
+const EARN_NEXT = (() => {
+  const d = new Date(`${CHART.candles.at(-1)!.time}T00:00:00Z`);
+  for (let n = 0; n < 3;) { d.setUTCDate(d.getUTCDate() + 1); if (d.getUTCDay() % 6) n++; }
+  return d.toISOString().slice(0, 10);
+})();
+const EARNINGS = { available: true, past: [CHART.candles[120].time, CHART.candles[183].time, CHART.candles[246].time], next: EARN_NEXT, days_to_next: 3, source: "yfinance" };
+
 const MP3 = readFileSync(resolve(import.meta.dir, "../test/fixtures/tts-sample.mp3"));
 const ttsCalls: { text: string; voice: string }[] = [];
 const wsSent: any[] = [];
@@ -76,6 +84,11 @@ beforeAll(async () => {
         const flat = { ...n.trade_plan.flat, entry: null, stop: null, targets: [], rr: null, rr_verdict: null, rr_gap: null, risk_pct: null, size: null };
         return JSON.stringify({ analysis: { ...n, label: "BOUNCE", play: { ...n.play, key: "空头结构反弹中", rules: ["P17", "J18", "J17"] },
           trade_plan: { ...n.trade_plan, key: "空头结构反弹中", flat } }, chart: CHART });
+      }
+      if (args[0] === "EARN") { // 3 天后财报：图上标 E，结论卡片提醒跳空
+        const n = nvda as Analysis;
+        return JSON.stringify({ analysis: { ...n, label: "EARN", earnings: EARNINGS,
+          thresholds: { ...n.thresholds, EARNINGS_WARN_DAYS: { value: 10, source: "脚本自定" } } }, chart: CHART });
       }
       return JSON.stringify({ analysis: { ...(nvda as Analysis), label: args[0], warning: warningNext ?? nvda.warning }, chart: CHART });
   }, Date.now, () => "polygon", () => sizingArgs(settings.get()));
@@ -660,6 +673,50 @@ const scrollIntoCenter = (page: Page, sel: string) => page.evaluate(async (sel) 
   s.scrollTop += el.getBoundingClientRect().top - s.getBoundingClientRect().top - 40;
   await new Promise((ok) => requestAnimationFrame(() => requestAnimationFrame(ok)));
 }, sel);
+
+/** 把图的底边（时间轴）滚进中栏视野：默认视口里图在结论下面，底边要往下滚才看得见。 */
+const scrollChartBottomIntoView = (page: Page) => page.evaluate(async () => {
+  const s = document.getElementById("center-scroll")!;
+  s.scrollTop += document.getElementById("chart")!.getBoundingClientRect().bottom - s.getBoundingClientRect().bottom + 12;
+  await new Promise((ok) => requestAnimationFrame(() => requestAnimationFrame(ok)));
+});
+
+describe("财报日", () => {
+  test("结论卡片：3 天后财报、跳空可能越过止损价，默认视图看得见、没被挡；打法不变", async () => {
+    const { page, errors } = await open(undefined, "EARN");
+    const sel = "#verdict [data-item=earnings]";
+    expect(await notCovered(page, sel)).toBe(true);
+    expect((await page.textContent(sel))!.replace(/\s+/g, "")).toContain(`3天后财报（${EARN_NEXT}）：跳空可能越过止损价183.08`);
+    expect(await page.textContent('#verdict .concl-row[data-situation="flat"]')).toContain("不做：盈亏比 0.6:1"); // 和 NVDA 一样
+    expect(errors).toEqual([]);
+    await page.close();
+  }, 30_000);
+
+  test("图上：过去的财报和下一次标 E（下一次在右边留白里），看得见、没被挡；没有财报日的票不标", async () => {
+    const { page, errors } = await open(undefined, "EARN");
+    await page.waitForSelector("#chart .e-mark.next");
+    await scrollChartBottomIntoView(page); // E 在图的底边：像用户一样往下滚到看见时间轴
+    const marks = await page.$$eval("#chart .e-mark", (els) => els.map((e) => [(e as HTMLElement).dataset.date, e.classList.contains("next")]));
+    expect(marks).toEqual([...EARNINGS.past.map((d) => [d, false]), [EARN_NEXT, true]]);
+    for (const d of [EARNINGS.past[2], EARN_NEXT]) expect(await notCovered(page, `#chart .e-mark[data-date="${d}"]`)).toBe(true);
+    expect(await page.getAttribute("#chart .e-mark.next", "title")).toContain("跳空");
+    // E 在时间轴上方、图内：底边不超过图的绘图区
+    const inPane = await page.evaluate(async () => {
+      const { getChart } = await import("/app.js");
+      const box = document.getElementById("chart")!.getBoundingClientRect();
+      const m = document.querySelector("#chart .e-mark")!.getBoundingClientRect();
+      return m.bottom <= box.bottom - getChart().chart.timeScale().height() + 1 && m.top > box.top;
+    });
+    expect(inPane).toBe(true);
+    expect(errors).toEqual([]);
+    await page.close();
+    const nv = await open(); // NVDA 的替身没有财报日
+    await nv.page.waitForSelector("#chart canvas");
+    expect(await nv.page.locator("#chart .e-mark").count()).toBe(0);
+    expect(await nv.page.locator("#verdict [data-item=earnings]").count()).toBe(0);
+    await nv.page.close();
+  }, 30_000);
+});
 
 describe("中栏：结论 → 看大局 → 找打法 → 做推演", () => {
   test("顺序：结论、K 线图、看大局、找打法、做推演；没有单独的规则清单卡", async () => {

@@ -23,10 +23,10 @@ const NOW = "2026-11-20T00:00:00.000Z";
 
 // ---------- HTTP：真的 dma_analyze.py，假的"真实"行情 ----------
 
-function setup() {
+function setup(run = pythonRunner) {
   const dir = mkdtempSync(join(tmpdir(), "dma-practice-"));
   const journal = new Journal(join(dir, "journal.json"));
-  const practice = new Practice({ store: new SessionStore(join(dir, "sessions.json")), journal, prices, run: pythonRunner,
+  const practice = new Practice({ store: new SessionStore(join(dir, "sessions.json")), journal, prices, run,
     dir: join(dir, "practice"), pool: [{ ticker: REAL_TICKER }], now: () => NOW });
   const analyzer = new Analyzer(async () => { throw new Error("练习不该取真股票"); });
   analyzer.mount(practice);
@@ -59,6 +59,24 @@ function leaks(text: string): string[] {
 }
 
 describe("练习的接口", () => {
+  test("财报日不进练习：就算脚本给了，页面、长风、鸿雁都拿不到（真实日期会泄露是哪只票）", async () => {
+    const real = REAL.at(-1)!.date;
+    const withEarnings = async (args: string[]) => {
+      const out = JSON.parse(await pythonRunner(args));
+      out.analysis.earnings = { available: true, past: [REAL[0].date], next: real, days_to_next: 3, source: "yfinance" };
+      return JSON.stringify(out);
+    };
+    const { json, analyzer } = setup(withEarnings);
+    await json("/api/practice", { id: "sess-earnings-1", seed: 3 });
+    const a = await json(`/api/analyze?ticker=${encodeURIComponent("练习 #1")}`);
+    expect("earnings" in a.analysis).toBe(false);
+    expect(a.report.earnings).toBeNull();
+    expect(a.raw).not.toContain(real);
+    const r = await analyzer.analyze("练习 #1", null);
+    expect(Object.keys(buildFacts(r.analysis)).filter((k) => k.startsWith("财报"))).toEqual([]);
+    expect(analysisForModel(r, buildFacts(r.analysis))).not.toContain("财报");
+  }, 120_000);
+
   test("蒙眼、不偷看、按计划成交、揭晓", async () => {
     const { json, call, analyzer, dir } = setup();
     const id = "sess-http-0001";
