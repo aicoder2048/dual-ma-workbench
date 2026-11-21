@@ -102,9 +102,16 @@ def test_m_top_and_2b_are_told_apart():
     assert [(p.name, p.state, p.level) for p in two_b] == [("2B 顶", "已形成", 14)]
 
 
+def test_formed_pattern_names_the_bar_whose_close_crossed_the_level():
+    m_df, two_b_df = bars(M_TOP), bars(TWO_B)
+    # M 顶：倒数第二根收盘 10.1 还在颈线 9.5 之上，最后一根 9.25 跌破；2B：C 之后那根收盘 12.4 跌回 A 的 14 之下
+    assert find_structure(m_df).patterns[0].confirmed == day(m_df, len(M_TOP) - 1)
+    assert find_structure(two_b_df).patterns[0].confirmed == day(two_b_df, len(TWO_B) - 1)
+
+
 def test_m_top_before_the_neckline_breaks_is_pending():
     patterns = find_structure(bars(M_TOP[:-2])).patterns
-    assert [(p.name, p.state) for p in patterns] == [("M 顶", "待确认")]
+    assert [(p.name, p.state, p.confirmed) for p in patterns] == [("M 顶", "待确认", None)]
 
 
 def test_csv_without_high_low_reports_no_data():

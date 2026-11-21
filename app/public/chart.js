@@ -1,7 +1,9 @@
 // K 线 + 6 条均线 + 抵扣价小黄点 + 成交量（TradingView lightweight-charts 4.2.0）。
 import { baseCandleStyle, candleBar as styledBar } from "./candles.js";
+import { createOverlay } from "./chartoverlay.js";
 import { earningsMarks, logicalOf } from "./earnings.js";
 import { measure, measureLines } from "./measure.js";
+import { structureScene } from "./overlays.js";
 import { volumeCell } from "./readout.js";
 import { DEFAULT_SPEED, OFF, SPEEDS, appendDelta, earliestIndex, indexOnOrBefore, randomIndex, sliceAt, speedMs, step } from "./replay.js";
 
@@ -145,6 +147,7 @@ export function createChart(box, legendEl) {
     + `<button type="button" class="tone-toggle" title="${TONE_TITLE}">`
     + `${Object.values(TONE_TOKENS).map((t) => `<i style="--c: var(${t})"></i>`).join("")}着色</button>`
     + `<button type="button" class="levels-toggle" aria-pressed="true" title="把结论里的触发价、止损和推翻判断的价位画成虚线">价位线</button>`
+    + `<button type="button" class="struct-toggle" aria-pressed="true">结构</button>`
     + `<button type="button" class="chart-help-toggle" aria-expanded="false">怎么用</button>`;
   legendEl.after(tools);
 
@@ -212,6 +215,32 @@ export function createChart(box, legendEl) {
     paintLevels();
   });
 
+  // ---------- 结构标注：波段、最近的顶部 / 底部构造、M 顶 / W 底 / 2B（skill 的 structure.py 算好的，这里只画） ----------
+  const structLayer = createOverlay(chart, candles, box);
+  let structure = null;
+  let structOn = true;
+  try { structOn = localStorage.getItem("dma-struct") !== "0"; } catch { /* 隐私模式 */ }
+  const structBtn = tools.querySelector(".struct-toggle");
+  const STRUCT_TITLE = "结构标注：波段连线、最近的顶部 / 底部构造和它的状态、M 顶 / W 底 / 2B；点图上的标记看规则原文";
+  /** 结构属于分析那一天：回放时收起（会露出之后才知道的构造），练习、揭晓时没有（免得提前看到答案）。 */
+  const structWhyOff = () => (rs.mode === "replay" ? "回放时收起：结构是按最新一天算的，会露出之后的走势"
+    : !structure?.available ? "这份数据没有结构标注（练习里不画，免得提前看到答案）" : null);
+  const overlayColors = () => ({ swing: css("--muted"), neck: css("--neutral"), up: css("--up"), down: css("--down"),
+    gap: css("--neutral"), target: css("--accent"), bg: css("--card"), font: css("--mono") });
+  function paintOverlay() {
+    const why = structWhyOff();
+    structBtn.disabled = Boolean(why);
+    structBtn.title = why ?? STRUCT_TITLE;
+    structBtn.setAttribute("aria-pressed", String(structOn && !why));
+    const scene = structOn && !why && view ? structureScene(structure, view.candles) : {};
+    structLayer.set(scene, overlayColors(), view?.candles ?? []);
+  }
+  structBtn.addEventListener("click", () => {
+    structOn = !structOn;
+    try { localStorage.setItem("dma-struct", structOn ? "1" : "0"); } catch { /* 忽略 */ }
+    paintOverlay();
+  });
+
   // ---------- 怎么用：四种常见用法，在这套方法里看什么 ----------
   const help = document.createElement("div");
   help.className = "chart-help";
@@ -227,6 +256,9 @@ export function createChart(box, legendEl) {
       第一根黑柱就是 20 线破线拐头；连续黑柱、收不回去，才说明拐头确认了。点工具栏里的「着色」可以关掉。</p>
     <p><b>测量</b>：点「测量」，在图上按住从一点拖到另一点，框里写涨跌多少、涨跌幅、隔几根 K 线（几个自然日），和这段距离是几个 ATR(14)。
       用来看止损离进场几个 ATR：不到 1 个 ATR 的止损，平常的波动就可能扫到。回放时一样能用；Esc 或再点一次「测量」清掉。</p>
+    <p><b>结构</b>：灰色折线是波段，把顶部构造的最高点连到底部构造的最低点，最后一段虚线是还在形成的那个构造。
+      「顶·已完成」「底·形成中」这类标记是最近的顶部、底部构造；形成中时旁边的短虚线写着下一根 K 线怎样就完成（比如"下一根低 &lt; 412.30"）。
+      「M顶」「W底」「2B顶」「2B底」标在收盘越过颈线（2B 是越过前高 A）的那根，带"?"的是还没确认；点标记看它的日期、价位和规则原文。回放时收起，练习里不画。</p>
     <p><b>财报 E</b>：时间轴上方的小 E 是财报日，实心的是下一次。财报后常常跳空开盘，止损单按开盘价成交，可能比止损价差很多；
       下一次财报在 10 个交易日内时，结论卡片会提醒。只是提醒，不改打法。</p>
     <p><b>看量</b>：底部的量柱，黄色是超过 50 日均量 2 倍的大量。看两种情况：横盘末期突然放量，是要变盘的信号；
@@ -298,6 +330,7 @@ export function createChart(box, legendEl) {
     for (const s of SPECS) series[s.key].applyOptions({ color: css(s.token) });
     paintLevels();
     paintMarkers();
+    paintOverlay();
   }
   const volBar = (v) => ({ time: v.time, value: v.value, color: css(v.spike ? "--drop" : "--line") });
   function paintMarkers() {
@@ -423,7 +456,7 @@ export function createChart(box, legendEl) {
       if (away) chart.timeScale().setVisibleLogicalRange(r);
       else windowAt(rs.index, r ? r.to - r.from : 120);
     }
-    if ((prev.mode === "replay") !== (rs.mode === "replay")) paintLevels();
+    if ((prev.mode === "replay") !== (rs.mode === "replay")) { paintLevels(); paintOverlay(); }
     syncReplay();
   }
 
@@ -650,6 +683,7 @@ export function createChart(box, legendEl) {
       ruler = null; // 量的两点属于旧数据
       arm();
       if (!sameTicker) { drawKey = key; loadDrawn(); }
+      structure = null; // 结构属于上一份分析；app 随后用 setStructure 给这份的（练习、揭晓时不给）
       paintDrawn();
       if (rs.mode === "replay") {
         show(sliceAt(d, index));
@@ -695,6 +729,13 @@ export function createChart(box, legendEl) {
       if (rs.mode === "replay") paintEarnings(); // 回放中重新载入：视图留在原处
       else applyRange(); // 右边的空位要不要放宽到下一次财报
     },
+    /** 结构标注：分析 JSON 的 structure；练习、揭晓时传 null，不画。 */
+    setStructure(s) {
+      structure = s ?? null;
+      paintOverlay();
+    },
+    /** 现在画着的结构标注（测试用）：{ segments, levels, marks }，见 overlays.js。 */
+    structure: () => structLayer.scene(),
     /** 价位线：[{ kind: trigger | stop | target | invalid, price, title }]，来自 viz.js 的 chartLevels。 */
     setLevels(list) {
       levels = list;

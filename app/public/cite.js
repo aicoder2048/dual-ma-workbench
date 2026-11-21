@@ -88,8 +88,10 @@ async function openSource(btn) {
   const res = await fetch(`/api/source?id=${encodeURIComponent(btn.dataset.ref)}`);
   if (!res.ok) { p.innerHTML = `<p>引用库里没有 <code>${esc(btn.dataset.ref)}</code>。</p>`; return; }
   const c = await res.json();
+  // data-lead：图上的标记点开时，先说这一个具体是什么（哪天、什么价位），下面是规则原文
+  const lead = btn.dataset.lead ? `<p class="pop-lead">${esc(btn.dataset.lead)}</p>` : "";
   p.innerHTML = `<div class="pop-head"><b>${esc(c.docTitle)} · ${esc(c.heading)}</b><button class="close" aria-label="关闭">×</button></div>
-    <div class="pop-path">${esc(c.path)}:${c.line} · [[S:${esc(c.id)}]]</div><div class="pop-body"></div>`;
+    ${lead}<div class="pop-path">${esc(c.path)}:${c.line} · [[S:${esc(c.id)}]]</div><div class="pop-body"></div>`;
   const body = p.querySelector(".pop-body");
   body.innerHTML = window.DOMPurify.sanitize(window.marked.parse(c.body));
   placeNear(btn);

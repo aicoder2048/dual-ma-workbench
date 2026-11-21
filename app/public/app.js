@@ -225,6 +225,7 @@ export function showAnalysis(data, asof = null) {
   v.style.setProperty("--stance", `var(--${r.stance === "bullish" ? "up" : r.stance === "bearish" ? "down" : "neutral"})`);
   chartApi?.setData(practiceChart ?? data.chart, a.label);
   chartApi?.setEarnings(practiceChart ? null : a.earnings);
+  chartApi?.setStructure(practiceChart ? null : a.structure); // 练习里不画：结构标注会提前说出答案
 
   const steps = $("steps");
   steps.innerHTML = "";

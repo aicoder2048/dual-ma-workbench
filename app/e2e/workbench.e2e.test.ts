@@ -49,6 +49,26 @@ const EARN_NEXT = (() => {
 })();
 const EARNINGS = { available: true, past: [CHART.candles[120].time, CHART.candles[183].time, CHART.candles[246].time], next: EARN_NEXT, days_to_next: 3, source: "yfinance" };
 
+/** 结构标注替身：落在 CHART 上的波段、完成的顶部构造、只差一根的底部构造、已形成的 M 顶和 2B 顶。 */
+const STRUCTURE = (() => {
+  const d = (i: number) => CHART.candles[i].time;
+  const hi = (i: number) => CHART.candles[i].high, lo = (i: number) => CHART.candles[i].low;
+  const construct = { extreme: false, broken_date: null, complete_at: null, next_at: null, bars_left: null };
+  const next = (nvda as Analysis).structure.bottom!.next_at; // 找打法里"还差"读这个价位，要和 NVDA 替身的规则对得上
+  return {
+    available: true,
+    top: { ...construct, side: "顶部构造", state: "已完成", pivot_date: d(240), pivot_price: hi(240), lh_date: d(241), done_date: d(242), invalidation: hi(240) },
+    bottom: { ...construct, side: "底部构造", state: "形成中", pivot_date: d(290), pivot_price: lo(290), lh_date: d(291), done_date: null,
+      invalidation: lo(290), complete_at: next, next_at: next, bars_left: 1 },
+    pivots: [{ kind: "低", date: d(200), price: lo(200) }, { kind: "高", date: d(215), price: hi(215) },
+      { kind: "低", date: d(225), price: lo(225) }, { kind: "高", date: d(240), price: hi(240) }],
+    patterns: [
+      { name: "M 顶", state: "已形成", dates: [d(215), d(225), d(240)], level: lo(225), confirmed: d(250) },
+      { name: "2B 顶", state: "已形成", dates: [d(255), d(262)], level: hi(255), confirmed: d(264) },
+    ],
+  };
+})();
+
 const MP3 = readFileSync(resolve(import.meta.dir, "../test/fixtures/tts-sample.mp3"));
 const ttsCalls: { text: string; voice: string }[] = [];
 const wsSent: any[] = [];
@@ -86,6 +106,7 @@ beforeAll(async () => {
         return JSON.stringify({ analysis: { ...n, label: "BOUNCE", play: { ...n.play, key: "空头结构反弹中", rules: ["P17", "J18", "J17"] },
           trade_plan: { ...n.trade_plan, key: "空头结构反弹中", flat } }, chart: CHART });
       }
+      if (args[0] === "STRUCT") return JSON.stringify({ analysis: { ...(nvda as Analysis), label: "STRUCT", structure: STRUCTURE }, chart: CHART });
       if (args[0] === "EARN") { // 3 天后财报：图上标 E，结论卡片提醒跳空
         const n = nvda as Analysis;
         return JSON.stringify({ analysis: { ...n, label: "EARN", earnings: EARNINGS,
@@ -842,6 +863,66 @@ describe("财报日", () => {
     expect(await nv.page.locator("#chart .e-mark").count()).toBe(0);
     expect(await nv.page.locator("#verdict [data-item=earnings]").count()).toBe(0);
     await nv.page.close();
+  }, 30_000);
+});
+
+describe("结构标注", () => {
+  const scene = (page: Page) => page.evaluate(async () => (await import("/app.js")).getChart().structure());
+  const shown = (page: Page) => page.$$eval("#chart .struct-mark", (els) => els.filter((e) => !(e as HTMLElement).hidden).map((e) => e.textContent));
+
+  test("默认画：波段、最近的构造、M 顶和 2B 顶；「结构」看得见、没被挡，点一下全收起，再点回来", async () => {
+    const { page, errors } = await open(undefined, "STRUCT");
+    await page.waitForSelector("#chart .struct-mark");
+    await scrollIntoCenter(page, ".chart-card"); // 像用户一样滚到图
+    expect(await notCovered(page, ".struct-toggle")).toBe(true);
+    expect(await page.getAttribute(".struct-toggle", "aria-pressed")).toBe("true");
+    expect(await shown(page)).toEqual(["顶·已完成", "底·形成中", "M顶", "2B顶"]);
+    for (const rule of ["J25", "J26"]) expect(await notCovered(page, `#chart .struct-mark[data-ref="rules#${rule}"]`)).toBe(true);
+    const s = await scene(page);
+    expect(s.segments.filter((x: any) => x.kind === "swing")).toHaveLength(3);
+    expect(s.segments.filter((x: any) => x.kind === "neck").map((x: any) => x.label)).toEqual(["颈线", "A"]);
+    expect(s.levels.map((x: any) => x.text)).toEqual([`下一根高 > ${STRUCTURE.bottom.next_at!.toFixed(2)} 底构造完成`]);
+    await page.click(".struct-toggle");
+    expect(await page.getAttribute(".struct-toggle", "aria-pressed")).toBe("false");
+    expect(await shown(page)).toEqual([]);
+    expect((await scene(page)).segments).toEqual([]);
+    await page.click(".struct-toggle");
+    expect(await shown(page)).toHaveLength(4);
+    expect(errors).toEqual([]);
+    await page.close();
+  }, 30_000);
+
+  test("点 M 顶标记：弹窗先说颈线和跌破那天，下面是 rules.md J25 原文", async () => {
+    const { page, errors } = await open(undefined, "STRUCT");
+    await page.waitForSelector("#chart .struct-mark");
+    await scrollIntoCenter(page, ".chart-card");
+    await page.click('#chart .struct-mark[data-ref="rules#J25"]');
+    await page.waitForSelector("#popover .pop-body p");
+    const pop = (await page.textContent("#popover"))!;
+    expect(pop).toContain(`颈线 ${STRUCTURE.patterns[0].level.toFixed(2)}`);
+    expect(pop).toContain(`${STRUCTURE.patterns[0].confirmed} 收盘跌破`);
+    expect(pop).toContain("rules.md");
+    expect(pop).toContain("J25");
+    expect(errors).toEqual([]);
+    await page.close();
+  }, 30_000);
+
+  test("回放时收起（结构按最新一天算，会露出之后的走势），按钮不能点；退出回放画回来", async () => {
+    const { page, errors } = await open(undefined, "STRUCT");
+    await page.waitForSelector("#chart .struct-mark");
+    await scrollIntoCenter(page, ".chart-card");
+    await page.click(".replay-toggle");
+    await page.click(".replay-start");
+    await page.click('[data-start="earliest"]');
+    await page.waitForFunction(async () => (await import("/app.js")).getChart().replay().mode === "replay");
+    expect(await page.isDisabled(".struct-toggle")).toBe(true);
+    expect(await page.getAttribute(".struct-toggle", "title")).toContain("回放时收起");
+    expect(await shown(page)).toEqual([]);
+    await page.click(".replay-exit");
+    expect(await page.isDisabled(".struct-toggle")).toBe(false);
+    expect(await shown(page)).toHaveLength(4);
+    expect(errors).toEqual([]);
+    await page.close();
   }, 30_000);
 });
 
@@ -1772,6 +1853,9 @@ describe("盲测练习", () => {
     expect(await page.isVisible(".replay-toggle")).toBe(false);
     // 图上的时间写成 T+n
     expect(await page.textContent("#chart-readout")).toContain("T0");
+    // 结构标注不画（会提前说出答案），按钮不能点
+    expect(await page.locator("#chart .struct-mark").count()).toBe(0);
+    expect(await page.isDisabled(".struct-toggle")).toBe(true);
     for (const sel of ['[data-act="plan"]', '[data-act="step"]', '[data-act="play"]', '[data-act="reveal"]']) {
       expect({ sel, ok: await usable(page, `#practice ${sel}`) }).toEqual({ sel, ok: true });
     }
