@@ -497,7 +497,9 @@ def plan_lines(tpj: dict) -> list[str]:
             items.append(f"盈亏比：{tp.RR_FAR}" if p["entry"]["far"] else
                          f"盈亏比：{p['rr']:.2f}:1，{p['rr_verdict']}" if p["rr"] is not None else "盈亏比：算不了")
             z = p["size"]
-            if z:
+            if z and p["entry"]["far"]:
+                items.append(f"股数：{tp.RR_FAR}")
+            elif z:
                 items.append(f"股数：{z['shares']} 股（{z['basis']}）" if z["shares"] is not None else f"股数：{z['basis']}")
         items += p["notes"]
         out.append(f"- {name}：" + "；".join(items))

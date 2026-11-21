@@ -70,6 +70,13 @@ describe("触发价离现价还远（ADR 0026）：结论卡的盈亏比标签�
     expect(chip).toContain("按明天的触发价 212.21 算是 0.57:1");
     expect(card).not.toContain("不做：盈亏比");
   });
+  test("股数标签也写到时重算、标灰；悬停里有按明天算的股数", () => {
+    const size = card.match(/<span class="pchip size[^>]*>\s*<span class="ck">股数<\/span>[\s\S]*?<\/span>/)![0];
+    expect(size).toContain("pchip size far");
+    expect(size).toContain("到时重算");
+    expect(size).not.toContain("343</b>");
+    expect(size).toContain("按明天的触发价 212.21 算：单位亏损 29.13；没填账户，每 1 万元风险对应 343 股");
+  });
   test("问鸿雁问的是什么时候拐头，不问盈亏比怎么算", () => {
     const qs = cardQuestions("verdict", a, r).map((q) => q.text).join("\n");
     expect(qs).toContain("触发价为什么离现价还远，20 线组最早什么时候拐头？");

@@ -383,10 +383,14 @@ function rrChip(t) {
     <span class="ck">盈亏比</span><b class="num">${t.rr.toFixed(2)}:1</b>${esc(t.rr_verdict)}</span>`;
 }
 
-/** 股数标签：填了账户给股数；没填给每 1 万元风险对应多少股（A6）。 */
+/** 股数标签：填了账户给股数；没填给每 1 万元风险对应多少股（A6）。触发价离现价还远时和盈亏比一样到时重算。 */
 function sizeChip(t) {
   const z = t.size;
   if (!z) return "";
+  if (t.entry?.far) {
+    return `<span class="pchip size far" data-item="size" ${tip(`触发价离现价还远，到时重算：按明天的触发价 ${f2(t.entry.price)} 算：${z.basis}（A6）`)}>
+    <span class="ck">股数</span>到时重算</span>`;
+  }
   if (z.shares === null) {
     return `<span class="pchip size" data-item="size" ${tip(`${z.basis}。在设置里填账户规模，就按每笔可承受亏损给股数`)}>
       <span class="ck">股数</span><b class="num">${z.per_10k}</b>/万元</span>`;
