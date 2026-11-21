@@ -38,7 +38,8 @@ const Estimate = Type.Object({
   compute_days: Type.Number(),
   jobs: Type.Number(),
   seconds: Type.Number(),
-  holdout: Type.Object({ locked: Type.Boolean(), overlap: Type.Array(Type.String()) }),
+  /** 新验证集：overlap 是方案里属于验证集的票，runs 是这批票到目前被跑过几次。 */
+  holdout: Type.Object({ locked: Type.Boolean(), overlap: Type.Array(Type.String()), runs: Type.Number() }),
 });
 export type Estimate = Static<typeof Estimate>;
 

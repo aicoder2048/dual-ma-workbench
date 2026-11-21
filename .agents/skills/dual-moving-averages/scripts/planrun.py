@@ -41,6 +41,7 @@ sys.path.insert(0, str(SCRIPTS))
 import evalstats as es  # noqa: E402
 import evaluate as ev  # noqa: E402
 import fullplan as fp  # noqa: E402
+import holdout as ho  # noqa: E402
 import plansim as ps  # noqa: E402
 
 PROJECT = SCRIPTS.parents[3]
@@ -55,9 +56,6 @@ BASELINES = (("买入持有", None), ("MA200 朴素规则", 200))
 # 一个决定点的计划约 0.06s，每 20 个再和完整分析对一次：平均按 0.075s 估
 SECONDS_PER_DAY = 0.075
 SECONDS_PER_DOWNLOAD = 3.0
-# 第 4 步的新验证集（还没建）。建好之后把代码填进来、HOLDOUT_LOCKED 改成 True：碰到这些票的方案不让跑，免得看过验证集再调参数
-HOLDOUT: frozenset[str] = frozenset()
-HOLDOUT_LOCKED = False
 
 
 class PlanError(ValueError):
@@ -238,10 +236,17 @@ def nondefault(plan: Plan, cfg: dict) -> list[dict]:
 
 
 def holdout(tickers: list[str]) -> dict:
-    overlap = sorted(set(tickers) & HOLDOUT)
-    if HOLDOUT_LOCKED and overlap:
-        raise PlanError(f"{overlap} 在新验证集里，验证集锁着，不能拿来回测调参数")
-    return {"locked": HOLDOUT_LOCKED, "overlap": overlap}
+    """第 4 步的新验证集（references/holdout.json）：碰到的票照跑，但标出来，并告诉用户这批票已经被跑过几次。"""
+    doc = ho.load_list(ho.LIST_FILE)
+    overlap = sorted(set(tickers) & set(ho.tickers_of(doc))) if doc else []
+    return {"locked": doc is not None, "overlap": overlap, "runs": len(ho.runs(ho.RUNS_FILE))}
+
+
+def touch_holdout(hold: dict) -> dict:
+    """真跑一次碰到验证集的方案：记一笔（references/holdout-runs.json），runs 换成记完之后的次数。"""
+    if not hold["overlap"]:
+        return hold
+    return {**hold, "runs": ho.record_run("planrun.py", hold["overlap"], ev.git("rev-parse", "HEAD"), ho.RUNS_FILE)}
 
 
 # ---------- 估计规模 ----------
@@ -354,6 +359,7 @@ def run(plan: Plan, data: Path, out: Path, jobs: int) -> dict:
     if not period:
         raise PlanError(f"{plan.start} ~ {plan.end} 没有可用的计划（每个决定点要往前 3 年的行情）")
     body = simulate_plan(plan, period, cal, bars, sigs, cfg)
+    hold = touch_holdout(hold)              # 结果算出来了，算看过一次验证集
     days = [r["d"] for rs in period.values() for r in rs]
     meta = {"generated": datetime.now().isoformat(timespec="seconds"), "head": ev.git("rev-parse", "HEAD"),
             "tickers": sorted(period), "skipped": skipped, "start": min(days), "end": max(days), "days": len(days),

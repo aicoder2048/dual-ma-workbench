@@ -1,0 +1,369 @@
+{
+ "snapshot": "2026-11-20",
+ "built": "2026-11-20T18:11:22",
+ "frozen": {
+  "commit": "ad3e75aa026a223b2802cba91397f8c129a810cb",
+  "config_sha256": "8c9f489f62434c3615326e9174142645b746ccf61b6edf725ab7a21320097e42",
+  "files": [
+   "scripts/backtest.py",
+   "scripts/dma_analyze.py",
+   "scripts/evalstats.py",
+   "scripts/evaluate.py",
+   "scripts/fullplan.py",
+   "scripts/hourly.py",
+   "scripts/indicators.py",
+   "scripts/plansim.py",
+   "scripts/projection.py",
+   "scripts/regime.py",
+   "scripts/rules.py",
+   "scripts/scan.py",
+   "scripts/structure.py",
+   "scripts/tradeplan.py",
+   "scripts/trades.py",
+   "scripts/weekly.py",
+   "references/evaluation.toml"
+  ],
+  "settings": {
+   "variant": {
+    "name": "完整计划",
+    "rr_filter": true,
+    "targets": true,
+    "hold_if_intact": true,
+    "equal_notional": false,
+    "skip_hourly": false,
+    "waypoint": false,
+    "intraday_stop": false,
+    "position_cap": true
+   },
+   "config": {
+    "risk_pct": 1.0,
+    "cap_pct": 6.0,
+    "notional_pct": null,
+    "stop_on_close": true,
+    "max_position": 0.25,
+    "risk_amount": null,
+    "stop_floor_atr": null,
+    "cost": 0.0005,
+    "equity0": 1000000.0
+   },
+   "first_decision": "2013-01-02",
+   "snapshot": "2026-11-20",
+   "bootstrap": {
+    "level": 0.9,
+    "reps": 2000,
+    "block_days": 60,
+    "seed": 7,
+    "min_points": 30,
+    "min_blocks": 8
+   },
+   "random": {
+    "reps": 20,
+    "seed": 11
+   }
+  }
+ },
+ "rule": [
+  "ETF：计划里写死的 20 只（VTI IWF IWD MDY VGK EWJ FXI EWZ INDA IBB XBI KRE XHB ITB XOP GDX SLV USO IEF HYG）。",
+  "个股候选池：yfinance 筛选器，`intradaymarketcap` 在 800 亿 ~ 2000 亿美元之间、region = us，按市值从大到小全部翻页取回（快照日 2026-11-20）。",
+  "候选只留：quoteType = EQUITY、挂在美国交易所（evaluation.toml 的 exchanges：NYSE、Nasdaq 三层、NYSE American），场外（PNK、OQX）不算美国上市；报价里的 marketCap 在 800 亿 ~ 2000 亿美元之间。",
+  "三个月日均成交额不到 5000 万美元的去掉（evaluation.toml 的 min_dollar_volume，挡市值数据出错和优先股）。",
+  "同一家公司的几类股（代码根相同或名字相同，如 PBR / PBR-A）只留市值大的一类。",
+  "之前任何一次评估或回测用过的去掉：2026-11-20 评估的 95 只（含被排除的）、PR #20 逐笔回测的 14 只、核心名单 38 只。",
+  "按市值从大到小，取前 30 只；历史不足的（到快照日不满 3.25 年，evaluation.toml 的 min_history_years）去掉，往后补。",
+  "历史窗口按标准 3 年口径：每只票第一个决定点是 2013-01-02 和它上市满 3 年那天里较晚的一天，不要求 2013 年前就有 3 年历史。"
+ ],
+ "criteria": [
+  {
+   "id": "a",
+   "text": "平均 R 的 90% 区间（60 个交易日一块的日期区块自助法）整个在 0 以上：合并组完整计划。"
+  },
+  {
+   "id": "b",
+   "text": "合并组完整计划账户的 MAR 不低于同一批品种上 MA200 朴素规则的 MAR。"
+  },
+  {
+   "id": "c",
+   "text": "ETF 组和个股组方向一致：两组完整计划的平均 R 点估计同号（都 > 0 或都 < 0）。"
+  }
+ ],
+ "pool": {
+  "source": "yfinance 1.8.0 screen：intradaymarketcap 800 亿 ~ 2000 亿美元、region us，按市值降序",
+  "quotes": 260
+ },
+ "etfs": [
+  "VTI",
+  "IWF",
+  "IWD",
+  "MDY",
+  "VGK",
+  "EWJ",
+  "FXI",
+  "EWZ",
+  "INDA",
+  "IBB",
+  "XBI",
+  "KRE",
+  "XHB",
+  "ITB",
+  "XOP",
+  "GDX",
+  "SLV",
+  "USO",
+  "IEF",
+  "HYG"
+ ],
+ "stocks": [
+  {
+   "ticker": "MCD",
+   "name": "McDonald's Corporation",
+   "cap": 192848625664,
+   "first_bar": "2009-12-01"
+  },
+  {
+   "ticker": "VZ",
+   "name": "Verizon Communications Inc.",
+   "cap": 192640925696,
+   "first_bar": "2009-12-01"
+  },
+  {
+   "ticker": "PEP",
+   "name": "Pepsico, Inc.",
+   "cap": 191519621120,
+   "first_bar": "2009-12-01"
+  },
+  {
+   "ticker": "TTE",
+   "name": "TotalEnergies SE",
+   "cap": 186636926976,
+   "first_bar": "2009-12-01"
+  },
+  {
+   "ticker": "TD",
+   "name": "Toronto Dominion Bank (The)",
+   "cap": 184318607360,
+   "first_bar": "2009-12-01"
+  },
+  {
+   "ticker": "C",
+   "name": "Citigroup, Inc.",
+   "cap": 183098720256,
+   "first_bar": "2009-12-01"
+  },
+  {
+   "ticker": "ABT",
+   "name": "Abbott Laboratories",
+   "cap": 178389991424,
+   "first_bar": "2009-12-01"
+  },
+  {
+   "ticker": "DELL",
+   "name": "Dell Technologies Inc.",
+   "cap": 176768647168,
+   "first_bar": "2016-08-17"
+  },
+  {
+   "ticker": "WELL",
+   "name": "Welltower Inc.",
+   "cap": 176315793408,
+   "first_bar": "2009-12-01"
+  },
+  {
+   "ticker": "TMUS",
+   "name": "T-Mobile US, Inc.",
+   "cap": 175415541760,
+   "first_bar": "2009-12-01"
+  },
+  {
+   "ticker": "NEE",
+   "name": "NextEra Energy, Inc.",
+   "cap": 175020195840,
+   "first_bar": "2009-12-01"
+  },
+  {
+   "ticker": "APH",
+   "name": "Amphenol Corporation",
+   "cap": 172156895232,
+   "first_bar": "2009-12-01"
+  },
+  {
+   "ticker": "BHP",
+   "name": "BHP Group Limited",
+   "cap": 170736418816,
+   "first_bar": "2009-12-01"
+  },
+  {
+   "ticker": "UNP",
+   "name": "Union Pacific Corporation",
+   "cap": 170722213888,
+   "first_bar": "2009-12-01"
+  },
+  {
+   "ticker": "BLK",
+   "name": "BlackRock, Inc.",
+   "cap": 170131374080,
+   "first_bar": "2009-12-01"
+  },
+  {
+   "ticker": "ADI",
+   "name": "Analog Devices, Inc.",
+   "cap": 167620886528,
+   "first_bar": "2009-12-01"
+  },
+  {
+   "ticker": "NVO",
+   "name": "Novo Nordisk A/S",
+   "cap": 166686162944,
+   "first_bar": "2009-12-01"
+  },
+  {
+   "ticker": "KLAC",
+   "name": "KLA Corporation",
+   "cap": 165306843136,
+   "first_bar": "2009-12-01"
+  },
+  {
+   "ticker": "DE",
+   "name": "Deere & Company",
+   "cap": 164269277184,
+   "first_bar": "2009-12-01"
+  },
+  {
+   "ticker": "COP",
+   "name": "ConocoPhillips",
+   "cap": 160939442176,
+   "first_bar": "2009-12-01"
+  },
+  {
+   "ticker": "QCOM",
+   "name": "QUALCOMM Incorporated",
+   "cap": 160435798016,
+   "first_bar": "2009-12-01"
+  },
+  {
+   "ticker": "SAN",
+   "name": "Banco Santander, S.A. Sponsored",
+   "cap": 160049414144,
+   "first_bar": "2009-12-01"
+  },
+  {
+   "ticker": "SHOP",
+   "name": "Shopify Inc.",
+   "cap": 159168495616,
+   "first_bar": "2015-05-20"
+  },
+  {
+   "ticker": "SONY",
+   "name": "Sony Group Corporation",
+   "cap": 159053053952,
+   "first_bar": "2009-12-01"
+  },
+  {
+   "ticker": "BUD",
+   "name": "Anheuser-Busch Inbev SA Sponsor",
+   "cap": 156014084096,
+   "first_bar": "2009-12-01"
+  },
+  {
+   "ticker": "SCHW",
+   "name": "Charles Schwab Corporation (The",
+   "cap": 155616854016,
+   "first_bar": "2009-12-01"
+  },
+  {
+   "ticker": "DHR",
+   "name": "Danaher Corporation",
+   "cap": 155030044672,
+   "first_bar": "2009-12-01"
+  },
+  {
+   "ticker": "TJX",
+   "name": "TJX Companies, Inc. (The)",
+   "cap": 154238828544,
+   "first_bar": "2009-12-01"
+  },
+  {
+   "ticker": "CB",
+   "name": "Chubb Limited",
+   "cap": 141992099840,
+   "first_bar": "2009-12-01"
+  },
+  {
+   "ticker": "HDB",
+   "name": "HDFC Bank Limited",
+   "cap": 141064077312,
+   "first_bar": "2009-12-01"
+  }
+ ],
+ "excluded": [
+  {
+   "ticker": "SMFG",
+   "cap": 135844233216,
+   "reason": "日均成交额 31.2 百万美元，不到 50 百万"
+  },
+  {
+   "ticker": "BBVA",
+   "cap": 128135692288,
+   "reason": "日均成交额 36.2 百万美元，不到 50 百万"
+  },
+  {
+   "ticker": "MFG",
+   "cap": 107690549248,
+   "reason": "日均成交额 33.5 百万美元，不到 50 百万"
+  },
+  {
+   "ticker": "WFC-PC",
+   "cap": 100020281344,
+   "reason": "日均成交额 2.9 百万美元，不到 50 百万"
+  },
+  {
+   "ticker": "PFE",
+   "cap": 156175990784,
+   "reason": "之前用过：2026-11-20 评估"
+  },
+  {
+   "ticker": "T",
+   "cap": 150290726912,
+   "reason": "之前用过：2026-11-20 评估"
+  },
+  {
+   "ticker": "CRM",
+   "cap": 148650262528,
+   "reason": "之前用过：2026-11-20 评估、核心名单"
+  },
+  {
+   "ticker": "BA",
+   "cap": 123535015936,
+   "reason": "之前用过：2026-11-20 评估、PR #20 逐笔回测"
+  },
+  {
+   "ticker": "CVS",
+   "cap": 103432691712,
+   "reason": "之前用过：2026-11-20 评估"
+  },
+  {
+   "ticker": "PBR-A",
+   "cap": 96261988352,
+   "reason": "和 PBR 是同一家公司，留市值大的"
+  },
+  {
+   "ticker": "MMM",
+   "cap": 91972698112,
+   "reason": "之前用过：2026-11-20 评估"
+  },
+  {
+   "ticker": "ADBE",
+   "cap": 84732731392,
+   "reason": "之前用过：2026-11-20 评估、核心名单"
+  },
+  {
+   "ticker": "GEV",
+   "cap": 185096617984,
+   "reason": "历史不足（2024-03-27 起）"
+  },
+  {
+   "ticker": "ARM",
+   "cap": 162853994496,
+   "reason": "历史不足（2023-09-14 起）"
+  }
+ ]
+}

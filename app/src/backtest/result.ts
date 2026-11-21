@@ -70,8 +70,8 @@ export const BacktestResult = Type.Object({
     key: Type.String(), label: Type.String(), value: Type.Unknown(), default: Type.Unknown(),
     origin: Type.Union([Type.Literal("脚本自定"), Type.Literal("完整计划")]),
   })),
-  /** 第 4 步的新验证集（还没建）：锁上以后碰到的票不让跑。 */
-  holdout: Type.Object({ locked: Type.Boolean(), overlap: Type.Array(Type.String()) }),
+  /** 第 4 步的新验证集：碰到的票照跑，标出来并计数；runs 是算上这次一共跑过几次（旧结果没有）。 */
+  holdout: Type.Object({ locked: Type.Boolean(), overlap: Type.Array(Type.String()), runs: Type.Optional(Type.Number()) }),
   summary: Type.Object({ plan: Metrics, baselines: Type.Record(Type.String(), BaseMetrics) }),
   /** 净值曲线，起点 = 1：plan 和每个对照（键是对照的名字）。 */
   equity: Type.Intersect([
