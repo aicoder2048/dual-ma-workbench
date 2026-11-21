@@ -898,6 +898,7 @@ RULES: tuple[Rule, ...] = (
     Rule("P42", Kind.ACTION, "黑绿线：20 在 60 下方，黑色做空", None),
     Rule("P43", Kind.ACTION, "黑绿线：20 在 60 下方，变绿平仓不做多", None),
     Rule("P44", Kind.ACTION, "黑绿线：灰色不做动作", None),
+    Rule("P45", Kind.ACTION, "黑绿线：上升趋势里一直是绿，没出现灰或黑之前不用关心", None),
 )
 BY_ID = {r.id: r for r in RULES}
 
