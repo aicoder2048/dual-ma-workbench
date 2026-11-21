@@ -530,11 +530,11 @@ body.offline .status-pill .dot { background: var(--bad); }
 .chart-tools .seg button[hidden] + button { border-radius: 999px 0 0 999px; padding-left: 8px; margin-left: 0; } /* 练习时「回放」收起，「测量」成了这一段的头 */
 .chart-tools .seg button[aria-pressed="true"] { position: relative; } /* 选中的那格描边不被右边那格盖住 */
 /* 「怎么用」收成一个问号：十三个带字的按钮在默认视口里排不进一行（ADR 0019） */
-.chart-tools .chart-help-toggle { width: 22px; padding: 1px 0; text-align: center; font-weight: 600; margin-left: auto; }
+.chart-tools .chart-help-toggle { width: 22px; padding: 1px 0; text-align: center; font-weight: 600; }
 
-/* 图层菜单：预设一行，下面每个图层一行开关；不能用的变灰，后面的小字写原因 */
-.chart-tools .layers-wrap { position: relative; }
-.layers-menu { position: absolute; left: 0; top: calc(100% + 4px); z-index: 7; width: 300px; display: grid; gap: 1px;
+/* 图层菜单：预设一行，下面每个图层一行开关；不能用的变灰，后面的小字写原因。「图层」靠右、挨着「?」，菜单从右边缘往下展开 */
+.chart-tools .layers-wrap { position: relative; margin-left: auto; }
+.layers-menu { position: absolute; right: 0; top: calc(100% + 4px); z-index: 7; width: 300px; display: grid; gap: 1px;
   background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 6px; box-shadow: 0 6px 20px rgb(0 0 0 / .15); }
 .layers-menu[hidden] { display: none; }
 .layers-presets { display: flex; align-items: center; gap: 4px; padding: 2px 4px 7px; margin-bottom: 4px; border-bottom: 1px solid var(--line); font-size: 12px; }

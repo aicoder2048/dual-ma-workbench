@@ -1091,6 +1091,29 @@ describe("筹码分布", () => {
     return { first: Math.max(0, Math.ceil(r.from)), last: Math.floor(r.to) };
   });
   const overlap = (a: any, b: any) => a.left < b.left + b.width && b.left < a.left + a.width && a.top < b.top + b.height && b.top < a.top + a.height;
+  /** 最新一根 K 线的右边缘和直方图（连山框）的左边缘，绘图区坐标；没画筹码时 left 是 null。 */
+  const room = (page: Page) => page.evaluate(async () => {
+    const c = (await import("/app.js")).getChart();
+    const ts = c.chart.timeScale(), r = ts.getVisibleLogicalRange()!;
+    const spacing = ts.width() / (r.to - r.from);
+    return { right: ts.logicalToCoordinate(c.replay().bars - 1)! + spacing / 2, left: c.profile().drawn?.left ?? null, width: ts.width() };
+  });
+  /** 等到最新一根停在直方图左边、只隔一点间隙（不压在直方图上，也不空出一大截）。 */
+  const parked = (page: Page, what: string) => until(page, `最新一根停在直方图左边（${what}）`, async () => {
+    const c = (await import("/app.js")).getChart();
+    const ts = c.chart.timeScale(), r = ts.getVisibleLogicalRange()!;
+    const right = ts.logicalToCoordinate(c.replay().bars - 1)! + ts.width() / (r.to - r.from) / 2;
+    const left = c.profile().drawn?.left;
+    return left != null && right <= left && left - right <= 14;
+  });
+  const range = (page: Page) => page.evaluate(async () => (await import("/app.js")).getChart().chart.timeScale().getVisibleLogicalRange()!);
+  const zoom = async (page: Page, dy: number) => {
+    const box = (await page.locator("#chart").boundingBox())!;
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 3);
+    await page.keyboard.down("Control");
+    await page.mouse.wheel(0, dy);
+    await page.keyboard.up("Control");
+  };
 
   test("筹码默认不画；在「图层」里打开：贴着价格轴画可见范围的筹码，写出日期，标山脚山顶和计划的参考带，找打法里单列一行「参考」；缩放后重算；周线不画", async () => {
     const { page, errors } = await open(undefined, "PROFILE");
@@ -1163,6 +1186,98 @@ describe("筹码分布", () => {
     await page.close();
   }, 30_000);
 
+  test("打开筹码：图右边留出直方图那么宽的空白，最新一根停在直方图左边；缩放、平移、范围按钮、复位、切周线再切回都对；关掉恢复原来的留白", async () => {
+    const { page, errors } = await open(undefined, "PROFILE");
+    await page.waitForSelector("#chart canvas");
+    await scrollIntoCenter(page, ".chart-card");
+    const before = await range(page);
+    const off = await room(page);
+    expect(off.left).toBeNull();
+    await switchLayer(page, "profile");
+    await parked(page, "打开");
+    expect((await range(page)).from).toBeCloseTo(before.from, 3); // 左边看得见的那段不变
+    // 关掉：恢复原来的留白（最新一根右边几根空位）
+    await switchLayer(page, "profile");
+    await until(page, "关掉后留白恢复", async (b) => {
+      const r = (await import("/app.js")).getChart().chart.timeScale().getVisibleLogicalRange()!;
+      return Math.abs(r.from - b.from) < 0.01 && Math.abs(r.to - b.to) < 0.01;
+    }, 5000, before);
+    await switchLayer(page, "profile");
+    await parked(page, "再打开");
+    // ⌘ + 滚轮放大、缩小
+    let bars = (await profile(page)).bars;
+    await zoom(page, -400);
+    await until(page, "放大后重算", async (n) => (await import("/app.js")).getChart().profile().bars < n, 5000, bars);
+    await parked(page, "放大");
+    // 以最新一根为锚放大：看得见的 K 线按比例变少（滚 400 是 e^(-4/3) 倍），不是以右边的空白为锚、只剩最后几根
+    expect(Math.abs((await profile(page)).bars - bars * Math.exp(-400 / 300))).toBeLessThan(3);
+    bars = (await profile(page)).bars;
+    await zoom(page, 600);
+    await until(page, "缩小后重算", async (n) => (await import("/app.js")).getChart().profile().bars > n, 5000, bars);
+    await parked(page, "缩小");
+    // 范围按钮、复位
+    await page.click('.range-btn[data-range="6m"]');
+    await parked(page, "半年");
+    await page.click('.range-btn[data-range="reset"]');
+    await parked(page, "复位");
+    // 往右拖一点（最新一根挪到直方图下面）：松手后停回直方图左边
+    const box = (await page.locator("#chart").boundingBox())!;
+    const drag = async (dx: number) => {
+      await page.mouse.move(box.x + box.width / 2, box.y + box.height / 3);
+      await page.mouse.down();
+      await page.mouse.move(box.x + box.width / 2 + dx / 2, box.y + box.height / 3, { steps: 4 });
+      await page.mouse.move(box.x + box.width / 2 + dx, box.y + box.height / 3, { steps: 4 });
+      await page.mouse.up();
+    };
+    await drag(40);
+    await parked(page, "拖一点");
+    // 拖得远，最新一根出了右边：不拉回来（用户在看以前的 K 线）
+    await drag(box.width * 0.6);
+    await page.waitForTimeout(200);
+    const far = await room(page);
+    expect(far.right).toBeGreaterThan(far.width);
+    await page.click('.range-btn[data-range="reset"]');
+    await parked(page, "拖远后复位");
+    // 周线不画筹码、恢复原来的留白；切回日线又让出来
+    await page.click('[data-frame="week"]');
+    await until(page, "周线不画筹码", async () => (await import("/app.js")).getChart().profile().drawn === null);
+    await page.click('[data-frame="day"]');
+    await parked(page, "切回日线");
+    expect(errors).toEqual([]);
+    await page.close();
+  }, 60_000);
+
+  test("「怎么用」讲了筹码怎么读：上方是阻力、下方山路轻松，反弹看上方最近那座山，只给价位不给买卖信号", async () => {
+    const { page } = await open();
+    await page.click(".chart-help-toggle");
+    const text = (await page.textContent(".chart-help"))!;
+    for (const k of ["山在价格上方是阻力", "山路轻松（J49）", "上方最近那座山的山脚到山顶大概率是这次反弹的目标区间", "不给买卖信号"]) expect(text).toContain(k);
+    await page.close();
+  }, 30_000);
+
+  test("计划的参考带只描框、写标签，不整块填色：带里面和带外面的空白一样", async () => {
+    const { page, errors } = await open((p) => p.addInitScript(() => localStorage.setItem("dma-layers", JSON.stringify({ profile: true }))), "PROFILE");
+    await page.waitForSelector("#chart canvas");
+    await scrollIntoCenter(page, ".chart-card");
+    await parked(page, "打开");
+    // 带里面（山框左边那条留给小字的空白，没有直方图）和同一高度、山框外面一点的空白比颜色：整块填色时里面会偏色
+    const px = await page.evaluate(async () => {
+      const c = (await import("/app.js")).getChart();
+      const { left, ref } = c.profile().drawn;
+      const shot = c.chart.takeScreenshot();
+      const k = shot.width / document.getElementById("chart")!.clientWidth;
+      const g = shot.getContext("2d")!;
+      const at = (x: number, y: number) => [...g.getImageData(Math.round(x * k), Math.round(y * k), 1, 1).data].join(",");
+      const rows = [];
+      for (let y = ref.top + 16; y < ref.bottom - 2; y += 3) rows.push({ y, inside: at(left + 2, y), outside: at(left - 3, y) });
+      return rows;
+    });
+    expect(px.length).toBeGreaterThan(0);
+    for (const r of px) expect(r.inside).toBe(r.outside);
+    expect(errors).toEqual([]);
+    await page.close();
+  }, 30_000);
+
   test("回放：只用回放那天及以前的 K 线，往后放一根就多算一根；参考带属于最新一天，回放时收起", async () => {
     const { page, errors } = await open((p) => p.addInitScript(() => localStorage.setItem("dma-layers", JSON.stringify({ profile: true }))), "PROFILE");
     await page.waitForSelector("#chart canvas");
@@ -1180,6 +1295,7 @@ describe("筹码分布", () => {
     await page.click(".replay-forward");
     p = await profile(page);
     expect(p.to).toBe(CHART.candles[idx + 1].time);
+    await parked(page, "回放");
     await page.click(".replay-exit");
     p = await profile(page);
     expect([p.to, p.ref]).toEqual([CHART.candles.at(-1)!.time, { foot: 175, top: 185 }]);
@@ -2619,6 +2735,16 @@ describe("图层菜单", () => {
     });
     expect(row.spread).toBeLessThan(8);
     expect(row.overflow).toBe(0);
+    // 「图层」在最右，紧挨「?」左边：两个按钮之间没有别的控件，「?」贴着工具栏右边
+    const ends = await page.evaluate(() => {
+      const r = (sel: string) => document.querySelector(sel)!.getBoundingClientRect();
+      return { tools: r(".chart-tools").right, help: r(".chart-help-toggle"), layers: r(".layers-toggle"),
+        rest: Math.max(...[...document.querySelectorAll(".chart-tools button:not(.layers-toggle):not(.chart-help-toggle):not(.layers-menu button)")].map((b) => b.getBoundingClientRect().right)) };
+    });
+    expect(ends.tools - ends.help.right).toBeLessThan(2);
+    expect(ends.help.left - ends.layers.right).toBeGreaterThanOrEqual(0);
+    expect(ends.help.left - ends.layers.right).toBeLessThan(8);
+    expect(ends.rest).toBeLessThan(ends.layers.left);
     const kept = [".layers-toggle", '[data-frame="day"]', '[data-frame="week"]', ...["1w", "1m", "6m", "1y", "all", "reset"].map((k) => `.range-btn[data-range="${k}"]`),
       ".replay-toggle", ".measure-toggle", ".draw-toggle", ".draw-clear", ".chart-help-toggle"];
     for (const sel of kept) expect({ sel, ok: await notCovered(page, sel) }).toEqual({ sel, ok: true });
@@ -2639,6 +2765,10 @@ describe("图层菜单", () => {
     const box = (await page.locator(".layers-menu").boundingBox())!;
     const vp = page.viewportSize()!;
     expect(box.x >= 0 && box.y >= 0 && box.x + box.width <= vp.width && box.y + box.height <= vp.height).toBe(true);
+    // 从右边往下展开：菜单右边缘和「图层」按钮的右边缘对齐
+    const btn = (await page.locator(".layers-toggle").boundingBox())!;
+    expect(Math.abs(box.x + box.width - (btn.x + btn.width))).toBeLessThan(1);
+    expect(box.y).toBeGreaterThan(btn.y + btn.height - 1);
     const keys = ["ma", "levels", "drops", "tone", "toneTurns", "constructs", "patterns", "swings", "gaps", "gapsAll", "profile"];
     for (const sel of [...["simple", "structure", "all"].map((k) => `.layers-menu [data-preset="${k}"]`), ...keys.map(layerBtn)]) {
       expect({ sel, ok: await notCovered(page, sel) }).toEqual({ sel, ok: true });
