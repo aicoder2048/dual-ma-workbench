@@ -47,6 +47,14 @@ describe("SourceLibrary.search", () => {
     ].join("\n")));
     expect(lib.search("抵扣价 公式")[0].chunk.heading).toBe("定义与公式");
   });
+
+  test("笔记里顺口提到「抵扣价的」「的公式」，排不过正文的定义", () => {
+    const lib = new SourceLibrary(chunkMarkdown(DOC, [
+      "## 看片笔记", "讲到抵扣价的时候，老师顺带提了 EMA 的公式推导。",
+      "## 定义与公式", "MA 每天的变化 = (今天收盘价 − 抵扣价) / N。",
+    ].join("\n")));
+    expect(lib.search("抵扣价的公式")[0].chunk.heading).toBe("定义与公式");
+  });
 });
 
 const HAS_PRIVATE = existsSync(resolve(PROJECT_ROOT, "chat/1118_what-I-want.md"));
