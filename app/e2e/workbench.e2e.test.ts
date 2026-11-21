@@ -8,6 +8,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { chromium, type Browser, type Page } from "playwright";
 import { Analyzer, pythonRunner } from "../src/analyze.ts";
+import { Backtests } from "../src/backtest/service.ts";
 import type { Analysis } from "../src/citations.ts";
 import { createHandler } from "../src/http.ts";
 import { Journal } from "../src/journal.ts";
@@ -82,8 +83,11 @@ beforeAll(async () => {
   // 识别题库：同一段假"真实"行情，真的 scan.py；先出好几段的题
   const drills = new DrillBank({ prices, dir: join(dir, "drills"), pool: [{ ticker: REAL_TICKER }], random: seeded(5) });
   await drills.fill(3);
+  // 回测：真的服务端和子进程，planrun.py 换成替身（同样的输出格式，结果是 CLI 真跑出来的 NVDA）
+  const backtests = new Backtests({ dir: join(dir, "backtests"), watchlist: () => ["NVDA"],
+    command: (args) => ["bun", resolve(import.meta.dir, "../test/fixtures/fake-planrun.ts"), ...args] });
   const handler = createHandler({
-    analyzer, practice, drills,
+    analyzer, practice, drills, backtests,
     watchlist: new Watchlist(join(dir, "w.json")), journal,
     library: SourceLibrary.load(),
     publicDir: resolve(import.meta.dir, "../public"),
@@ -1706,4 +1710,83 @@ describe("盲测练习", () => {
     expect(errors).toEqual([]);
     await page.close();
   }, 120_000);
+});
+
+describe("回测页", () => {
+  /** 在默认视图里看得见、整块在窗口里、没被挡住。 */
+  const usable = (page: Page, sel: string) => page.locator(sel).first().evaluate((el) => {
+    const r = el.getBoundingClientRect();
+    const hit = document.elementFromPoint(r.x + Math.min(20, r.width / 2), r.y + r.height / 2);
+    return r.height > 0 && r.top >= 0 && r.bottom <= innerHeight && r.right <= innerWidth && !!hit && el.contains(hit);
+  });
+  const shot = (page: Page, name: string) => process.env.BACKTEST_SHOTS
+    ? page.screenshot({ path: join(process.env.BACKTEST_SHOTS, `${name}.png`) }) : Promise.resolve();
+
+  test("顶栏「回测」→ 只选 NVDA → 先看规模 → 运行 → 汇总和逐笔 → 点一笔回到工作台那天", async () => {
+    const { page, errors } = await open();
+    await page.click("#backtest-btn");
+    await page.waitForSelector("#backtest-page", { state: "visible" });
+    await page.waitForFunction(() => (document.getElementById("bt-name") as HTMLInputElement).value !== "");
+    for (const sel of ["#bt-plan-select", "#bt-tickers", "#bt-start", "#bt-end", "#bt-save", "#bt-run", "#backtest-close"]) {
+      expect({ sel, ok: await usable(page, sel) }).toEqual({ sel, ok: true });
+    }
+    expect(await page.textContent("#bt-form")).toContain("第二期");
+    await page.fill("#bt-tickers", "nvda");
+    await shot(page, "1-form");
+    // 先看规模，再开始
+    await page.click("#bt-run");
+    await page.waitForSelector("#bt-go", { state: "visible" });
+    expect(await page.textContent("#bt-estimate")).toContain("1 只 × 这段时间 = 975 个决定点");
+    expect(await usable(page, "#bt-go")).toBe(true);
+    await shot(page, "2-estimate");
+    await page.click("#bt-go");
+    await page.waitForSelector("#bt-progress", { state: "visible" });
+    expect(await usable(page, "#bt-cancel")).toBe(true);
+    await page.waitForSelector(".bt-summary");
+    await page.waitForSelector("#bt-progress", { state: "hidden" });
+    // 汇总：完整计划和两个对照并排；期望带区间、每笔占净值
+    const head = await page.locator(".bt-summary thead").textContent();
+    expect(head).toContain("完整计划");
+    expect(head).toContain("买入持有");
+    expect(head).toContain("MA200 朴素规则");
+    const summary = await page.locator(".bt-summary tbody").textContent();
+    for (const label of ["期望：平均 R（90% 区间）", "每笔盈亏占净值", "胜率", "年化（CAGR）", "最大回撤", "MAR", "有持仓的天数"]) {
+      expect(summary).toContain(label);
+    }
+    expect(await usable(page, ".bt-summary")).toBe(true);
+    expect(await page.locator(".bt-trades tbody tr").count()).toBe(4);
+    expect(await page.locator("#bt-runs [data-run]").count()).toBe(1);
+    expect(await page.textContent("#bt-runs")).toContain("完成");
+    await shot(page, "3-result");
+    // 点第一笔：回测关掉，工作台回放到信号日
+    const row = page.locator(".bt-trades tbody tr").first();
+    const date = (await row.locator("td").nth(1).textContent())!.trim();
+    await row.scrollIntoViewIfNeeded();
+    expect(await usable(page, ".bt-trades tbody tr td.tk button")).toBe(true);
+    await row.locator("td.tk button").click();
+    await page.waitForSelector("#backtest-page", { state: "hidden" });
+    await page.waitForFunction((d) => location.hash === `#NVDA@${d}`, date);
+    expect(await page.inputValue("#load-asof")).toBe(date);
+    expect(await usable(page, "#verdict")).toBe(true);
+    await shot(page, "4-workbench-at-date");
+    // 再打开：结果还在，Esc 关掉
+    await page.click("#backtest-btn");
+    await page.waitForSelector(".bt-summary");
+    await page.keyboard.press("Escape");
+    await page.waitForSelector("#backtest-page", { state: "hidden" });
+    expect(errors).toEqual([]);
+    await page.close();
+  }, 60_000);
+
+  test("填错了：底部直接说哪里不对，不开始", async () => {
+    const { page } = await open();
+    await page.click("#backtest-btn");
+    await page.waitForFunction(() => (document.getElementById("bt-name") as HTMLInputElement).value !== "");
+    await page.fill("#bt-risk-pct", "0");
+    await page.click("#bt-run");
+    await page.waitForFunction(() => document.getElementById("bt-msg")!.textContent!.includes("每笔风险比例"));
+    expect(await usable(page, "#bt-msg")).toBe(true);
+    expect(await page.isVisible("#bt-estimate")).toBe(false);
+    await page.close();
+  }, 30_000);
 });

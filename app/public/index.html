@@ -42,6 +42,10 @@
       <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.2"/></svg>
       <span>练习</span>
     </button>
+    <button type="button" id="backtest-btn" class="settings-btn practice-btn" aria-haspopup="dialog" aria-controls="backtest-page" title="回测：自己选标的、调方案、看逐笔">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3v18h18"/><path d="m7 15 4-5 3 3 5-7"/></svg>
+      <span>回测</span>
+    </button>
     <button type="button" id="settings-btn" class="settings-btn" aria-label="设置：大模型、市场数据" aria-expanded="false" aria-controls="settings-panel">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
       <span>设置</span>
@@ -196,6 +200,94 @@
     <div id="practice-stats" class="j-summary"></div>
     <ul id="practice-list" class="j-list"></ul>
     <p class="left-foot">只存在本机 data/practice/。练习的单不进交易日志的列表和汇总，揭晓后在这里点「复盘」。</p>
+  </div>
+</section>
+
+<!-- 回测：顶栏「回测」打开，盖住整个工作台；关掉回到原样。点一笔交易：关掉回测，工作台回放到那天 -->
+<section id="backtest-page" class="practice-page bt-page" role="dialog" aria-modal="true" aria-labelledby="backtest-title" hidden>
+  <header class="pp-head">
+    <h2 id="backtest-title">回测</h2>
+    <span class="pp-sub">照结论卡片的完整计划下单，看它在你选的票和时间段上做得怎样</span>
+    <button type="button" id="backtest-close" class="pp-close" title="回到工作台（Esc）">回到工作台 ✕</button>
+  </header>
+  <div class="bt-body">
+    <aside class="bt-side" aria-label="回测方案">
+      <div class="bt-scroll">
+        <div class="bt-plans">
+          <label class="bt-field"><span>方案</span>
+            <select id="bt-plan-select" aria-label="选一个方案"></select></label>
+          <div class="bt-plan-btns">
+            <button type="button" id="bt-new" title="按默认口径新建">新建</button>
+            <button type="button" id="bt-dup" title="复制这个方案">复制</button>
+            <button type="button" id="bt-import" title="导入一个 .toml 方案文件">导入</button>
+            <a id="bt-export" role="button" title="下载这个方案的 .toml 文件">导出</a>
+            <button type="button" id="bt-delete" title="删掉这个方案文件">删除</button>
+            <input type="file" id="bt-import-file" accept=".toml,text/plain" hidden>
+          </div>
+        </div>
+        <form id="bt-form" class="bt-form" autocomplete="off" novalidate>
+          <label class="bt-field"><span>名字</span><input id="bt-name" maxlength="40" required></label>
+          <fieldset class="bt-group"><legend>标的</legend>
+            <div class="bt-seg" role="radiogroup" aria-label="标的">
+              <label><input type="radio" name="bt-kind" value="tickers" checked><span>指定代码</span></label>
+              <label><input type="radio" name="bt-kind" value="watchlist"><span>自选股</span></label>
+              <label><input type="radio" name="bt-kind" value="core"><span>核心名单</span></label>
+            </div>
+            <input id="bt-tickers" placeholder="一只或几只，例如 NVDA 或 NVDA, SPY, AAPL" spellcheck="false" aria-label="代码，逗号或空格分开">
+            <p class="bt-hint" id="bt-kind-hint"></p>
+          </fieldset>
+          <fieldset class="bt-group bt-two"><legend>时间段</legend>
+            <label class="bt-field"><span>开始</span><input type="date" id="bt-start" required></label>
+            <label class="bt-field"><span>结束</span><input type="date" id="bt-end" required></label>
+          </fieldset>
+          <fieldset class="bt-group"><legend>测什么</legend>
+            <label class="bt-check"><input type="radio" name="bt-mode" value="fullplan" checked> 完整计划：照结论卡片的进场、止损、第一目标、股数下单</label>
+            <label class="bt-check off"><input type="radio" name="bt-mode" disabled> 逐个关掉盈亏比 / 目标 / 仓位 <em>第二期</em></label>
+            <label class="bt-check off"><input type="radio" name="bt-mode" disabled> 随机进场对照 <em>第二期</em></label>
+            <label class="bt-check off"><input type="radio" name="bt-mode" disabled> 参数网格、敏感度 <em>第二期</em></label>
+          </fieldset>
+          <fieldset class="bt-group bt-two"><legend>执行</legend>
+            <label class="bt-field"><span>止损 <i class="bt-own" title="计划原文是收盘跌破；盘中是对照">计划原文</i></span>
+              <select id="bt-stop"><option value="close">按收盘（第二天开盘走）</option><option value="intraday">盘中碰到就走</option></select></label>
+            <label class="bt-field"><span>账户规模</span><input type="number" id="bt-account" min="1" step="any"></label>
+            <label class="bt-field"><span>每笔风险</span>
+              <select id="bt-risk"><option value="pct">按净值比例</option><option value="amount">固定金额</option></select></label>
+            <label class="bt-field" id="bt-risk-pct-f"><span>比例 %</span><input type="number" id="bt-risk-pct" min="0" max="10" step="any"></label>
+            <label class="bt-field" id="bt-risk-amount-f" hidden><span>金额</span><input type="number" id="bt-risk-amount" min="1" step="any"></label>
+            <label class="bt-field"><span>单票仓位上限 % <i class="bt-own" title="视频没有，回测自己定的">脚本自定</i></span><input type="number" id="bt-maxpos" min="0" max="100" step="any" title="0 = 不限"></label>
+            <label class="bt-field"><span>止损下限 <i class="bt-own" title="止损离进场不到 k 个 ATR(14) 就放宽到 k 个 ATR">脚本自定</i></span>
+              <select id="bt-floor"><option value="0">不用</option><option value="0.5">0.5 个 ATR</option><option value="1">1 个 ATR</option></select></label>
+            <label class="bt-field"><span>手续费 %（每边） <i class="bt-own" title="回测自己定的">脚本自定</i></span><input type="number" id="bt-cost" min="0" max="1" step="any"></label>
+            <label class="bt-check"><input type="checkbox" id="bt-rr"> 盈亏比不到 3:1 不做</label>
+            <label class="bt-check"><input type="checkbox" id="bt-targets"> 到第一目标离场（关掉 = 拿到止损或失效）</label>
+          </fieldset>
+        </form>
+        <section class="bt-history" aria-label="运行记录">
+          <div class="bt-history-head"><b>运行记录</b>
+            <button type="button" id="bt-import-result" title="导入命令行 planrun.py 跑出来的结果 JSON">导入结果</button>
+            <input type="file" id="bt-import-result-file" accept=".json,application/json" hidden></div>
+          <ul id="bt-runs" class="bt-runs"></ul>
+          <p class="left-foot">存在本机 data/backtests/。第二期：对比两次运行、参数网格、定时运行。</p>
+        </section>
+      </div>
+      <div class="bt-foot">
+        <p id="bt-msg" class="bt-msg" role="status" aria-live="polite"></p>
+        <div id="bt-estimate" class="bt-estimate" hidden></div>
+        <div id="bt-progress" class="bt-progress" hidden>
+          <div class="bt-bar"><span id="bt-bar-fill"></span></div>
+          <p id="bt-progress-text"></p>
+          <button type="button" id="bt-cancel">取消</button>
+        </div>
+        <div class="bt-actions">
+          <button type="button" id="bt-save">保存</button>
+          <button type="button" id="bt-run" class="bt-primary">运行回测</button>
+        </div>
+      </div>
+    </aside>
+    <main class="bt-main" id="bt-main" aria-label="回测结果">
+      <div class="bt-empty" id="bt-empty"><p>左边选好标的和时间段，点「运行回测」。</p><p>每天的计划有缓存的票几秒出结果；只改执行参数（止损、仓位、目标……）重跑也是几秒。</p></div>
+      <div id="bt-result" hidden></div>
+    </main>
   </div>
 </section>
 
