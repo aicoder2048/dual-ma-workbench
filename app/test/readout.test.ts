@@ -14,11 +14,11 @@ describe("读数条的成交量", () => {
   test("量和量比：1.2× 均量；大量标黄", () => {
     const normal = volumeCell({ time: "2026-11-20", value: 33.8e6, spike: false, ratio: 1.24 });
     expect(normal).toContain("量<b>33.8M</b>");
-    expect(normal).toContain("1.2× 均量");
+    expect(normal).toContain('1.2×<span class="ro-unit"> 均量</span>');
     expect(normal).not.toContain("spike");
     const big = volumeCell({ time: "2026-11-20", value: 81.1e6, spike: true, ratio: 2.4 });
     expect(big).toContain('class="ro-ratio spike"');
-    expect(big).toContain("2.4× 均量");
+    expect(big).toContain('2.4×<span class="ro-unit"> 均量</span>');
   });
 
   test("不到 50 根没有量比：只写量；没有量：整格不写", () => {
@@ -49,5 +49,13 @@ describe("读数条第一行：开高低收和涨跌", () => {
     const row = ohlcRow("2026-01-02", week("2026-01-02", 1, 2, 0.5, 1.5), undefined, undefined);
     expect(row).not.toContain("ro-chg");
     expect(row).toContain('收<b class="">1.50</b>');
+  });
+
+  test("这根变了色（变色提示开着）：日期后面写「转绿」或「转黑」；没变色不写", () => {
+    const cur = week("2026-11-20", 401, 410, 340, 345.82);
+    expect(ohlcRow("2026-11-20", cur, undefined, undefined, "bull")).toStartWith('<b>2026-11-20</b><span class="ro-turn bull">转绿</span>');
+    expect(ohlcRow("2026-11-20", cur, undefined, undefined, "bear")).toContain('<span class="ro-turn bear">转黑</span>');
+    expect(ohlcRow("2026-11-20", cur, undefined, undefined, null)).not.toContain("ro-turn");
+    expect(ohlcRow("2026-11-20", cur, undefined, undefined)).not.toContain("ro-turn");
   });
 });

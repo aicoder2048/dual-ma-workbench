@@ -3,15 +3,15 @@ import { DEFAULT_PRESET, LAYERS, PRESETS, layerRows, parseLayers, presetOf, pres
 
 /** 一眼看得出是假的颜色来源。 */
 const FAKE_TONE = { name: "假规则：按日期单双", legend: ["单号绿、双号黑（测试用）", "第二行"], warning: null };
-/** 日线、不在回放、结构和缺口都有、有成交量：什么都能画。 */
-const DAY = { frame: "day", replay: false, structure: true, gaps: 8, moreGaps: 6, volume: true, tone: FAKE_TONE };
+/** 日线、不在回放、不在练习、结构和缺口都有、有成交量、有颜色：什么都能画。 */
+const DAY = { frame: "day", replay: false, practice: false, structure: true, gaps: 8, moreGaps: 6, volume: true, tone: FAKE_TONE, tones: true };
 const onKeys = (state: Record<string, boolean>) => Object.keys(state).filter((k) => state[k]);
 const why = (state: Record<string, boolean>, ctx: object) => Object.fromEntries(layerRows(state, ctx).map((r) => [r.key, r.why]));
 
 describe("图层表", () => {
-  test("菜单里的分组和顺序：均线、价位线、抵扣价、着色、顶底构造、形态、波段、缺口（带「全部」）、筹码", () => {
+  test("菜单里的分组和顺序：均线、价位线、抵扣价、着色（带「变色提示」）、顶底构造、形态、波段、缺口（带「全部」）、筹码", () => {
     expect(LAYERS.map((l) => [l.group, l.label])).toEqual([
-      ["均线", "均线"], ["价位线", "价位线"], ["抵扣价", "抵扣价"], ["着色", "着色"], ["顶底构造", "顶底构造"],
+      ["均线", "均线"], ["价位线", "价位线"], ["抵扣价", "抵扣价"], ["着色", "着色"], ["着色", "变色提示"], ["顶底构造", "顶底构造"],
       ["形态", "形态"], ["波段", "波段"], ["缺口", "缺口"], ["缺口", "全部"], ["筹码", "筹码"],
     ]);
   });
@@ -132,11 +132,26 @@ describe("能不能用", () => {
     expect([row.sub, row.why, row.hint]).toEqual([true, null, "离得远、不是目标位的那 6 个也画"]);
   });
 
+  test("「变色提示」是着色的子项：着色关着要先打开；练习里不标；没有颜色数据标不了", () => {
+    const row = (state: Record<string, boolean>, ctx: object) => layerRows(state, ctx).find((r) => r.key === "toneTurns")!;
+    expect([row(presetState("all"), DAY).sub, row(presetState("all"), DAY).why]).toEqual([true, null]);
+    expect(row(toggleLayer(presetState("simple"), "toneTurns"), DAY).why).toBe("先打开「着色」");
+    expect(row(presetState("all"), { ...DAY, practice: true }).why).toBe("练习里不标：这是题目要你自己看的");
+    expect(row(presetState("all"), { ...DAY, practice: true }).shown).toBe(false);
+    expect(row(presetState("all"), { ...DAY, tones: false }).why).toContain("没有颜色");
+  });
+
+  test("「变色提示」只属于「全部」；周线、回放时照常能用", () => {
+    expect(PRESETS.map((p) => presetState(p.key).toneTurns)).toEqual([false, false, true]);
+    expect(why(presetState("all"), { ...DAY, frame: "week" }).toneTurns).toBeNull();
+    expect(why(presetState("all"), { ...DAY, replay: true }).toneTurns).toBeNull();
+  });
+
   test("图上画不画 = 开着而且能用", () => {
     const all = presetState("all");
     expect(Object.values(shownLayers(all, DAY)).every(Boolean)).toBe(true);
     const week = shownLayers(all, { ...DAY, frame: "week" });
-    expect(onKeys(week)).toEqual(["ma", "levels", "drops", "tone"]);
+    expect(onKeys(week)).toEqual(["ma", "levels", "drops", "tone", "toneTurns"]);
     expect(onKeys(shownLayers(presetState("simple"), DAY))).toEqual(["ma", "levels", "drops"]);
   });
 });

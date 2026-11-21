@@ -11,7 +11,7 @@ import { gapBands, pickGaps, structureScene } from "./overlays.js";
 import { createProfileLayer } from "./profilelayer.js";
 import { ohlcRow, weekLabel } from "./readout.js";
 import { DEFAULT_SPEED, OFF, SPEEDS, appendDelta, earliestIndex, indexOnOrBefore, randomIndex, sliceAt, speedMs, step } from "./replay.js";
-import { toneInfo } from "./tones.js";
+import { toneInfo, toneTurns } from "./tones.js";
 import { visibleProfile } from "./volprofile.js";
 
 /** 图表库传来的时间（"2026-10-22"、{year,month,day} 或 UTC 秒）→ "2026-10-22"。 */
@@ -130,9 +130,14 @@ export function createChart(box, legendEl) {
     const label = frame === "week" ? weekLabel(showTime(c.time), view.partial && c === view.candles.at(-1)) : showTime(c.time);
     const lines = SPECS.filter((sp) => series[sp.key].options().visible && (frame === "day" || !sp.off))
       .map((sp) => `<span><i class="${sp.kind.toLowerCase()}" style="--c: var(${sp.token})"></i>${sp.key} ${f2(at(sp.key))}</span>`).join("");
-    readout.innerHTML = `<div class="ro-ohlc">${ohlcRow(label, c, prev, view.volume.find((v) => v.time === c.time))}</div><div class="ro-lines">${lines}</div>`;
+    const turn = turnsNow.find((t) => t.time === c.time)?.to ?? null;
+    readout.innerHTML = `<div class="ro-ohlc">${ohlcRow(label, c, prev, view.volume.find((v) => v.time === c.time), turn)}</div><div class="ro-lines">${lines}</div>`;
+    // 窄栏（默认视口）放不下时一步步收：先收涨跌额，还放不下（多了「转绿」「转黑」）再收量比后面的「均量」两个字
     const row = readout.firstChild;
-    if (row.scrollWidth > row.clientWidth) row.classList.add("tight"); // 窄栏（默认视口）：量和量比比涨跌额要紧
+    for (const cls of ["tight", "tighter"]) {
+      if (row.scrollWidth <= row.clientWidth) break;
+      row.classList.add(cls);
+    }
   };
   chart.subscribeCrosshairMove((param) => showReadout(param.time));
 
@@ -167,10 +172,10 @@ export function createChart(box, legendEl) {
   /** 图表现在的情况，决定哪些图层能用（layers.js 的 ctx）。 */
   const layerCtx = () => {
     const { all, picked } = gapSets();
-    const whole = data ? frameData(data) : null; // 这一档（日线或周线）的完整数据：回放截短了的图上没带 tone_source
-    return { frame, replay: rs.mode === "replay", structure: Boolean(structure?.available),
+    const whole = data ? frameData(data) : null; // 这一档（日线或周线）的完整数据：回放截短了的图也按它说颜色
+    return { frame, replay: rs.mode === "replay", practice: practicing, structure: Boolean(structure?.available),
       gaps: gaps ? gaps.list.length : null, moreGaps: all.length - picked.length, volume: Boolean(view?.volume?.length),
-      tone: toneInfo(whole?.tone_source) };
+      tone: toneInfo(whole?.tone_source), tones: Boolean(whole?.candles.some((c) => c.tone)) };
   };
   /** 图上现在画哪些图层：开着而且能用。 */
   const shown = () => shownLayers(layers, layerCtx());
@@ -282,6 +287,14 @@ export function createChart(box, legendEl) {
       bands: on.gaps ? gapBands(on.gapsAll ? all : picked, gaps?.targets, bars) : [],
     };
     structLayer.set(scene, overlayColors(), bars);
+    paintTurns();
+  }
+  // 变色提示：颜色变了的那几根上方标小三角（规则在 tones.js，只看颜色序列）。跟着图上的 K 线走：回放只标已经放出来的
+  let turnsNow = [];
+  function paintTurns() {
+    const bars = view?.candles ?? [];
+    turnsNow = shown().toneTurns ? toneTurns(bars).map((t) => ({ ...t, high: bars[t.i].high })) : [];
+    structLayer.setTurns(turnsNow, { bull: css("--bar-bull"), bear: css("--bar-bear") });
   }
 
   // ---------- 筹码分布（视频 O）：按图上看得见的那段 K 线在浏览器里算（volprofile.js），缩放、平移、回放都重算 ----------
@@ -588,6 +601,7 @@ export function createChart(box, legendEl) {
     }
     paintRibbon();
     paintMarkers();
+    paintTurns();
     paintProfile();
     showReadout(null);
   }
@@ -846,6 +860,7 @@ export function createChart(box, legendEl) {
       replayBtn.hidden = on;
       practicing = on;
       paintLines();
+      paintOverlay(); // 练习里用不了的图层（变色提示）跟着变
     },
     /** 停止回放、回到完整数据（取数失败、中栏收起图表时用）。 */
     stopReplay() { leaveReplay(); },
@@ -900,6 +915,8 @@ export function createChart(box, legendEl) {
     flashing: () => (flash ? { kind: flash.kind, price: flash.price, title: flash.title, y: candles.priceToCoordinate(flash.price) } : null),
     /** 图层（测试用）：现在是哪个预设（null = 自定），每个图层开没开、画没画、不能用的原因。 */
     layers: () => ({ preset: presetOf(layers), rows: layerRows(layers, layerCtx()).map(({ key, on, shown: drawn, why }) => ({ key, on, shown: drawn, why })) }),
+    /** 图上的变色提示（测试用）：上一次画的小三角 [{ time, to: "bull" | "bear", left, top, width, height }]。 */
+    turns: () => structLayer.turns(),
     /** 图上的抵扣价小黄点（测试用）：["20扣", …]。 */
     drops: () => candles.markers().map((m) => m.text),
     /** 有几根 K 线着了色（测试用）。 */

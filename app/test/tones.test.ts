@@ -1,9 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import { toneHelp } from "../public/charthelp.js";
-import { toneInfo } from "../public/tones.js";
+import { TURN_TEXT, toneInfo, toneTurns } from "../public/tones.js";
 
 /** 一眼看得出是假的来源：测试只谈接口，不写任何真规则。 */
 const FAKE = { key: "plugin", name: "假规则：按日期单双", legend: ["单号绿、双号黑（测试用，不是真规则）", "第二行说明 <b>&"], warning: null };
+
+const bars = (tones: (string | null | undefined)[]) => tones.map((tone, i) => ({ time: `2026-01-${String(i + 1).padStart(2, "0")}`, tone }));
+const turns = (tones: (string | null | undefined)[]) => toneTurns(bars(tones)).map((t: { i: number; to: string }) => [t.i, t.to]);
 
 describe("颜色的来源说明", () => {
   test("有 tone_source：名字、几行说明、出错原因原样拿来", () => {
@@ -20,6 +23,33 @@ describe("颜色的来源说明", () => {
       expect(info.legend[0]).toContain("重新分析");
       expect(info.warning).toBeNull();
     }
+  });
+});
+
+describe("变色提示：只看颜色序列", () => {
+  test("这根是绿而上一根不是绿：转绿；这根是黑而上一根不是黑：转黑", () => {
+    expect(turns(["mixed", "bull", "bull", "mixed", "bear", "bear", "bull", "bear"]))
+      .toEqual([[1, "bull"], [4, "bear"], [6, "bull"], [7, "bear"]]);
+  });
+
+  test("变成灰不标；颜色没变不标", () => {
+    expect(turns(["bull", "mixed", "mixed", "bear", "mixed"])).toEqual([[3, "bear"]]);
+    expect(turns(["bear", "bear", "bear"])).toEqual([]);
+  });
+
+  test("上一根没有颜色（预热段、插件没给）不标；第一根没有上一根，也不标", () => {
+    expect(turns([null, "bull", "bear"])).toEqual([[2, "bear"]]);
+    expect(turns([undefined, "bear", null, "bull", "mixed", "bull"])).toEqual([[5, "bull"]]);
+    expect(turns(["bull"])).toEqual([]);
+    expect(turns([])).toEqual([]);
+  });
+
+  test("标在哪根：带上那根的日期", () => {
+    expect(toneTurns(bars(["mixed", "bull"]))).toEqual([{ i: 1, time: "2026-01-02", to: "bull" }]);
+  });
+
+  test("读数条里的叫法", () => {
+    expect(TURN_TEXT).toEqual({ bull: "转绿", bear: "转黑" });
   });
 });
 
