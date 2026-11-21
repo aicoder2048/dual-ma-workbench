@@ -46,6 +46,7 @@ import earnings as ea
 import regime as rg
 import rules as rl
 import tradeplan as tp
+import volprofile as vp
 from indicators import NAIVE_MA, PERIODS, add_indicators, arrangement
 from projection import HURDLE_DAYS, extend, hurdle_path, projection
 from hourly import load_hourly
@@ -81,6 +82,8 @@ THRESHOLDS = {
     "BIAS120_PCT": (rl.BIAS120_PCT, "视频"), "WEEKLY_BIAS120_PCT": (rl.WEEKLY_BIAS120_PCT, "视频"),
     "RR_MIN": (tp.RR_MIN, "视频"), "RR_IDEAL": (tp.RR_IDEAL, "视频"),
     "EARNINGS_WARN_DAYS": (ea.WARN_DAYS, "脚本自定"),
+    "PROFILE_BINS": (vp.PROFILE_BINS, "脚本自定"), "PROFILE_EDGE": (vp.PROFILE_EDGE, "脚本自定"),
+    "PROFILE_DAYS": (vp.PROFILE_DAYS, "脚本自定"),
 }
 
 
@@ -438,7 +441,8 @@ def analyze(df: pd.DataFrame, label: str, src: str, history: pd.DataFrame | None
         "play": play, "trade_plan": tp.plan_json(plan), "rules": results,
         "thresholds": {k: {"value": v, "source": s} for k, (v, s) in THRESHOLDS.items()},
         "drops": drops, "lean": lean,
-        "projection": projection(df), "structure": structure_json(df), "gaps": tp.gaps_json(df), "weekly": weekly,
+        "projection": projection(df), "structure": structure_json(df), "gaps": tp.gaps_json(df),
+        "profile": vp.profile_json(ctx.profile), "weekly": weekly,
         "hourly": hourly, "ma200": ma200_of(df, regime),
         "earnings": earnings or NO_EARNINGS,
     }
@@ -541,6 +545,10 @@ def render_markdown(a: dict) -> str:
     if a["volume"]:
         out.append(f"- 成交量：今日 {a['volume']['ratio']:.1f}× 50 日均量；近 20 日大量（>{rl.VOLUME_SPIKE}×）："
                    + (", ".join(a["volume"]["spikes"]) or "无"))
+    pf = a["profile"]
+    if pf["available"]:
+        mts = "、".join(f"{m['foot']:.2f}–{m['top']:.2f}（{m['share']:.0%}）" for m in pf["mountains"]) or "没有"
+        out.append(f"- 筹码山（{pf['start']} ~ {pf['end']}，只当价位和目标参考，不是买卖信号）：{mts}")
     out += ["", "## 2) 定策略", "", a["play"]["text"], "", f"用到的规则：{'、'.join(a['play']['rules'])}", ""]
     out += plan_lines(a["trade_plan"]) + ["",
             f"## 3) 看方向：抵扣价推演（未来 {PROJECT_DAYS} 天）", "",
