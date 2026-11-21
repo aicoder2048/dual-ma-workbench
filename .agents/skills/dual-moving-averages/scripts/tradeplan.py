@@ -198,10 +198,13 @@ def dense_zones_above(df: pd.DataFrame, price: float) -> list[Target]:
     """下跌途中形成过的均线密集区：线靠在一起（相差 < 价格的 DENSE_PCT）而 MA60 在走低的连续几根，目标是这几根线的平均。
 
     20、60 两组四条线密集就算（视频 G 39:29 120 线没汇进来也算）；6 条线都密集是"全部汇聚"。正在形成的那段不算。
+    形成以后收盘站上过的不算（视频 G 40:03 冲过去了就找下一个目标位）：本轮下跌之前留下、上涨途中已经越过的密集区
+    不是这轮的阻力。和缺口一样，补上了就不再是目标。
     """
     lines4 = df[["MA20", "EMA20", "MA60", "EMA60"]]
     lines6 = df[["MA20", "EMA20", "MA60", "EMA60", "MA120", "EMA120"]]
     falling = df["MA60"] < df["MA60"].shift(CLOCK_WINDOW)   # 和 J2 钟表同一个窗口：60 线朝下
+    close = df["Close"].to_numpy()
     out = []
     for lines, kind in ((lines4, "20、60 均线密集"), (lines6, "20、60、120 全部汇聚")):
         spread = (lines.max(axis=1) - lines.min(axis=1)) / df["Close"] * 100
@@ -213,7 +216,7 @@ def dense_zones_above(df: pd.DataFrame, price: float) -> list[Target]:
                 continue
             if run and run[-1] != len(df) - 1:
                 level = float(lines.iloc[run].mean(axis=1).mean())
-                if level > price:
+                if level > price and close[run[-1] + 1:].max() <= level:
                     out.append(Target(level, kind, "P25", "视频", str(df.index[run[-1]].date())))
             run = []
     return out

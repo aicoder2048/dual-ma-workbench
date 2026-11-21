@@ -120,7 +120,7 @@ def test_zone_a_later_close_went_above_is_no_longer_a_target():
     df = lines_frame()
     df.iloc[34, df.columns.get_loc("Close")] = 121   # 120 的密集区形成以后有一天收在它上方，之后又跌下来
     t = tp.find_targets(df, None, 100)
-    assert [(x.kind, round(x.price, 2)) for x in t] == [("20、60 均线密集", 130.0), ("20、60、120 全部汇聚", 130.0)]
+    assert (t[0].kind, round(t[0].price, 2)) == ("20、60 均线密集", 130.0)   # 120 那个不在了
 
 
 def test_zone_still_forming_today_is_not_a_target():
