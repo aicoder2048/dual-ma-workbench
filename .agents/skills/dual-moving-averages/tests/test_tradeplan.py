@@ -146,32 +146,24 @@ def test_previous_high_when_nothing_above():
     assert [(x.kind, x.price, x.source) for x in t] == [("前高", 140.0, "解读")]
 
 
-# ---------- 筹码山也是目标位来源（P38） ----------
+# ---------- 筹码山只作参考价位（P38，docs/adr/0018.md）：不进 targets ----------
 
 def profile_with(*bands: tuple[float, float]) -> Profile:
     return Profile("2023-01-02", "2024-02-23", 250, [], [], [Mountain(a, b, 1.0, 0.1) for a, b in bands])
 
 
-def test_mountain_nearer_than_the_dense_zone_is_the_first_target_as_a_band():
-    t = tp.find_targets(lines_frame(), None, 100, profile_with((110, 115)))
-    assert [(x.kind, round(x.price, 2), x.top, x.rule) for x in t] == [
-        ("筹码山", 110, 115, "P38"), ("20、60、120 全部汇聚", 130.0, None, "P25")]
+def test_reference_mountain_is_the_nearest_whole_one_above():
+    m = tp.mountain_above(profile_with((110, 115), (125, 128)), 100)
+    assert (m.foot, m.top, m.date) == (110, 115, "2023-01-02~2024-02-23")
 
 
-def test_mountain_farther_than_the_dense_zone_does_not_replace_it():
-    t = tp.find_targets(lines_frame(), None, 100, profile_with((125, 128)))
-    assert t[0].kind == "20、60 均线密集"
+def test_mountain_the_price_is_already_in_is_not_the_reference():
+    assert tp.mountain_above(profile_with((95, 105)), 100) is None
+    assert tp.mountain_above(profile_with((95, 105), (125, 128)), 100).foot == 125
 
 
-def test_mountain_fills_the_gap_before_falling_back_to_the_previous_high():
-    df = lines_frame().iloc[:20]
-    st = SimpleNamespace(pivots=[Pivot("高", "2024-01-20", 140.0)])
-    t = tp.find_targets(df, st, 100, profile_with((150, 160)))
-    assert [(x.kind, x.price, x.top, x.source) for x in t] == [("筹码山", 150, 160, "解读")]
-
-
-def test_mountain_the_price_is_already_in_is_not_a_target():
-    assert tp.mountains_above(profile_with((95, 105)), 100) == []
+def test_no_reference_mountain_without_a_profile():
+    assert tp.mountain_above(None, 100) is None
 
 
 # ---------- 进场和止损 ----------
@@ -234,17 +226,42 @@ def plans() -> dict:
             for t, d in (("SPY", "2024-04-19"), ("TSLA", "2021-04-14"), ("GOOGL", "2025-04-08"))}
 
 
-def test_p38_spy_crash_bottom_targets_the_mountain_band_above():
+def band(m: dict) -> tuple[float, float, str]:
+    return round(m["foot"], 2), round(m["top"], 2), m["date"]
+
+
+def test_p38_spy_crash_bottom_mountain_above_is_a_reference_and_targets_stay_as_without_it():
+    """筹码山 318.94 比前高 313.10 远、278.67 比缺口 288.52 近：都不进 targets，盈亏比照前高算。"""
     a = dma.analyze(load_fixture("SPY", "2020-03-23"), "SPY", "fixture")
-    t = a["trade_plan"]["flat"]["targets"][0]
-    assert (t["kind"], round(t["price"], 2), round(t["top"], 2)) == ("筹码山", 318.94, 323.98)
+    f, h = a["trade_plan"]["flat"], a["trade_plan"]["holding"]
+    assert [(t["kind"], round(t["price"], 2)) for t in f["targets"]] == [("前高", 313.1)]
+    assert [(t["kind"], round(t["price"], 2)) for t in h["targets"]] == [("缺口", 288.52), ("20、60、120 全部汇聚", 293.88)]
+    assert f["rr"] == pytest.approx(0.0105, abs=0.0001)
+    assert band(f["mountain"]) == (318.94, 323.98, "2019-03-25~2020-03-23")   # 从进场价 312.65 往上找
+    assert band(h["mountain"]) == (278.67, 313.91, "2019-03-25~2020-03-23")   # 从现价 222.95 往上找
     p38 = next(r for r in a["rules"] if r["id"] == "P38")
-    assert p38["status"] == "满足" and p38["levels"] == {"山脚": t["price"], "山顶": t["top"]}
+    assert p38["status"] == "满足" and p38["levels"] == {"山脚": f["mountain"]["foot"], "山顶": f["mountain"]["top"]}
+    assert "318.94–323.98" in p38["basis"] and "只作参考" in p38["basis"] and "不算盈亏比" in p38["basis"]
 
 
-def test_p38_unmet_when_a_gap_comes_first(plans):
-    p38 = next(r for r in plans["GOOGL"]["rules"] if r["id"] == "P38")
-    assert p38["status"] == "不满足" and "比它近的是缺口 178.74" in p38["basis"]
+def test_p38_unmet_when_no_whole_mountain_is_above_the_entry(plans):
+    a = plans["SPY"]
+    assert a["trade_plan"]["flat"]["mountain"] is None and a["trade_plan"]["holding"]["mountain"] is None
+    p38 = next(r for r in a["rules"] if r["id"] == "P38")
+    assert p38["status"] == "不满足" and "进场价 500.46 上方没有整座的筹码山" in p38["basis"]
+
+
+def test_no_plan_lists_a_mountain_among_its_targets(plans):
+    for a in plans.values():
+        for side in ("flat", "holding"):
+            for t in a["trade_plan"][side]["targets"]:
+                assert t["kind"] != "筹码山" and "top" not in t
+
+
+def test_text_report_names_the_mountain_as_a_reference_not_a_target(plans):
+    lines = [x for x in dma.plan_lines(plans["GOOGL"]["trade_plan"]) if x.startswith("- 空仓")]
+    assert "目标：178.74（缺口，2025-02-25）" in lines[0]
+    assert "上方最近的筹码山 182.11–184.88，只作参考，不算盈亏比（P38）" in lines[0]
 
 
 def test_spy_pullback_plan_is_short_of_3_to_1(plans):

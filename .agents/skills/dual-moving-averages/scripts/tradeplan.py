@@ -6,8 +6,10 @@
 - 进场：打法会买时才有（横盘埋伏或突破、稳定上涨吃回撤、多头结构回撤中和加速下跌的 20 线组拐头）。
 - 止损：什么原则进就什么原则出（P23）。突破买入在起涨 K 线最低价（P22）；20 线组拐头进场的，
   拐头失败就止损，价位用 EMA20 和抵扣价算；吃回撤是 60 线组拐头（视频没给价位，标"解读"）。
-- 目标位（P25）：上方最近的缺口、均线密集（20、60 汇在一起也算）或筹码山（P38，最近 1 年的筹码分布），
-  下一个是 20/60/120 全部汇聚处。上方都没有时用最近的波峰（前高，解读）。
+- 目标位（P25）：上方最近的缺口或均线密集（20、60 汇在一起也算），下一个是 20/60/120 全部汇聚处。
+  上方都没有时用最近的波峰（前高，解读）。
+- 筹码山（P38）：上方最近的整座筹码山记在计划的 mountain 上，只作参考价位，不排进目标、不算盈亏比
+  （docs/adr/0018.md）。
 - 到第一目标是检查点（P25）：中长线（60/120）完好就继续拿，按止损和失效离场；不完好就在目标位走。
   完好的判断只在这里（holds_past_target），回测（fullplan、plansim）和网页都读它。
 - 盈亏比 = (第一目标 − 进场) ÷ (进场 − 止损)。< 3 不做，≥ 5 理想（P24）。
@@ -51,11 +53,18 @@ class Stop:
 @dataclass(frozen=True)
 class Target:
     price: float
-    kind: str              # 缺口 / 20、60 均线密集 / 20、60、120 全部汇聚 / 筹码山 / 前高
+    kind: str              # 缺口 / 20、60 均线密集 / 20、60、120 全部汇聚 / 前高
     rule: str
     source: str
-    date: str | None       # 缺口、密集区形成的日子（前高是波峰那天，筹码山是统计区间）
-    top: float | None = None   # 筹码山的山顶：目标是 [山脚 price, 山顶 top] 这条带（J47）
+    date: str | None       # 缺口、密集区形成的日子（前高是波峰那天）
+
+
+@dataclass(frozen=True)
+class PlanMountain:
+    """上方最近的整座筹码山（P38）：参考价位，是 [山脚, 山顶] 一条带（J47），不是目标。"""
+    foot: float
+    top: float
+    date: str              # 筹码分布的统计区间，"开始~结束"
 
 
 @dataclass(frozen=True)
@@ -80,6 +89,7 @@ class TradePlan:
     size: Size | None
     at_target: str | None = None  # 到第一目标怎么办（P25）；没有目标时为 None
     notes: list[str] = field(default_factory=list)
+    mountain: PlanMountain | None = None   # 上方最近的筹码山，只作参考（P38）；上方没有整座的山时为 None
 
 
 @dataclass(frozen=True)
@@ -208,22 +218,9 @@ def dense_zones_above(df: pd.DataFrame, price: float) -> list[Target]:
     return out
 
 
-def mountains_above(profile: Profile | None, price: float) -> list[Target]:
-    """价格上方整座的筹码山（P38）：目标价是山脚（先碰到的那头），山顶记在 top，目标是这条带（J47）。
-
-    和缺口、均线密集并列是推断，视频没说谁先；标"解读"。
-    """
-    if profile is None:
-        return []
-    when = f"{profile.start}~{profile.end}"
-    return [Target(m.foot, "筹码山", "P38", "解读", when, m.top) for m in profile.above(price)]
-
-
-def find_targets(df: pd.DataFrame, structure: Structure | None, price: float,
-                 profile: Profile | None = None) -> list[Target]:
-    """第一个目标：上方最近的缺口、均线密集或筹码山；第二个：再往上最近的 20/60/120 全部汇聚处。都没有时用最近的波峰（前高）。"""
-    found = sorted(gaps_above(df, price) + dense_zones_above(df, price) + mountains_above(profile, price),
-                   key=lambda t: t.price)
+def find_targets(df: pd.DataFrame, structure: Structure | None, price: float) -> list[Target]:
+    """第一个目标：上方最近的缺口或均线密集；第二个：再往上最近的 20/60/120 全部汇聚处。都没有时用最近的波峰（前高）。"""
+    found = sorted(gaps_above(df, price) + dense_zones_above(df, price), key=lambda t: t.price)
     if found:
         first = found[0]
         full = [t for t in found if t.kind.startswith("20、60、120") and t.price > first.price]
@@ -233,6 +230,12 @@ def find_targets(df: pd.DataFrame, structure: Structure | None, price: float,
         if high is not None:
             return [Target(high.price, "前高", "P25", "解读", high.date)]
     return []
+
+
+def mountain_above(profile: Profile | None, price: float) -> PlanMountain | None:
+    """价格上方最近的整座筹码山（P38）；价格已经在山里的那座不算（看 P39）。只作参考，不进 find_targets。"""
+    up = profile.above(price) if profile is not None else []
+    return PlanMountain(up[0].foot, up[0].top, f"{profile.start}~{profile.end}") if up else None
 
 
 # ---------- 到第一目标（P25） ----------
@@ -417,16 +420,17 @@ def _plan(c: rl.Ctx, key: str, entry: Entry | None, stop: Stop | None, ref: floa
           notes: list[str]) -> TradePlan:
     """ref：算目标和距离的价位（空仓是进场价，持仓是现价）。sizing 为 None（持仓）不算股数、不算盈亏比。"""
     notes = list(notes)
-    targets = find_targets(c.df, c.structure, ref, c.profile) if ref is not None else []
+    targets = find_targets(c.df, c.structure, ref) if ref is not None else []
+    mountain = mountain_above(c.profile, ref) if ref is not None else None
     if ref is not None and targets and targets[0].kind == "前高":
-        notes.append("上方没有缺口、下跌途中形成的均线密集区和筹码山，目标用最近的波峰（前高），是解读")
+        notes.append("上方没有缺口和下跌途中形成的均线密集区，目标用最近的波峰（前高），是解读")
     elif ref is not None and not targets:
-        notes.append("上方没有缺口、均线密集区、筹码山，也没有更高的波峰：目标位算不出")
+        notes.append("上方没有缺口、均线密集区，也没有更高的波峰：目标位算不出")
     s = stop.price if stop else None
     risk_pct = None if ref is None or s is None or s >= ref else (ref - s) / ref * 100
     at_target = at_target_line(key, targets)
     if sizing is None:
-        return TradePlan(entry, stop, targets, None, None, None, risk_pct, None, at_target, notes)
+        return TradePlan(entry, stop, targets, None, None, None, risk_pct, None, at_target, notes, mountain)
     rr = reward_risk(ref, s, targets[0].price) if ref is not None and s is not None and targets else None
     verdict = rr_verdict(rr)
     gap = None
@@ -438,7 +442,7 @@ def _plan(c: rl.Ctx, key: str, entry: Entry | None, stop: Stop | None, ref: floa
     size, why = size_position(ref, s, sizing) if entry is not None else (None, None)
     if why and ref is not None:
         notes.append(why)
-    return TradePlan(entry, stop, targets, rr, verdict, gap, risk_pct, size, at_target, notes)
+    return TradePlan(entry, stop, targets, rr, verdict, gap, risk_pct, size, at_target, notes, mountain)
 
 
 def build(c: rl.Ctx, sizing: Sizing | None = None) -> PlanSet:

@@ -19,7 +19,7 @@ from structure import State, Structure
 from volprofile import Mountain, Profile, plan_profile
 
 if TYPE_CHECKING:
-    from tradeplan import PlanSet, Target, TradePlan
+    from tradeplan import PlanSet, TradePlan
 
 VOLUME_SPIKE = 2.0       # 脚本自定：成交量 > 50 日均量 2 倍算大量
 VOLUME_PERSIST = 3       # 脚本自定：近 20 日大量 ≥ 3 天算持续放量
@@ -73,7 +73,7 @@ class Ctx:
 
     @cached_property
     def profile(self) -> Profile | None:
-        """最近 1 年的筹码分布（volprofile.plan_profile）：J45–J49、P38、P39 和找目标位读它。"""
+        """最近 1 年的筹码分布（volprofile.plan_profile）：J45–J49、P38、P39 和计划的参考筹码山读它。"""
         return plan_profile(self.df)
 
 
@@ -774,37 +774,29 @@ def _target_plan(c: Ctx) -> TradePlan:
     return f if f.entry is not None and f.entry.price is not None else c.plan.holding
 
 
-def _target_text(t: Target) -> str:
-    return f"{t.kind} {_f(t.price)}–{_f(t.top)}" if t.top is not None else f"{t.kind} {_f(t.price)}"
-
-
 def p25_targets(c: Ctx) -> Result:
     if c.plan is None:
         return _no_plan()
     p = _target_plan(c)
     if not p.targets:
         return _met(False, next((n for n in p.notes if "目标" in n), "上方没有目标位"))
-    basis = "；".join(f"目标 {i} {_target_text(t)}（{t.date}）" for i, t in enumerate(p.targets, 1))
+    basis = "；".join(f"目标 {i} {t.kind} {_f(t.price)}（{t.date}）" for i, t in enumerate(p.targets, 1))
     return _met(True, f"{basis}。{p.at_target}", {f"目标 {i}": t.price for i, t in enumerate(p.targets, 1)})
 
 
-def p38_profile_target(c: Ctx) -> Result:
+def p38_profile_reference(c: Ctx) -> Result:
+    """上方有整座筹码山就满足。它只作参考：不排进第一目标、不算盈亏比（docs/adr/0018.md）。"""
     if c.plan is None:
         return _no_plan()
-    p = _target_plan(c)
-    hit = next(((i, t) for i, t in enumerate(p.targets, 1) if t.kind == "筹码山"), None)
-    if hit:
-        i, t = hit
-        return _met(True, f"目标 {i} 是筹码山：山脚 {_f(t.price)} 到山顶 {_f(t.top)} 这条带（J47，{t.date}）",
-                    {"山脚": t.price, "山顶": t.top})
     if c.profile is None:
         return _no_volume()
-    ref = p.entry.price if p is c.plan.flat else c.close
-    up = c.profile.above(ref)
-    if not up:
-        return _met(False, f"{'进场价' if p is c.plan.flat else '现价'} {_f(ref)} 上方没有整座的筹码山")
-    nearer = f"，比它近的是{_target_text(p.targets[0])}" if p.targets else ""
-    return _met(False, f"上方最近的筹码山 {_band(up[0])} 不是第一目标{nearer}")
+    p = _target_plan(c)
+    ref = f"进场价 {_f(p.entry.price)}" if p is c.plan.flat else f"现价 {_f(c.close)}"
+    m = p.mountain
+    if m is None:
+        return _met(False, f"{ref} 上方没有整座的筹码山")
+    return _met(True, f"{ref} 上方最近的筹码山 {_f(m.foot)}–{_f(m.top)}（山脚到山顶这条带，J47，{m.date}）。"
+                      "只作参考，不排进第一目标、不算盈亏比（ADR 0018）", {"山脚": m.foot, "山顶": m.top})
 
 
 RULES: tuple[Rule, ...] = (
@@ -899,7 +891,7 @@ RULES: tuple[Rule, ...] = (
     Rule("P35", Kind.ACTION, "走不好在原级别解决", None),
     Rule("P36", Kind.ACTION, "周期共振第一时间反应", None),
     Rule("P37", Kind.ACTION, "周线 2B 先看日线呼应", None),
-    Rule("P38", Kind.ACTION, "筹码山也是目标位来源，和缺口、均线密集并列", p38_profile_target),
+    Rule("P38", Kind.ACTION, "筹码山也是目标位来源，和缺口、均线密集并列", p38_profile_reference),
     Rule("P39", Kind.ACTION, "进了目标筹码山照 P25 看中长线", p39_in_mountain),
     Rule("P40", Kind.ACTION, "黑绿线：20 在 60 上方，绿色做多", None),
     Rule("P41", Kind.ACTION, "黑绿线：20 在 60 上方，变黑平仓不做空", None),
