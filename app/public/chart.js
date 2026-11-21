@@ -20,6 +20,8 @@ function isoDate(t) {
 
 /** 最新一根右边留几根的空位（下一次财报的 E 标在这里）。 */
 const RIGHT_ROOM = 4;
+/** 下一次财报在这么多根之内，右边的空位留到能看见它（覆盖 10 个交易日的财报提醒）。 */
+const NEXT_EARNINGS_ROOM = 15;
 
 const css = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
 
@@ -165,8 +167,11 @@ export function createChart(box, legendEl) {
     const from = new Date(view.candles[last].time);
     from.setDate(from.getDate() - (days ?? Infinity));
     const first = days ? Math.max(0, view.candles.findIndex((c) => c.time >= from.toISOString().slice(0, 10))) : 0;
-    // 右边留几根的空位：下一次财报的 E 标在那里
-    chart.timeScale().setVisibleLogicalRange({ from: first, to: last + RIGHT_ROOM });
+    // 右边留几根的空位；下一次财报在三周内就留到能看见它的 E
+    const next = earningsMarks(earnings, view.candles[last].time).find((m) => m.next);
+    const ahead = next ? logicalOf(next.date, view.candles) - last : 0;
+    const room = ahead > 0 && ahead <= NEXT_EARNINGS_ROOM ? Math.max(RIGHT_ROOM, ahead + 1) : RIGHT_ROOM;
+    chart.timeScale().setVisibleLogicalRange({ from: first, to: last + room });
   };
   tools.addEventListener("click", (e) => {
     const b = e.target.closest(".range-btn");
@@ -687,7 +692,8 @@ export function createChart(box, legendEl) {
     /** 财报日（分析 JSON 的 earnings）：图上标 E；练习里没有，传 null 清掉。 */
     setEarnings(e) {
       earnings = e ?? null;
-      paintEarnings();
+      if (rs.mode === "replay") paintEarnings(); // 回放中重新载入：视图留在原处
+      else applyRange(); // 右边的空位要不要放宽到下一次财报
     },
     /** 价位线：[{ kind: trigger | stop | target | invalid, price, title }]，来自 viz.js 的 chartLevels。 */
     setLevels(list) {
