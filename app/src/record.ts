@@ -29,7 +29,12 @@ export interface BacktestRecord {
   /** 能买的打法（trades.py 的 SETUPS）；空仓不买的打法不在里面。 */
   setups: Record<string, SetupRecord>;
 }
-export interface RecordNote { text: string; setup: SetupRecord | null; record: BacktestRecord }
+/**
+ * text：整句，带整套方法的评估（给长风、交易日志）。
+ * card：结论卡片上的一行，只说本打法的记录（line 显示，tip 悬停）；没有进场记录时为 null，卡片不显示这一行。
+ * 整套方法的评估在页面上固定写一次（index.html 的 #method-note，docs/adr/0028.md），不进 card。
+ */
+export interface RecordNote { text: string; setup: SetupRecord | null; record: BacktestRecord; card: { line: string; tip: string } | null }
 
 export const RECORD_PATH = resolve(PROJECT_ROOT, ".agents/skills/dual-moving-averages/references/backtest-record.json");
 export const RECORD: BacktestRecord = JSON.parse(readFileSync(RECORD_PATH, "utf8"));
@@ -58,14 +63,18 @@ export const RULE_EVIDENCE = parseRuleEvidence(readFileSync(resolve(PROJECT_ROOT
 export function recordNote(key: string, r: BacktestRecord = RECORD): RecordNote {
   const s = r.setups[key] ?? null;
   const scope = `回测（${r.variant}，${r.tickers.length} 只票，${r.from} ~ ${r.to}）`;
-  if (!s) return { text: `${scope}：这套打法空仓不买，回测没有进场。${EVALUATION_NOTE}`, setup: null, record: r };
-  if (!s.trades) return { text: `${scope}：这段时间这套打法一笔也没进场，没有可看的记录。${EVALUATION_NOTE}`, setup: s, record: r };
+  if (!s) return { text: `${scope}：这套打法空仓不买，回测没有进场。${EVALUATION_NOTE}`, setup: null, record: r, card: null };
+  if (!s.trades) return { text: `${scope}：这段时间这套打法一笔也没进场，没有可看的记录。${EVALUATION_NOTE}`, setup: s, record: r, card: null };
   const ci = s.ci ? `，90% 区间 ${pc(s.ci[0])} ~ ${pc(s.ci[1])}` : "";
   const verdict = s.ci_crosses_zero ? "区间跨过 0，说明不了比随机进场好" : s.excess! > 0 ? "区间在 0 以上" : "区间在 0 以下，比随机进场差";
+  const entries = s.entries.join(" / ");
+  const full = `${scope}：按 ${entries} 进场 ${s.trades} 笔（${s.dates} 个日期${s.few_dates ? "，日期少" : ""}），`
+    + `胜率 ${Math.round(s.win_rate! * 100)}%，中位数 ${pc(s.median!)}，比随机进场多 ${s.excess == null ? "—" : pc(s.excess)}${ci}：${verdict}。`;
+  const excess = s.excess == null ? "" : `，比随机进场${s.excess >= 0 ? "多" : "少"} ${(Math.abs(s.excess) * 100).toFixed(1)}%`;
   return {
-    text: `${scope}：按 ${s.entries.join(" / ")} 进场 ${s.trades} 笔（${s.dates} 个日期${s.few_dates ? "，日期少" : ""}），`
-      + `胜率 ${Math.round(s.win_rate! * 100)}%，中位数 ${pc(s.median!)}，比随机进场多 ${s.excess == null ? "—" : pc(s.excess)}${ci}：${verdict}。${EVALUATION_NOTE}`,
+    text: `${full}${EVALUATION_NOTE}`,
     setup: s, record: r,
+    card: { line: `按 ${entries} 进场 ${s.trades} 笔${s.few_dates ? "（日期少）" : ""}${excess}${ci}：${verdict}`, tip: full },
   };
 }
 
@@ -73,27 +82,30 @@ export function recordNote(key: string, r: BacktestRecord = RECORD): RecordNote 
 const MAR = { ma200: 0.26, dual: 0.14, hold: 0.33 };
 
 /**
- * 结论卡片的对照一行。rule：MA200 朴素规则怎么说（算不了时写原因）；dual：双均线照方向持有怎么说；
- * agrees 算不了时为 null。卡片上写 rule、dual、agrees 和 short，text 是整句（悬停、给模型）。
+ * 结论卡片的对照一行。rule：MA200 朴素规则怎么说，带离 MA200 多远（算不了时写原因）；ma200：朴素规则的持有 / 空仓；
+ * dual：双均线照方向持有怎么说；算不了时 ma200、dual、agrees 为 null。
+ * 卡片上只写 ma200、dual、agrees；text 是整句，评估的数用完整的话写（悬停、给模型）。
  */
 export interface NaiveCompare {
   rule: string;
+  ma200: HoldStance | null;
   dual: HoldStance | null;
   agrees: boolean | null;
-  short: string;
   text: string;
 }
 
-const SHORT = `评估 MAR ${MAR.ma200} vs ${MAR.dual}`;
-const EVIDENCE = `评估里 MAR：MA200 ${MAR.ma200}、照方向持有 ${MAR.dual}、买入持有 ${MAR.hold}（${EVALUATION_DATE}，H3，见 README）`;
+const EVIDENCE = `历史评估（${EVALUATION_DATE}，H3，见 README）比的是收益和回撤之比（MAR，越高越好）：`
+  + `MA200 朴素规则 ${MAR.ma200}，双均线照方向持有 ${MAR.dual}，一直买入持有 ${MAR.hold}。这一项上朴素规则比双均线好`;
 
 export function naiveCompare(m: Ma200): NaiveCompare {
   if (!m.available) {
     const rule = `MA200 朴素规则：${m.reason}`;
-    return { rule, dual: null, agrees: null, short: SHORT, text: `${rule}。${EVIDENCE}` };
+    return { rule, ma200: null, dual: null, agrees: null, text: `${rule}。${EVIDENCE}。` };
   }
   const pct = `${m.distance_pct >= 0 ? "+" : ""}${m.distance_pct.toFixed(1)}%`;
   const rule = `MA200 朴素规则：收盘在${m.close_above ? "上方" : "下方"} ${pct}，${m.stance}`;
-  const dual = `双均线照方向持有（稳定 / 加速上涨才持有）：${m.dual_ma_stance}`;
-  return { rule, dual: m.dual_ma_stance, agrees: m.agrees, short: SHORT, text: `${rule}；${dual}；${m.agrees ? "一致" : "不一致"}。${EVIDENCE}` };
+  const plain = `MA200 朴素规则（收盘在 200 日均线上方就持有，否则空仓）：收盘在${m.close_above ? "上方" : "下方"} ${Math.abs(m.distance_pct).toFixed(1)}%，${m.stance}`;
+  const dual = `双均线照方向持有（稳定上涨、加速上涨才持有）：${m.dual_ma_stance}`;
+  return { rule, ma200: m.stance, dual: m.dual_ma_stance, agrees: m.agrees,
+    text: `${plain}。${dual}。两边${m.agrees ? "一致" : "不一致"}。${EVIDENCE}。` };
 }

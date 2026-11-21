@@ -685,9 +685,11 @@ ul.solves li { display: flex; justify-content: space-between; gap: 12px; padding
 /* ===================== 结论：空仓、持仓两行，价位标签，回测 ===================== */
 .verdict { display: grid; gap: 8px; }
 .concl-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.concl-now, .concl-lean { display: inline-flex; align-items: baseline; gap: 6px; cursor: help; }
+.concl-now .ck, .concl-lean .ck { font-size: 11.5px; color: var(--muted); border: 1px solid var(--line); border-radius: 6px; padding: 0 6px; white-space: nowrap; }
 .concl-trend { font: 700 18px var(--heading); }
-.concl-lean { font-size: 13px; color: var(--muted); }
-.concl-lean .lean-label { font: 600 14px var(--heading); }
+.concl-lean .lean-label { font: 700 16px var(--heading); }
+.concl-row .pnl-advice { margin: 2px 0 0; font-size: 13px; line-height: 1.5; }
 .concl-head .ask-card { margin-left: auto; }
 .concl-row { display: grid; grid-template-columns: 5.5em 1fr; gap: 10px; align-items: start; padding: 6px 0 0; border-top: 1px solid var(--line); }
 .concl-row .who { font-size: 12px; color: var(--muted); padding-top: 2px; }
@@ -711,9 +713,16 @@ button.pchip:hover { background: var(--card); }
 .pchip .muted { color: var(--muted); font-size: 11.5px; }
 .verdict .pos-cost { padding-left: calc(5.5em + 10px); }
 .verdict .record, .verdict .naive, .verdict .earnings-warn { margin: 0; font-size: 12.5px; color: var(--muted); border-top: 1px dashed var(--line); padding-top: 6px; }
-.verdict .naive-agree { margin-left: 4px; font-weight: 600; white-space: nowrap; } .naive-agree.same { color: var(--up); } .naive-agree.differ { color: var(--neutral); }
-.verdict .naive { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } /* 只占一行：窄屏截掉的部分悬停看整句 */
-.verdict .naive-ev { font-size: 11.5px; margin-left: 8px; }
+.verdict .naive { cursor: help; } /* 离 MA200 多远、评估的数悬停看整句；窄屏折行，「一致 / 不一致」不被截掉 */
+.verdict .bwl-line { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.verdict .naive b { color: var(--fg); font-weight: 600; }
+.verdict .naive .sep { margin: 0 6px; color: var(--faint); }
+.verdict .naive.same .naive-agree { color: var(--up); }
+.verdict .naive.differ { color: var(--fg); }
+.verdict .naive.differ .naive-agree { color: var(--neutral); border: 1px solid currentColor; border-radius: 6px; padding: 0 6px; }
+.verdict .record { cursor: help; }
+.method-note { margin: 4px 2px 0; font-size: 12px; color: var(--muted); }
+.method-note .pl { display: inline-block; font-size: 11px; border: 1px solid var(--line); border-radius: 6px; padding: 0 6px; margin-right: 8px; }
 .verdict .earnings-warn { color: var(--fg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .verdict .record .pl, .verdict .naive .pl, .verdict .earnings-warn .pl, .answer .missing .pl { display: inline-block; font-size: 11.5px; color: var(--muted); border: 1px solid var(--line); border-radius: 6px; padding: 0 6px; margin-right: 8px; }
 .verdict .earnings-warn .pl { color: var(--neutral); border-color: var(--neutral); }
@@ -746,6 +755,7 @@ details.more > *:not(summary) { margin-top: 10px; }
 @media (max-width: 640px) {
   .concl-row { grid-template-columns: 1fr; gap: 2px; }
   .verdict .pos-cost { padding-left: 0; }
+  .verdict .naive .sep { margin: 0 3px; }
 }
 
 /* ===================== 交易日志 ===================== */

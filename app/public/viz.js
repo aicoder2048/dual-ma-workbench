@@ -325,7 +325,7 @@ export function parseCost(raw) {
 const isEven = (cost, close) => Math.abs((close / cost - 1) * 100) < 0.005;
 
 export function pnlText(cost, close) {
-  if (!String(cost ?? "").trim()) return "填了成本价，就显示浮盈亏，计划也按浮盈 / 浮亏给。";
+  if (!String(cost ?? "").trim()) return "填了成本价，持仓这一行和计划就按浮盈 / 浮亏给建议。";
   const c = parseCost(cost);
   if (c === null) return '<b class="bad">成本价看不懂：请填数字，例如 133.5</b>';
   const d = (close / c - 1) * 100;
@@ -403,7 +403,10 @@ const targetChips = (t, close, compact) => t.targets.map((x, i) =>
   priceChip(`目标${t.targets.length > 1 ? i + 1 : ""}`, { label: x.source === "解读" ? `${x.kind}（解读）` : x.kind, price: x.price }, close, "target",
     { compact, note: compact ? "" : undefined, more: i === 0 ? t.at_target ?? "" : "" })).join("");
 
-/** 一行结论。buys：这套打法空仓会不会买（交易计划有进场），不买时空仓的价位叫「先看」，不叫触发。 */
+/**
+ * 一行结论。buys：这套打法空仓会不会买（交易计划有进场），不买时空仓的价位叫「先看」，不叫触发。
+ * 持仓浮盈 / 浮亏时计划里有「盈亏」一条（plan.ts 的 PNL），放在做法下面。
+ */
 function conclusionRow(name, plan, close, flat, buys, cost) {
   const fill = (t) => esc(t).replaceAll("{cost}", cost === null ? "成本" : f2(cost));
   const risk = plan.risk === null ? ""
@@ -418,9 +421,10 @@ function conclusionRow(name, plan, close, flat, buys, cost) {
       + targetChips(t, close, true) + rrChip(t) + sizeChip(t)
     : priceChip(flat ? "先看" : "盯住", plan.trigger, close, "trigger") + priceChip(flat ? "进场后止损" : "止损", plan.stop, close, "stop") + risk
       + (flat ? "" : targetChips(t, close, true));
+  const pnl = plan.items.find((i) => i.label === "盈亏");
   return `<div class="concl-row" data-situation="${flat ? "flat" : "holding"}">
       <span class="who">${name}</span>
-      <div class="what"><b>${fill(plan.action)}</b></div>
+      <div class="what"><b>${fill(plan.action)}</b>${pnl ? `<p class="pnl-advice">${fill(pnl.text)}</p>` : ""}</div>
       <div class="chips-row${five ? " five" : ""}">${chips}</div></div>`;
 }
 
@@ -431,10 +435,16 @@ export function holdingRow(r, close, p) {
   return conclusionRow(SITUATION_LABEL[k], r.plans[k], close, false, true, cost);
 }
 
+const NOW_TIP = "看大局的结论：现在是哪种趋势（类型·阶段），按 6 条均线今天的排列、方向和乖离判的。证据在下面「看大局」。";
+const LEAN_TIP = "做推演的结论（模糊判断）：不预测明天涨跌，只判断接下来几周均线（市场的持仓成本）往哪走、对多头还是空头有利。"
+  + "依据在下面「做推演」的「更多推演」里。";
+
+/** 结论卡片。标题分「现在」和「往后」两段；整套方法的评估不在卡片上，页面上固定写一次（#method-note，ADR 0028）。 */
 export function conclusionCard(r, close, p) {
   const buys = r.plans.flat.trade.entry !== null;
-  return `<div class="concl-head"><span class="eyebrow">结论</span><b class="concl-trend">${esc(r.trend.type)}</b>
-      <span class="concl-lean">接下来几周 <span class="lean-label ${stanceOf(r.visual.lean)}">${esc(r.visual.lean.label)}</span></span>
+  return `<div class="concl-head"><span class="eyebrow">结论</span>
+      <span class="concl-now" ${tip(NOW_TIP)}><span class="ck">现在</span><b class="concl-trend">${esc(r.trend.type)}</b></span>
+      <span class="concl-lean" ${tip(LEAN_TIP)}><span class="ck">模糊判断 · 接下来几周</span><span class="lean-label ${stanceOf(r.visual.lean)}">${esc(r.visual.lean.label)}</span></span>
       <button type="button" id="journal-add" class="journal-add" title="把此刻的计划记进交易日志，之后对照结果">记入日志</button>
       <button type="button" class="ask-card" data-ask-card="verdict" aria-haspopup="menu">问鸿雁</button></div>
     ${conclusionRow("空仓", r.plans.flat, close, true, buys, null)}
@@ -443,7 +453,12 @@ export function conclusionCard(r, close, p) {
     ${naiveLine(r.naive)}
     ${bwlLine(r)}
     ${earningsLine(r, p)}
-    <p class="record"><span class="pl">回测</span>${esc(r.record.text)}</p>`;
+    ${recordLine(r.record)}`;
+}
+
+/** 本打法的回测记录一行；空仓不买、一笔没进场的打法没有记录，不显示。 */
+function recordLine(rec) {
+  return rec.card ? `<p class="record" ${tip(rec.card.tip)}><span class="pl">本打法回测</span>${esc(rec.card.line)}</p>` : "";
 }
 
 /**
@@ -471,11 +486,12 @@ export function bwlLine(r) {
     + `<span class="pl">黑绿线 · 仅参考</span>（${esc(b.source)}）：${esc(b.text)}。交易计划没用它</p>`;
 }
 
-/** 对照一行：MA200 朴素规则怎么说、双均线怎么说、一不一致，带评估的出处（悬停看整句）。 */
+/** 对照一句：MA200 规则怎么说｜双均线怎么说｜一不一致（不一致标出来）；离 MA200 多远、评估的数在悬停的整句里。 */
 function naiveLine(n) {
-  const dual = n.dual === null ? "" : `；双均线${n.agrees ? "也" : ""}${esc(n.dual)}
-    <b class="naive-agree ${n.agrees ? "same" : "differ"}">${n.agrees ? "一致" : "不一致"}</b>`;
-  return `<p class="naive" ${tip(n.text)}><span class="pl">对照</span>${esc(n.rule)}${dual}<span class="naive-ev">${esc(n.short)}</span></p>`;
+  if (n.agrees === null) return `<p class="naive" ${tip(n.text)}><span class="pl">对照</span>${esc(n.rule)}</p>`;
+  const agree = n.agrees ? ["same", "一致"] : ["differ", "不一致"];
+  return `<p class="naive ${agree[0]}" ${tip(n.text)}><span class="pl">对照</span>MA200 规则：<b>${esc(n.ma200)}</b><span class="sep">｜</span>`
+    + `双均线：<b>${esc(n.dual)}</b><span class="sep">｜</span><b class="naive-agree">${agree[1]}</b></p>`;
 }
 
 /** K 线图上的虚线：当前处境（找打法里选的空仓 / 持仓）的触发价、止损、目标位，加上推翻判断的价位。 */

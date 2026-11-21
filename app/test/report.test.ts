@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { buildFacts, type Analysis } from "../src/citations.ts";
 import { buildReport, crossVerdict, parseCross, parseTypeTable, stanceOf, TYPE_TABLE } from "../src/report.ts";
-import { EVALUATION_NOTE, parseRuleEvidence } from "../src/record.ts";
+import { EVALUATION_NOTE, parseRuleEvidence, recordNote } from "../src/record.ts";
 import nvda from "./fixtures/nvda-analysis.json";
 
 const analysis = nvda as Analysis;
@@ -120,6 +120,14 @@ describe("模糊判断在前", () => {
   test("回测记录：加速下跌空仓不买，照实说没有进场", () => {
     expect(report.record.setup).toBeNull();
     expect(report.record.text).toContain("空仓不买");
+    expect(report.record.card).toBeNull(); // 卡片上不显示回测一行
+  });
+  test("回测记录：有记录的打法给卡片一句本打法的记录，不带整套方法的评估", () => {
+    const c = recordNote("稳定上涨").card!;
+    expect(c.line).toBe("按 P14 进场 5 笔（日期少），比随机进场少 7.6%，90% 区间 -10.7% ~ -4.4%：区间在 0 以下，比随机进场差");
+    expect(c.tip).toContain("14 只票");
+    expect(c.line + c.tip).not.toContain(EVALUATION_NOTE);
+    expect(recordNote("稳定上涨").text.endsWith(EVALUATION_NOTE)).toBe(true); // 给长风的整句照旧
   });
   test("可视化数据带上模糊判断和改变判断的价位", () => {
     expect(report.visual.lean.label).toBe("明显偏空");
@@ -160,8 +168,8 @@ describe("MA200 朴素规则对照", () => {
     expect(report.naive.rule).toBe("MA200 朴素规则：收盘在下方 -25.9%，空仓");
     expect(report.naive.dual).toBe("空仓");
     expect(report.naive.agrees).toBe(true);
-    expect(report.naive.short).toBe("评估 MAR 0.26 vs 0.14");
-    expect(report.naive.text).toContain("MA200 0.26、照方向持有 0.14、买入持有 0.33");
+    expect(report.naive.ma200).toBe("空仓");
+    expect(report.naive.text).toContain("MA200 朴素规则 0.26，双均线照方向持有 0.14，一直买入持有 0.33");
   });
   test("两边说法不同时是不一致", () => {
     const r = buildReport({ ...analysis, ma200: { ...nv, close_above: true, distance_pct: 3.04, stance: "持有", agrees: false } });
@@ -176,6 +184,6 @@ describe("MA200 朴素规则对照", () => {
   test("长风拿得到 MA200 和对照两个字段", () => {
     const facts = buildFacts(analysis);
     expect(facts["MA200"].value).toBe("203.72，向下；2026-11-04 收盘下穿（10 根前）");
-    expect(facts["MA200.对照"].value).toStartWith("MA200 朴素规则：收盘在下方 -25.9%，空仓；双均线照方向持有（稳定 / 加速上涨才持有）：空仓；一致。");
+    expect(facts["MA200.对照"].value).toStartWith("MA200 朴素规则（收盘在 200 日均线上方就持有，否则空仓）：收盘在下方 25.9%，空仓。双均线照方向持有（稳定上涨、加速上涨才持有）：空仓。两边一致。");
   });
 });
