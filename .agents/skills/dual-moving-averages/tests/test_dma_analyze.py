@@ -307,3 +307,28 @@ def test_chart_volume_carries_the_ratio_to_the_50_day_average():
     assert vol[-1]["ratio"] == round(a["volume"]["ratio"], 2)   # 和 analysis.volume 同一个口径
     assert all(v["spike"] == (v["ratio"] > rules.VOLUME_SPIKE) for v in vol if "ratio" in v)
     assert any(v["spike"] for v in vol)
+
+
+def test_weekly_chart_draws_the_same_weekly_lines_the_analysis_reads():
+    from conftest import load_fixture
+    from html_report import weekly_chart
+
+    df, history = load_fixture("TSLA", "2021-04-14"), load_fixture("TSLA", "2021-04-14", years=5)
+    a = dma.analyze(df, "TSLA", "fixture", history)
+    w = weekly_chart(history, a)
+    assert set(w["lines"]) == {f"{k}{n}" for n in dma.PERIODS for k in ("MA", "EMA")}   # 周线不画 MA200
+    assert w["candles"][-1]["time"] == a["date"] and w["candles"][-1]["close"] == a["weekly"]["close"]
+    assert w["partial"] == a["weekly"]["partial"]
+    for ln in a["weekly"]["lines"]:
+        assert w["lines"][f"MA{ln['period']}"][-1]["value"] == round(ln["ma"], 4)
+        assert w["lines"][f"EMA{ln['period']}"][-1]["value"] == round(ln["ema"], 4)
+    # 抵扣价落在倒数第 N 根周 K 线上；量不标大量、不给量比（那是按 50 日均量定的）
+    assert [d["time"] for d in w["drops"]] == [w["candles"][-n]["time"] for n in dma.PERIODS]
+    assert not any(v["spike"] or "ratio" in v for v in w["volume"])
+    assert len(w["candles"]) == a["weekly"]["bars"]   # 周线判断用的整段历史都画
+
+
+def test_json_chart_has_a_weekly_block(json_out):
+    w = json_out["chart"]["weekly"]
+    assert w["candles"][-1]["time"] == json_out["chart"]["candles"][-1]["time"]
+    assert set(w) >= {"candles", "volume", "lines", "drops", "partial"}

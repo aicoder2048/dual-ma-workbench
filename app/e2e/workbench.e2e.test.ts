@@ -32,8 +32,21 @@ const CHART = (() => {
   }
   const close = days.map((_, i) => 200 + 30 * Math.sin(i / 25) - i * 0.1);
   const line = (k: number) => days.map((time, i) => ({ time, value: close[i] + k }));
+  const candles = days.map((time, i) => ({ time, open: close[i] - 1, high: close[i] + 2, low: close[i] - 2, close: close[i] }));
+  // 周线：按周五结束的自然周合并，时间是那一周最后一个交易日（和 skill 的 weekly.to_weekly 一样）；最后一周没走完
+  const friday = (t: string) => { const d = new Date(`${t}T00:00:00Z`); d.setUTCDate(d.getUTCDate() + 5 - d.getUTCDay()); return d.toISOString().slice(0, 10); };
+  const groups = new Map<string, typeof candles>();
+  for (const c of candles) groups.set(friday(c.time), [...(groups.get(friday(c.time)) ?? []), c]);
+  const weeks = [...groups.values()].map((g) => ({ time: g.at(-1)!.time, open: g[0].open, high: Math.max(...g.map((c) => c.high)),
+    low: Math.min(...g.map((c) => c.low)), close: g.at(-1)!.close }));
+  const wline = (k: number) => weeks.map((w) => ({ time: w.time, value: w.close + k }));
+  const weekly = {
+    candles: weeks, volume: weeks.map((w) => ({ time: w.time, value: 169e6, spike: false })),
+    lines: { MA20: wline(6), EMA20: wline(5), MA60: wline(12), EMA60: wline(11), MA120: wline(18).slice(30), EMA120: wline(17).slice(30) },
+    drops: [{ time: weeks.at(-20)!.time, period: 20 }], partial: true,
+  };
   return {
-    candles: days.map((time, i) => ({ time, open: close[i] - 1, high: close[i] + 2, low: close[i] - 2, close: close[i] })),
+    candles, weekly,
     // 量 33.8M、1.2 倍均量；最后一根是大量（2.4 倍，读数条标黄）
     volume: days.map((time, i) => (i === 299 ? { time, value: 81.1e6, spike: true, ratio: 2.4 } : { time, value: 33.8e6, spike: false, ratio: 1.2 })),
     lines: { MA20: line(5), EMA20: line(4), MA60: line(10), EMA60: line(9), MA120: line(15), EMA120: line(14), MA200: line(20).slice(199) },
@@ -921,6 +934,64 @@ describe("结构标注", () => {
     await page.click(".replay-exit");
     expect(await page.isDisabled(".struct-toggle")).toBe(false);
     expect(await shown(page)).toHaveLength(4);
+    expect(errors).toEqual([]);
+    await page.close();
+  }, 30_000);
+});
+
+describe("日 / 周切换", () => {
+  const chartApi = <T,>(page: Page, fn: string) => page.evaluate(async (fn) => (await import("/app.js")).getChart()[fn](), fn) as Promise<T>;
+  const W = CHART.weekly;
+
+  test("点「周」：周 K 线、读数写那一周和比上一周的涨跌；只在日线上的按钮不能点；点「日」回来", async () => {
+    const { page, errors } = await open();
+    await page.waitForSelector("#chart canvas");
+    await scrollIntoCenter(page, ".chart-card");
+    for (const sel of ['[data-frame="day"]', '[data-frame="week"]']) expect({ sel, ok: await notCovered(page, sel) }).toEqual({ sel, ok: true });
+    expect(await page.getAttribute('[data-frame="day"]', "aria-pressed")).toBe("true");
+    await page.click('[data-frame="week"]');
+    expect(await chartApi(page, "frame")).toBe("week");
+    expect((await chartApi<any>(page, "replay")).bars).toBe(W.candles.length);
+    expect(await page.textContent(".chart-card .chart-frame")).toBe("周线");
+    const [prev, last] = W.candles.slice(-2);
+    const ro = (await page.textContent("#chart-readout"))!;
+    expect(ro).toContain(`周 ${last.time}（本周未完）`);
+    expect(ro).toContain(`${((last.close / prev.close - 1) * 100).toFixed(2).replace("-", "−")}%`);
+    expect(ro).toContain(`MA20 ${W.lines.MA20.at(-1)!.value.toFixed(2)}`);
+    expect(ro).not.toContain("MA200");
+    for (const sel of [".replay-toggle", ".measure-toggle", ".struct-toggle", ".range-btn[data-range='1w']", ".range-btn[data-range='1m']"]) {
+      expect({ sel, off: await page.isDisabled(sel) }).toEqual({ sel, off: true });
+    }
+    expect(await page.getAttribute(".range-btn[data-range='all']", "aria-pressed")).toBe("true");
+    expect(await page.isDisabled(".draw-toggle")).toBe(false); // 画线、价位线是价格，周线上照常
+    await page.click('[data-frame="day"]');
+    expect(await chartApi(page, "frame")).toBe("day");
+    expect((await chartApi<any>(page, "replay")).bars).toBe(CHART.candles.length);
+    expect(await page.textContent("#chart-readout")).toContain(CHART.candles.at(-1)!.time);
+    expect(await page.getAttribute(".range-btn[data-range='1y']", "aria-pressed")).toBe("true");
+    expect(await page.isDisabled(".replay-toggle")).toBe(false);
+    expect(errors).toEqual([]);
+    await page.close();
+  }, 30_000);
+
+  test("测量中、回放中切到周线：先退出（模式互斥，回放只在日线上）", async () => {
+    const { page, errors } = await open();
+    await page.waitForSelector("#chart canvas");
+    await scrollIntoCenter(page, ".chart-card");
+    await page.click(".measure-toggle");
+    expect(await chartApi(page, "tool")).toBe("measure");
+    await page.click('[data-frame="week"]');
+    expect(await chartApi(page, "tool")).toBe("none");
+    expect(await page.getAttribute(".measure-toggle", "aria-pressed")).toBe("false");
+    await page.click('[data-frame="day"]');
+    await page.click(".replay-toggle");
+    await page.click(".replay-start");
+    await page.click('[data-start="earliest"]');
+    await page.waitForFunction(async () => (await import("/app.js")).getChart().replay().mode === "replay");
+    await page.click('[data-frame="week"]');
+    expect((await chartApi<any>(page, "replay")).mode).toBe("off");
+    expect(await page.isVisible(".replay-bar")).toBe(false);
+    expect(await chartApi(page, "frame")).toBe("week");
     expect(errors).toEqual([]);
     await page.close();
   }, 30_000);
@@ -1856,6 +1927,8 @@ describe("盲测练习", () => {
     // 结构标注不画（会提前说出答案），按钮不能点
     expect(await page.locator("#chart .struct-mark").count()).toBe(0);
     expect(await page.isDisabled(".struct-toggle")).toBe(true);
+    // 周线不能切（练习的图只到现在那根，周线会用到之后的 K 线）
+    expect(await page.isDisabled('[data-frame="week"]')).toBe(true);
     for (const sel of ['[data-act="plan"]', '[data-act="step"]', '[data-act="play"]', '[data-act="reveal"]']) {
       expect({ sel, ok: await usable(page, `#practice ${sel}`) }).toEqual({ sel, ok: true });
     }

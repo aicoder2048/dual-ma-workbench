@@ -40,13 +40,23 @@ def to_weekly(df: pd.DataFrame) -> pd.DataFrame:
     return out.dropna(subset=["Close"])
 
 
+def weekly_frame(df: pd.DataFrame) -> pd.DataFrame:
+    """周 K 线加上同一套均线指标：周线判断和工作台的周线图都用它。"""
+    return add_indicators(to_weekly(df[[c for c in AGG if c in df.columns]]))
+
+
+def partial_week(df: pd.DataFrame) -> bool:
+    """最后一周还没走完：最后一根日线不是周五。"""
+    return df.index[-1].weekday() != 4
+
+
 def _direction(now: float, prev: float) -> str:
     return "上" if now > prev else ("下" if now < prev else "平")
 
 
 def weekly_json(df: pd.DataFrame) -> dict:
     """JSON 里的 weekly 一块。历史不够 MIN_WEEKS 周时说明原因。"""
-    w = add_indicators(to_weekly(df[[c for c in AGG if c in df.columns]]))
+    w = weekly_frame(df)
     if len(w) < MIN_WEEKS:
         return {"available": False, "reason": f"周线只有 {len(w)} 根，MA{max(PERIODS)} 需要 {MIN_WEEKS} 根"}
     now, prev = w.iloc[-1], w.iloc[-2]
@@ -54,8 +64,7 @@ def weekly_json(df: pd.DataFrame) -> dict:
                         above=bool(now["Close"] > now[f"MA{n}"]),
                         ma_direction=_direction(now[f"MA{n}"], prev[f"MA{n}"]),
                         ema_direction=_direction(now[f"EMA{n}"], prev[f"EMA{n}"])) for n in PERIODS]
-    last_day = df.index[-1]
-    weekly = Weekly(bars=len(w), date=str(w.index[-1].date()), partial=last_day.weekday() != 4,
+    weekly = Weekly(bars=len(w), date=str(w.index[-1].date()), partial=partial_week(df),
                     close=float(now["Close"]), lines=lines,
                     arr_ma=arrangement(now, "MA"), arr_ema=arrangement(now, "EMA"))
     return {"available": True, **asdict(weekly)}

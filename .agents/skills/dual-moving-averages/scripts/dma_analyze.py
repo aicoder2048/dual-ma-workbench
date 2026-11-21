@@ -602,9 +602,9 @@ def main() -> None:
     earnings = ea.load_earnings(a.ticker.upper(), str(df.index[-1].date()), str(df.index[0].date())) if a.ticker else None
     result = analyze(df, a.ticker.upper() if a.ticker else a.csv, src, history, hourly, sizing, earnings)
     if a.json:
-        from html_report import CHART_BARS, chart_data
+        from html_report import CHART_BARS, chart_data, weekly_chart
 
-        chart = chart_data(df, result, a.chart_bars or CHART_BARS)
+        chart = {**chart_data(df, result, a.chart_bars or CHART_BARS), "weekly": weekly_chart(history, result)}
         print(json.dumps({"analysis": result, "chart": chart},
                          ensure_ascii=False, allow_nan=False))
         return

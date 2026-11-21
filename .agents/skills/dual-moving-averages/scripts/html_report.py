@@ -26,6 +26,7 @@ import pandas as pd
 
 from indicators import NAIVE_MA
 from rules import VOLUME_SPIKE
+from weekly import partial_week, weekly_frame
 
 CHART_BARS = 260  # 图上显示最近多少根日 K 线
 CHART_LIB = "https://cdn.jsdelivr.net/npm/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"
@@ -93,6 +94,17 @@ def chart_data(df: pd.DataFrame, a: dict, bars: int = CHART_BARS) -> dict:
     # MA200 朴素规则的对照线（工作台默认不画）；日线窗口前 199 根没有值
     lines[f"MA{NAIVE_MA}"] = line(df["Close"].rolling(NAIVE_MA).mean().reindex(view.index))
     return {"candles": candles, "volume": volume, "lines": lines, "drops": drops}
+
+
+def weekly_chart(history: pd.DataFrame, a: dict) -> dict:
+    """工作台的周线图：周线判断用的那段历史（实时取 5 年）全画，均线、抵扣价、着色照日线的算法跑在周 K 线上。
+
+    MA200 是日线朴素规则的对照，周线不画；大量是按 50 日均量定的，周线不标，也不给量比。
+    """
+    out = chart_data(weekly_frame(history), a, len(history))
+    del out["lines"][f"MA{NAIVE_MA}"]
+    out["volume"] = [{"time": v["time"], "value": v["value"], "spike": False} for v in out["volume"]]
+    return {**out, "partial": partial_week(history)}
 
 
 def render_html(a: dict, df: pd.DataFrame, commentary: dict | None = None) -> str:

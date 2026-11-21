@@ -972,3 +972,10 @@ body.practice-revealed #verdict, body.practice-revealed #steps, body.practice-re
 .struct-mark.faint { color: var(--faint); }
 .struct-mark[hidden] { display: none; }
 .popover .pop-lead { margin: 6px 0; font-size: 13px; line-height: 1.6; }
+
+/* 日 / 周：两个按钮拼成一组 */
+.chart-tools .frame-toggle { display: inline-flex; }
+.chart-tools .frame-toggle button { border-radius: 0; padding: 1px 9px; }
+.chart-tools .frame-toggle button:first-child { border-radius: 999px 0 0 999px; }
+.chart-tools .frame-toggle button + button { border-radius: 0 999px 999px 0; margin-left: -1px; }
+.chart-tools button:disabled { opacity: .45; cursor: not-allowed; }
