@@ -80,20 +80,21 @@ export function createDrillChart(box, readout) {
     label = (t) => (at.has(t) ? tLabel(at.get(t) - zero) : "");
   }
 
-  chart.subscribeCrosshairMove((p) => drill && showReadout(p.time ? isoDate(p.time) : null));
+  /** 十字线所在的那根（读数条写的就是它）；鼠标离开图为 null。 */
+  let hover = null;
+  chart.subscribeCrosshairMove((p) => {
+    hover = p.time ? isoDate(p.time) : null;
+    if (drill) showReadout(hover);
+  });
   // 点图题自己听按下、抬起：图表库的单击回调在上一下之后半秒内不报（算双击），连着点两根、同一根点两下都会丢。
-  // 按下到抬起挪了几个像素以上是在拖图，不算点。
+  // 记十字线所在的那根，读数条写哪根就记哪根（自己按坐标换算会和十字线差一根）。按下到抬起挪了几个像素以上是在拖图，不算点。
   let down = null;
   box.addEventListener("pointerdown", (e) => { down = { x: e.clientX, y: e.clientY }; });
   box.addEventListener("pointerup", (e) => {
     const was = down;
     down = null;
     if (!drill || !pickFn || !was || Math.hypot(e.clientX - was.x, e.clientY - was.y) > 4) return;
-    const x = e.clientX - box.getBoundingClientRect().left;
-    if (x > chart.timeScale().width()) return; // 价格轴上
-    const t = chart.timeScale().coordinateToTime(x);
-    const time = t && isoDate(t);
-    if (time && bars.some((c) => c.time === time)) pickFn(time, label(time));
+    if (hover && bars.some((c) => c.time === hover)) pickFn(hover, label(hover));
   });
   matchMedia("(prefers-color-scheme: dark)").addEventListener("change", paint);
   new MutationObserver(paint).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });

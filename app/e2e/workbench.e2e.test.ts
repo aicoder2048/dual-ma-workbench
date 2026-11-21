@@ -2737,13 +2737,23 @@ describe("盲测练习", () => {
     const box = (await page.locator("#dr-chart").boundingBox())!;
     const y = box.y + box.height * 0.4;
     /** 像用户一样在图上找那一根：鼠标左右移，看读数条的 T 几（K 线从左到右 T 越来越大）。 */
+    /** 移到 x，等读数条不再变（十字线在下一帧才更新，机器忙时更慢）再读。 */
+    const tAt = async (x: number) => {
+      await page.mouse.move(x, y);
+      let prev = NaN;
+      for (let n = 0; n < 40; n++) {
+        await page.waitForTimeout(40);
+        const t = await readT();
+        if (t === prev) return t;
+        prev = t;
+      }
+      throw new Error("读数条一直在变");
+    };
     const xOf = async (k: number) => {
       let lo = box.x + 4, hi = box.x + box.width - 80;
       for (let i = 0; i < 16; i++) {
         const mid = (lo + hi) / 2;
-        await page.mouse.move(mid, y);
-        await page.waitForTimeout(30);
-        const t = await readT();
+        const t = await tAt(mid);
         if (t === k) return mid;
         if (t < k) lo = mid; else hi = mid;
       }
