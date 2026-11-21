@@ -95,6 +95,37 @@ describe("结构标注：structure → 图上的线和标记", () => {
   });
 });
 
+describe("结构拆成三个图层：顶底构造、形态、波段各画各的", () => {
+  const OFF = { constructs: false, patterns: false, swings: false };
+  const kinds = (s: ReturnType<typeof structureScene>) => [...new Set(s.segments.map((x) => x.kind))].sort();
+
+  test("只开波段：只有波段连线和还没走完的那段虚线，没有标记、颈线、短虚线", () => {
+    const s = structureScene(S, CANDLES, { ...OFF, swings: true });
+    expect(kinds(s)).toEqual(["swing", "tentative"]);
+    expect([s.marks, s.levels]).toEqual([[], []]);
+  });
+
+  test("只开顶底构造：两个构造标记和「下一根怎样」的短虚线，没有连线", () => {
+    const s = structureScene(S, CANDLES, { ...OFF, constructs: true });
+    expect(s.marks.map((m) => m.text)).toEqual(["顶·已完成", "底·形成中"]);
+    expect(s.levels).toHaveLength(1);
+    expect(s.segments).toEqual([]);
+  });
+
+  test("只开形态：M 顶、2B 的标记和它们的颈线；同一根上没有构造标记，就不用往外叠", () => {
+    const s = structureScene(S, CANDLES, { ...OFF, patterns: true });
+    expect(s.marks.every((m) => !m.text.includes("·"))).toBe(true);
+    expect(s.marks).toHaveLength(2);
+    expect(kinds(s)).toEqual(["neck"]);
+    expect(s.levels).toEqual([]);
+    expect(s.marks.find((m) => m.i === at("2026-10-06"))!.stack).toBe(0);
+  });
+
+  test("三个都关：什么都不画", () => {
+    expect(structureScene(S, CANDLES, OFF)).toEqual({ segments: [], levels: [], marks: [] });
+  });
+});
+
 describe("缺口：gaps → 色带", () => {
   const GAPS = [{ date: "2026-04-10", top: 260, bottom: 251.5 }, { date: "2026-10-27", top: 232.4, bottom: 221.94 }];
   const TARGETS = [{ price: 221.94, kind: "缺口", rule: "P25", source: "视频" as const, date: "2026-10-27" }];

@@ -1,7 +1,10 @@
 // K 线 + 6 条均线 + 抵扣价小黄点 + 成交量（TradingView lightweight-charts 4.2.0）。
 import { baseCandleStyle, candleBar as styledBar } from "./candles.js";
+import { CHART_HELP } from "./charthelp.js";
 import { createOverlay } from "./chartoverlay.js";
 import { earningsMarks, logicalOf } from "./earnings.js";
+import { createLayerMenu } from "./layermenu.js";
+import { LAYERS_KEY, layerRows, parseLayers, presetOf, presetState, shownLayers, toggleLayer } from "./layers.js";
 import { measure, measureLines } from "./measure.js";
 import { BAND_ALPHA, CANDLE_ALPHA, GROUPS, SPECS, alpha, bandPoints, lineStyle, nextFocus } from "./lines.js";
 import { gapBands, pickGaps, structureScene } from "./overlays.js";
@@ -26,15 +29,8 @@ const css = (n) => getComputedStyle(document.documentElement).getPropertyValue(n
 
 // 破线拐头着色：tone 由 Python 算好（见 html_report.bar_tones），这里只查颜色
 const TONE_TOKENS = { bull: "--bar-bull", bear: "--bar-bear", mixed: "--bar-mixed" };
-const TONE_TITLE = [
-  "破线拐头信号着色：按 20 线有没有破线拐头给 K 线上色（点击开 / 关）",
-  "绿：收盘在 MA20 上方，且高于 20 日抵扣价（MA20 向上）",
-  "黑：两样都不满足（MA20 向下）。第一根黑柱就是破线拐头信号",
-  "灰：只满足一样，过渡状态",
-  "这是 LEI 黑绿线指标第一个因子的简化版，只看 MA20 破线和拐头；不是他的黑绿线（他还看 60 线组、20/60 交叉和 MACD 强度，代码没公开）",
-  "怎么读（视频 P）：多头排列里绿 = 持有 / 做多，黑 = 离场；空头排列里见绿也不做多；灰 = 不动",
-  "三点钟方向的横盘里颜色会来回翻，别跟着翻来翻去地交易",
-].join("&#10;");
+/** 点结论卡片上的价位，图上那条线亮多久（毫秒）。 */
+const FLASH_MS = 4000;
 
 export function createChart(box, legendEl) {
   if (!window.LightweightCharts) {
@@ -57,7 +53,17 @@ export function createChart(box, legendEl) {
     handleScroll: { mouseWheel: false, pressedMouseMove: true, horzTouchDrag: true, vertTouchDrag: false },
     handleScale: { mouseWheel: false, pinch: true, axisPressedMouseMove: true },
   });
-  const candles = chart.addCandlestickSeries({ priceLineVisible: false });
+  let flash = null; // 正在亮着的那条价位线，见下面的 flashLevel
+  const candles = chart.addCandlestickSeries({
+    priceLineVisible: false,
+    // 亮着的价位在图的价格范围外面时，把范围撑到它，不然点了看不见
+    autoscaleInfoProvider: (base) => {
+      const info = base();
+      if (!info?.priceRange || !flash) return info;
+      const { minValue, maxValue } = info.priceRange;
+      return { ...info, priceRange: { minValue: Math.min(minValue, flash.price), maxValue: Math.max(maxValue, flash.price) } };
+    },
+  });
   const vol = chart.addHistogramSeries({ priceScaleId: "vol", priceFormat: { type: "volume" }, lastValueVisible: false, priceLineVisible: false });
   chart.priceScale("vol").applyOptions({ scaleMargins: { top: 0.8, bottom: 0 } });
   const series = {};
@@ -77,10 +83,8 @@ export function createChart(box, legendEl) {
     b.title = s.off ? "MA200 朴素规则的对照线（收盘在上方持有，否则空仓），默认不画" : `显示 / 隐藏 ${s.key}`;
     b.innerHTML = `<i class="${s.kind.toLowerCase()}" style="--c: var(${s.token})"></i>${s.key}`;
     b.addEventListener("click", () => {
-      const on = b.getAttribute("aria-pressed") !== "true";
-      b.setAttribute("aria-pressed", String(on));
-      series[s.key].applyOptions({ visible: on });
-      paintRibbon();
+      b.setAttribute("aria-pressed", String(b.getAttribute("aria-pressed") !== "true"));
+      paintLines();
       showReadout(null);
     });
     (legendEl.querySelector(`.legend-group[data-group="${s.group}"]`) ?? legendEl).appendChild(b);
@@ -139,36 +143,47 @@ export function createChart(box, legendEl) {
   const WEEK_OFF = new Set(["1w", "1m"]);
   const tools = document.createElement("div");
   tools.className = "chart-tools";
-  tools.innerHTML = `<span class="frame-toggle" role="group" aria-label="日线 / 周线">`
+  // 一行放得下（默认视口）：互斥的选项连成一段；图上画什么都收在「图层 ▾」里
+  // 「图层」排最左：菜单往下、往右展开，盖住的是旧 K 线，开关一项时右边最新的那段看得见
+  tools.innerHTML = `<span class="layers-wrap"></span>`
+    + `<span class="seg frame-toggle" role="group" aria-label="日线 / 周线">`
     + `<button type="button" data-frame="day" aria-pressed="true" title="日 K 线（分析用的就是日线）">日</button>`
     + `<button type="button" data-frame="week" aria-pressed="false">周</button></span>`
+    + `<span class="seg" role="group" aria-label="看多长一段">`
     + RANGES.map(([k, label]) => `<button type="button" class="range-btn" data-range="${k}">${label}</button>`).join("")
-    + `<button type="button" class="range-btn" data-range="reset" title="回到当前范围的默认视图">复位</button>`
+    + `<button type="button" class="range-btn" data-range="reset" title="回到当前范围的默认视图">复位</button></span>`
+    + `<span class="seg" role="group" aria-label="图上的工具">`
     + `<button type="button" class="replay-toggle" aria-pressed="false" title="从过去某一天开始，一根一根往后放 K 线">回放</button>`
     + `<button type="button" class="measure-toggle" aria-pressed="false" title="点这里，再在图上按住从一点拖到另一点：量涨跌多少、隔几根 K 线、几个 ATR（看止损离得远不远）。Esc 清掉">测量</button>`
     + `<button type="button" class="draw-toggle" aria-pressed="false" title="点这里，再点图上任意一处，就在那个价位画一条横线">画线</button>`
-    + `<button type="button" class="draw-clear" title="删掉这只股票上自己画的线">清除</button>`
-    + `<button type="button" class="tone-toggle" title="${TONE_TITLE}">`
-    + `${Object.values(TONE_TOKENS).map((t) => `<i style="--c: var(${t})"></i>`).join("")}着色</button>`
-    + `<button type="button" class="levels-toggle" aria-pressed="true" title="把结论里的触发价、止损和推翻判断的价位画成虚线">价位线</button>`
-    + `<button type="button" class="struct-toggle" aria-pressed="true">结构</button>`
-    + `<span class="gaps-pair"><button type="button" class="gaps-toggle" aria-pressed="true">缺口</button>`
-    + `<button type="button" class="gaps-all" aria-pressed="false" hidden></button></span>`
-    + `<button type="button" class="profile-toggle" aria-pressed="false">筹码</button>`
-    + `<button type="button" class="chart-help-toggle" aria-expanded="false">怎么用</button>`;
+    + `<button type="button" class="draw-clear" title="删掉这只股票上自己画的线">清除</button></span>`
+    + `<button type="button" class="chart-help-toggle" aria-expanded="false" aria-label="怎么用" title="怎么用：每个工具、每个图层在这套方法里看什么">?</button>`;
   legendEl.after(tools);
 
-  // 破线拐头信号着色：默认开，记在本机
-  let toneOn = true;
-  try { toneOn = localStorage.getItem("dma-tone") !== "0"; } catch { /* 隐私模式 */ }
-  const toneBtn = tools.querySelector(".tone-toggle");
-  toneBtn.setAttribute("aria-pressed", String(toneOn));
-  toneBtn.addEventListener("click", () => {
-    toneOn = !toneOn;
-    toneBtn.setAttribute("aria-pressed", String(toneOn));
-    try { localStorage.setItem("dma-tone", toneOn ? "1" : "0"); } catch { /* 忽略 */ }
-    paint();
+  // ---------- 图层：图上画什么。表在 layers.js，菜单在 layermenu.js；开关记在本机 ----------
+  let layers = parseLayers(null);
+  try { layers = parseLayers(localStorage.getItem(LAYERS_KEY)); } catch { /* 隐私模式 */ }
+  /** 图表现在的情况，决定哪些图层能用（layers.js 的 ctx）。 */
+  const layerCtx = () => {
+    const { all, picked } = gapSets();
+    return { frame, replay: rs.mode === "replay", structure: Boolean(structure?.available),
+      gaps: gaps ? gaps.list.length : null, moreGaps: all.length - picked.length, volume: Boolean(view?.volume?.length) };
+  };
+  /** 图上现在画哪些图层：开着而且能用。 */
+  const shown = () => shownLayers(layers, layerCtx());
+  const layerRow = (key) => layerRows(layers, layerCtx()).find((r) => r.key === key);
+  const layerMenu = createLayerMenu(tools.querySelector(".layers-wrap"), {
+    onPreset: (name) => setLayers(presetState(name)),
+    onToggle: (key) => setLayers(toggleLayer(layers, key)),
   });
+  const syncLayers = () => layerMenu.render(layerRows(layers, layerCtx()), presetOf(layers));
+  function setLayers(next) {
+    layers = next;
+    try { localStorage.setItem(LAYERS_KEY, JSON.stringify(layers)); } catch { /* 忽略 */ }
+    if (!view) { syncLayers(); return; } // 还没有数据：只把菜单对上
+    paint();
+    showReadout(null); // 均线关了，读数条第二行也跟着空
+  }
   const applyRange = () => {
     tools.querySelectorAll(".range-btn").forEach((b) => {
       b.setAttribute("aria-pressed", String(b.dataset.range === rangeKeys[frame]));
@@ -209,8 +224,7 @@ export function createChart(box, legendEl) {
   const LEVEL_COLOR = { trigger: "--up", stop: "--down", target: "--accent", invalid: "--neutral" };
   let levels = [];
   let levelLines = [];
-  let levelsOn = true;
-  const levelsShown = () => levelsOn && rs.mode !== "replay"; // 价位线属于最新一天，回放时收起
+  const levelsShown = () => shown().levels; // 价位线属于最新一天，回放时收起
   const paintLevels = () => {
     levelLines.forEach((l) => candles.removePriceLine(l));
     levelLines = levelsShown() ? levels.map((lv) => candles.createPriceLine({
@@ -222,97 +236,52 @@ export function createChart(box, legendEl) {
   /** 图上的小字（缺口、颈线……）避开价位线和自己画的线。 */
   const guidePrices = () => [...(levelsShown() ? levels.map((lv) => lv.price) : []), ...drawn];
   const syncGuides = () => structLayer.setGuides(guidePrices());
-  const levelsBtn = tools.querySelector(".levels-toggle");
-  levelsBtn.addEventListener("click", () => {
-    levelsOn = !levelsOn;
-    levelsBtn.setAttribute("aria-pressed", String(levelsOn));
-    paintLevels();
-  });
+
+  // ---------- 点结论卡片上的价位：那条线在图上亮几秒（价位线图层关着、回放中也照样亮）。lv：{ kind, price, title } ----------
+  function flashLevel(lv) {
+    clearFlash();
+    const line = candles.createPriceLine({ price: lv.price, color: css(LEVEL_COLOR[lv.kind]), lineWidth: 3, lineStyle: 0, axisLabelVisible: true, title: lv.title });
+    flash = { kind: lv.kind, price: lv.price, title: lv.title, line, timer: setTimeout(clearFlash, FLASH_MS) };
+  }
+  function clearFlash() {
+    if (!flash) return;
+    clearTimeout(flash.timer);
+    candles.removePriceLine(flash.line);
+    flash = null;
+  }
 
   // ---------- 结构标注：波段、最近的顶部 / 底部构造、M 顶 / W 底 / 2B（skill 的 structure.py 算好的，这里只画） ----------
   const structLayer = createOverlay(chart, candles, box);
   let structure = null;
-  let structOn = true;
-  try { structOn = localStorage.getItem("dma-struct") !== "0"; } catch { /* 隐私模式 */ }
-  const structBtn = tools.querySelector(".struct-toggle");
-  const STRUCT_TITLE = "结构标注：波段连线、最近的顶部 / 底部构造和它的状态、M 顶 / W 底 / 2B；点图上的标记看规则原文";
-  /** 结构属于分析那一天：回放时收起（会露出之后才知道的构造），练习、揭晓时没有（免得提前看到答案）。 */
-  const structWhyOff = () => (frame === "week" ? "结构按日线算：切回日线看"
-    : rs.mode === "replay" ? "回放时收起：结构是按最新一天算的，会露出之后的走势"
-    : !structure?.available ? "这份数据没有结构标注（练习里不画，免得提前看到答案）" : null);
   const overlayColors = () => ({ swing: css("--muted"), neck: css("--neutral"), up: css("--up"), down: css("--down"),
     gap: css("--neutral"), target: css("--accent"), bg: css("--card"), font: css("--mono") });
   // 缺口：没补的向下缺口画成色带（和交易计划找目标位同一个定义，tradeplan.unfilled_gaps）；被用作目标位的标出来
   let gaps = null; // { list, targets }
-  let gapsOn = true;
-  // 默认只画要紧的缺口（目标位 + 离现价最近的上下各一个），「+N」画出所有的
-  let gapsAll = false;
-  try {
-    gapsOn = localStorage.getItem("dma-gaps") !== "0";
-    gapsAll = localStorage.getItem("dma-gaps-all") === "1";
-  } catch { /* 隐私模式 */ }
-  const gapsBtn = tools.querySelector(".gaps-toggle");
-  const gapsAllBtn = tools.querySelector(".gaps-all");
-  const GAPS_TITLE = "没补的向下缺口：从跳空那天画到现在的色带，上沿是跳空前一天的最低价，下沿是还没补的那段的底；交易计划拿它当目标位的标「目标位」。默认只画目标位和离现价最近的上下各一个";
-  const gapsWhyOff = () => (frame === "week" ? "缺口按日线算：切回日线看"
-    : rs.mode === "replay" ? "回放时收起：缺口补没补要看之后的 K 线"
-    : !gaps ? "这份数据没有缺口（练习里不画，免得提前看到答案）"
-    : !gaps.list.length ? "上方没有没补的缺口" : null);
-  /** 一个开关的状态：不能用时按钮灰掉并写明原因，能用时按开关。 */
-  const syncToggle = (btn, on, why, title) => {
-    btn.disabled = Boolean(why);
-    btn.title = why ?? title;
-    btn.setAttribute("aria-pressed", String(on && !why));
-    return on && !why;
-  };
-  function paintOverlay() {
-    const showStruct = syncToggle(structBtn, structOn, structWhyOff(), STRUCT_TITLE);
-    const showGaps = syncToggle(gapsBtn, gapsOn, gapsWhyOff(), GAPS_TITLE);
+  /** 图上这段 K 线里没补的缺口：all 是全部，picked 是要紧的（目标位 + 离现价最近的上下各一个），默认只画 picked。 */
+  const gapSets = () => {
     const bars = view?.candles ?? [];
-    const all = showGaps && bars.length ? gaps.list.filter((g) => g.date <= bars.at(-1).time) : [];
-    const picked = pickGaps(all, gaps?.targets, bars.at(-1)?.close);
-    const more = all.length - picked.length;
-    gapsAllBtn.hidden = !more;
-    gapsAllBtn.setAttribute("aria-pressed", String(gapsAll));
-    gapsAllBtn.textContent = gapsAll ? "全部" : `+${more}`;
-    gapsAllBtn.title = gapsAll ? "现在画着所有没补的缺口；点一下只留目标位和离现价最近的上下各一个"
-      : `还有 ${more} 个离得远、不是目标位的缺口没画；点一下全画出来`;
+    const all = gaps && bars.length ? gaps.list.filter((g) => g.date <= bars.at(-1).time) : [];
+    return { all, picked: pickGaps(all, gaps?.targets, bars.at(-1)?.close) };
+  };
+  /** 结构和缺口。图层能不能用变了（换数据、日 / 周、进出回放）都会走到这里，所以菜单也在这里对上。 */
+  function paintOverlay() {
+    syncLayers();
+    const on = shown();
+    const bars = view?.candles ?? [];
+    const { all, picked } = gapSets();
     const scene = {
-      ...(showStruct ? structureScene(structure, bars) : {}),
-      bands: gapBands(gapsAll ? all : picked, gaps?.targets, bars),
+      ...structureScene(structure, bars, on),
+      bands: on.gaps ? gapBands(on.gapsAll ? all : picked, gaps?.targets, bars) : [],
     };
     structLayer.set(scene, overlayColors(), bars);
   }
-  gapsAllBtn.addEventListener("click", () => {
-    gapsAll = !gapsAll;
-    try { localStorage.setItem("dma-gaps-all", gapsAll ? "1" : "0"); } catch { /* 忽略 */ }
-    paintOverlay();
-  });
-  gapsBtn.addEventListener("click", () => {
-    gapsOn = !gapsOn;
-    try { localStorage.setItem("dma-gaps", gapsOn ? "1" : "0"); } catch { /* 忽略 */ }
-    paintOverlay();
-  });
-  structBtn.addEventListener("click", () => {
-    structOn = !structOn;
-    try { localStorage.setItem("dma-struct", structOn ? "1" : "0"); } catch { /* 忽略 */ }
-    paintOverlay();
-  });
 
   // ---------- 筹码分布（视频 O）：按图上看得见的那段 K 线在浏览器里算（volprofile.js），缩放、平移、回放都重算 ----------
   const profileLayer = createProfileLayer(chart, candles);
-  let profileOn = false; // 默认不画，图面干净；点开记在本机
-  try { profileOn = localStorage.getItem("dma-profile") === "1"; } catch { /* 隐私模式 */ }
   let profileRef = null; // 交易计划记下的上方最近的筹码山 { foot, top }：参考带（P38，只作参考，不是目标）；练习里没有
   let profileNow = null; // 现在画着的那份（测试和问鸿雁用）
-  const profileBtn = tools.querySelector(".profile-toggle");
-  const PROFILE_TITLE = "筹码分布：按价格统计图上看得见的那段 K 线的成交量，画成贴着价格轴的横向山（视频 O）。"
-    + "描框的是筹码山，标出山脚（下沿）、山顶（上沿）；交易计划记下的上方最近那座高亮，写着「参考带」（P38）：只作参考，不排进第一目标、不算盈亏比。筹码分布只当价位参考，不是买卖信号";
-  const profileWhyOff = () => (frame === "week" ? "筹码按日线算：切回日线看"
-    : !view?.volume?.length ? "这份数据没有成交量，算不了筹码分布" : null);
   function paintProfile() {
-    const shown = syncToggle(profileBtn, profileOn, profileWhyOff(), PROFILE_TITLE);
-    const p = shown ? visibleProfile(view, chart.timeScale().getVisibleLogicalRange()) : null;
+    const p = shown().profile ? visibleProfile(view, chart.timeScale().getVisibleLogicalRange()) : null;
     profileNow = p && { ...p, fromLabel: showTime(p.from), toLabel: showTime(p.to) };
     profileLayer.set({
       profile: profileNow,
@@ -322,50 +291,12 @@ export function createChart(box, legendEl) {
       colors: { bin: css("--muted"), mountain: css("--neutral"), ref: css("--accent"), muted: css("--muted"), bg: css("--card"), font: css("--mono") },
     });
   }
-  profileBtn.addEventListener("click", () => {
-    profileOn = !profileOn;
-    try { localStorage.setItem("dma-profile", profileOn ? "1" : "0"); } catch { /* 忽略 */ }
-    paintProfile();
-  });
 
-  // ---------- 怎么用：四种常见用法，在这套方法里看什么 ----------
+  // ---------- 怎么用：每个工具、每个图层在这套方法里看什么（文字在 charthelp.js） ----------
   const help = document.createElement("div");
   help.className = "chart-help";
   help.hidden = true;
-  help.innerHTML = `
-    <p><b>悬停读数</b>：鼠标停在某天，上方显示那天的开高低收、涨跌、成交量（"1.2× 均量"是和 50 日均量比，超过 2 倍的大量标黄）和 6 条线。用来看"那次回调碰到了哪条线、守没守住"。</p>
-    <p><b>聚焦一组</b>：点图例里的「20 线组」「60 线组」「120 线组」，这一组的 MA 和 EMA 之间填上色带，另外两组变淡。
-      色带变宽是两种算法分歧变大，收窄、翻面是在转折；三组色带一起画太乱，所以一次只看一组。再点一次或按 Esc 取消；点 MA20 这类小按钮是显示 / 隐藏那一条线。</p>
-    <p><b>缩放</b>：按住 ⌘（或 Ctrl）滚轮，或触控板双指捏合，以最新一天为准放大缩小；按住拖动可以左右平移。只滚轮时滚动的是页面。</p>
-    <p><b>固定范围</b>（1 周 / 1 月 / 半年 / 1 年 / 全部）：均线的斜率（几点钟方向）只有在同样长的时间里比才不失真，所以要固定时长、用对数坐标。
-      <b>1 年</b>（默认）判断现在是几点钟、属于哪种趋势；<b>全部</b>看大周期和横盘有多长（"横有多长，竖有多高"）；<b>半年</b>看最近的细节，比如这次回调比上次深还是浅；<b>1 周、1 月</b>看最近几根 K 线怎么走。</p>
-    <p><b>画线</b>：点「画线」，再点图上一处，就在那个价位画一条横线，刷新后还在。常画的是前高、前低、自己的成本价、"跌破就重新看"的价位。
-      图上的<b>虚线价位线</b>是自动画的：绿色是结论里的触发价（不买的打法是"先看"），红色是止损，黄色是推翻判断的价位。</p>
-    <p><b>着色</b>：绿 = 收盘在 MA20 上方且高于 20 日抵扣价（MA20 向上）；黑 = 两样都不满足（MA20 向下）；灰 = 只满足一样。
-      第一根黑柱就是 20 线破线拐头；连续黑柱、收不回去，才说明拐头确认了。点工具栏里的「着色」可以关掉。
-      这是 LEI 黑绿线指标第一个因子的简化版，只用 MA20 破线（收盘对 MA20）和拐头（收盘对 20 日抵扣价）；不是他的黑绿线，他还看 60 线组、20/60 交叉和 MACD 强度，代码没有公开。
-      按均线排列读（视频 P）：多头排列里绿 = 持有 / 做多，黑 = 离场；空头排列里见绿也不做多；灰 = 不动。三点钟方向的横盘里颜色会来回翻，别跟着翻的颜色交易。</p>
-    <p><b>测量</b>：点「测量」，在图上按住从一点拖到另一点，框里写涨跌多少、涨跌幅、隔几根 K 线（几个自然日），和这段距离是几个 ATR(14)。
-      用来看止损离进场几个 ATR：不到 1 个 ATR 的止损，平常的波动就可能扫到。回放时一样能用；Esc 或再点一次「测量」清掉。</p>
-    <p><b>日 / 周</b>：「周」换成周 K 线和周线的 6 条线（5 年），看大一级的趋势（规则 J11 看的就是它）；读数条写那一周的开高低收和比上一周的涨跌，没走完的本周会注明。
-      小黄点是周线的抵扣价（"20周扣"）。回放、测量、结构、缺口只在日线上，切到周线时这几个按钮不能点；价位线和自己画的线照常显示。</p>
-    <p><b>结构</b>：灰色折线是波段，把顶部构造的最高点连到底部构造的最低点，最后一段虚线是还在形成的那个构造。
-      「顶·已完成」「底·形成中」这类标记是最近的顶部、底部构造；形成中时旁边的短虚线写着下一根 K 线怎样就完成（比如"下一根低 &lt; 412.30"）。
-      「M顶」「W底」「2B顶」「2B底」标在收盘越过颈线（2B 是越过前高 A）的那根，带"?"的是还没确认；点标记看它的日期、价位和规则原文。回放时收起，练习里不画。</p>
-    <p><b>缺口</b>：没补上的向下跳空缺口画成浅色带，从跳空那天一直画到现在：上沿是跳空前一天的最低价，下沿是之后涨回去还没补到的位置。
-      交易计划拿上方最近的缺口当目标位（P25），被用作目标位的那条颜色深一点、写着「目标位」。
-      默认只画目标位和离现价最近的上下各一个，其余的点「缺口」旁边的「+N」才画；图上的小字放不下时会往上下挪一行，再放不下就不写。回放时收起，练习里不画。</p>
-    <p><b>筹码</b>（默认不画）：按价格统计图上看得见的那段 K 线的成交量，贴着价格轴横着画（视频 O 的"横过来的山"），右上角写着用了哪段日期；缩放、平移、回放都重算。
-      量不低于平均的连续几档描了框，是一座筹码山：山脚是下沿，山顶是上沿（不是量最大的那档）。只标价格所在的、上方和下方最近的那几座。
-      交易计划记下进场价（持仓是现价）上方最近的那座，那条带高亮、写着「参考带（P38）」，带的读法是 J47；它只作参考，不排进第一目标、不算盈亏比，按最近 1 年算，和图上的可见范围不一定是同一段。
-      山在上方是爬山，越近山顶越难；收盘翻过最大那座的山顶，可能是大行情的起点（J48、J49）。筹码分布只当价位参考，不是买卖信号，方向还是看均线。周线上不画，回放时参考带收起。</p>
-    <p><b>财报 E</b>：时间轴上方的小 E 是财报日，实心的是下一次。财报后常常跳空开盘，止损单按开盘价成交，可能比止损价差很多；
-      下一次财报在 10 个交易日内时，结论卡片会提醒。只是提醒，不改打法。</p>
-    <p><b>看量</b>：底部的量柱，黄色是超过 50 日均量 2 倍的大量。看两种情况：横盘末期突然放量，是要变盘的信号；
-      急涨或急跌的末端连续放量，说明多空分歧在化解，行情往往快要转向，并不代表强势。看到放量先提高警惕，动手还是要等均线拐头。</p>
-    <p><b>回放</b>：点「回放」，再点图上的一天（或在「选起点」里选日期、最早一天、随机一天），图上就只剩那天及以前的 K 线，
-      并立刻开始一根一根往后放（默认一秒一根，「回放」按钮下方的控制条可以暂停、前进一根、调速度），像当时身在其中那样练判断：先想好"这里该怎么做"，再放下一根看结果。快捷键 <b>Shift+↓</b> 播放 / 暂停，<b>Shift+→</b> 前进一根，<b>Shift+←</b> 回退一根（回退会停下播放）。
-      想看那天的完整分析，点「按这一天分析」。点「回到最新」或 × 退出。</p>`;
+  help.innerHTML = CHART_HELP;
   tools.after(help);
   const helpBtn = tools.querySelector(".chart-help-toggle");
   helpBtn.addEventListener("click", () => {
@@ -414,7 +345,7 @@ export function createChart(box, legendEl) {
   let view = null; // 图上画着的：平时就是 data，回放时是截到那天的
   let toneColors = {}; // tone → 颜色，换主题时在 paint 里重取
 
-  const candleBar = (c) => styledBar(c, toneOn, toneColors);
+  const candleBar = (c, tone = shown().tone) => styledBar(c, tone, toneColors);
 
   function paint() {
     if (!view) return;
@@ -428,7 +359,8 @@ export function createChart(box, legendEl) {
     const faded = (token) => alpha(css(token), CANDLE_ALPHA);
     candles.applyOptions(baseCandleStyle({ up: faded("--up"), down: faded("--down") }));
     toneColors = Object.fromEntries(Object.entries(TONE_TOKENS).map(([k, t]) => [k, faded(t)]));
-    candles.setData(view.candles.map(candleBar));
+    const tone = shown().tone;
+    candles.setData(view.candles.map((c) => candleBar(c, tone)));
     vol.setData(view.volume.map(volBar));
     paintLines();
     paintLevels();
@@ -446,12 +378,22 @@ export function createChart(box, legendEl) {
     try { localStorage.setItem("dma-focus", focus ? String(focus) : ""); } catch { /* 忽略 */ }
     paintLines();
   }
+  /** 一条线画不画：均线图层开着，图例里这条线也点着。图层关着时图例整行不能点（MA200 在周线上本来就没有）。 */
   function paintLines() {
     const f = shownFocus();
+    const on = shown().ma;
     const colors = Object.fromEntries(SPECS.map((s) => [s.token, css(s.token)]));
-    for (const s of SPECS) series[s.key].applyOptions(lineStyle(s, colors, f));
+    for (const s of SPECS) {
+      const b = legendEl.querySelector(`[data-line="${s.key}"]`);
+      b.disabled = !on || (s.off && frame === "week");
+      series[s.key].applyOptions({ ...lineStyle(s, colors, f), visible: on && b.getAttribute("aria-pressed") === "true" });
+    }
     if (f) legendEl.dataset.focus = String(f); else delete legendEl.dataset.focus;
-    legendEl.querySelectorAll(".group-focus").forEach((b) => b.setAttribute("aria-pressed", String(Number(b.dataset.group) === f)));
+    legendEl.title = on ? "" : "均线图层关着：在「图层」里打开";
+    legendEl.querySelectorAll(".group-focus").forEach((b) => {
+      b.disabled = !on;
+      b.setAttribute("aria-pressed", String(Number(b.dataset.group) === f));
+    });
     paintRibbon();
   }
   /** 色带跟着图上的数据走（回放截到哪天就画到哪天）；这组有一条线被隐藏了就不画。 */
@@ -464,7 +406,8 @@ export function createChart(box, legendEl) {
   const volBar = (v) => ({ time: v.time, value: v.value, color: css(v.spike ? "--drop" : "--line") });
   function paintMarkers() {
     const drop = css("--drop");
-    candles.setMarkers(view.drops.slice().sort((a, b) => (a.time < b.time ? -1 : 1)).map((d) => ({
+    const drops = shown().drops ? view.drops.slice().sort((a, b) => (a.time < b.time ? -1 : 1)) : [];
+    candles.setMarkers(drops.map((d) => ({
       time: d.time, position: "belowBar", color: drop, shape: "circle", text: `${d.period}${frame === "week" ? "周" : ""}扣`,
     })));
     paintEarnings();
@@ -520,7 +463,7 @@ export function createChart(box, legendEl) {
     const f = e.target.closest("[data-frame]")?.dataset.frame;
     if (f) setFrame(f);
   });
-  /** 日 / 周按钮和只在日线上能用的按钮（回放、测量、MA200）。 */
+  /** 日 / 周按钮和只在日线上能用的按钮（回放、测量）。 */
   function syncFrame() {
     const week = frame === "week";
     tools.querySelectorAll("[data-frame]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.frame === frame)));
@@ -532,8 +475,6 @@ export function createChart(box, legendEl) {
     replayBtn.title = week ? "回放只在日线上：切回日线" : REPLAY_TITLE;
     measureBtn.disabled = week;
     measureBtn.title = week ? "测量按日线的 ATR(14) 算止损远近：切回日线再量" : MEASURE_TITLE;
-    const ma200 = legendEl.querySelector('[data-line="MA200"]');
-    if (ma200) ma200.disabled = week;
   }
 
   // ---------- 回放：从过去某一天开始，一根一根往后放（状态机在 replay.js） ----------
@@ -667,7 +608,6 @@ export function createChart(box, legendEl) {
     $r(".replay-play").textContent = rs.playing ? "⏸ 暂停" : "▶ 播放";
     $r(".replay-play").setAttribute("aria-pressed", String(Boolean(rs.playing)));
     $r(".replay-label").setAttribute("aria-live", rs.playing ? "off" : "polite"); // 播放中不每秒播报
-    levelsBtn.disabled = rs.mode === "replay"; // 价位线属于最新一天，回放时收起，按钮也不能点
     $r(".replay-play").disabled = rs.mode !== "replay" || atEnd;
     $r(".replay-forward").disabled = rs.mode !== "replay" || atEnd;
     $r(".replay-back").disabled = rs.mode !== "replay" || rs.index <= 0;
@@ -838,6 +778,7 @@ export function createChart(box, legendEl) {
 
   matchMedia("(prefers-color-scheme: dark)").addEventListener("change", paint);
   new MutationObserver(paint).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+  syncLayers();
 
   return {
     chart,
@@ -853,6 +794,7 @@ export function createChart(box, legendEl) {
       if (rs.mode === "replay" || !d.weekly) frame = "day"; // 回放只在日线上；没有周线（练习）就回日线
       if (tool === "pick-start") tool = "none"; // 换了数据：选到一半的起点作废
       ruler = null; // 量的两点属于旧数据
+      clearFlash(); // 亮着的价位也是
       arm();
       if (!sameTicker) { drawKey = key; loadDrawn(); }
       structure = gaps = null; // 结构、缺口属于上一份分析；app 随后用 setStructure 给这份的（练习、揭晓时不给）
@@ -922,7 +864,7 @@ export function createChart(box, legendEl) {
     },
     /** 筹码分布（测试和问鸿雁用）：开没开、不能用的原因、用了哪段 K 线、筹码山、参考带、画在哪。 */
     profile: () => ({
-      on: profileBtn.getAttribute("aria-pressed") === "true", why: profileWhyOff(),
+      on: layerRow("profile").shown, why: layerRow("profile").why,
       from: profileNow?.from ?? null, to: profileNow?.to ?? null, bars: profileNow?.bars ?? 0,
       mountains: profileNow?.mountains ?? [], ref: rs.mode === "replay" ? null : profileRef, drawn: profileLayer.drawn(),
     }),
@@ -944,6 +886,16 @@ export function createChart(box, legendEl) {
     focus: () => ({ group: shownFocus(), band: structLayer.ribbon().points }),
     /** 当前画在图上的价位线（测试和问鸿雁用）。 */
     levels: () => (levelsShown() ? levels.map(({ kind, title, price }) => ({ kind, title, price })) : []),
+    /** 点了结论卡片上的一个价位：{ kind, price, title } 那条线在图上亮几秒，价位线图层关着也亮。 */
+    flashLevel,
+    /** 正在亮着的价位（测试用）：{ kind, price, title, y（在图上的纵坐标） }，没有是 null。 */
+    flashing: () => (flash ? { kind: flash.kind, price: flash.price, title: flash.title, y: candles.priceToCoordinate(flash.price) } : null),
+    /** 图层（测试用）：现在是哪个预设（null = 自定），每个图层开没开、画没画、不能用的原因。 */
+    layers: () => ({ preset: presetOf(layers), rows: layerRows(layers, layerCtx()).map(({ key, on, shown: drawn, why }) => ({ key, on, shown: drawn, why })) }),
+    /** 图上的抵扣价小黄点（测试用）：["20扣", …]。 */
+    drops: () => candles.markers().map((m) => m.text),
+    /** 有几根 K 线按破线拐头着了色（测试用）。 */
+    toned: () => candles.data().filter((b) => b.borderColor).length,
     /** 自己画的线（价格列表）。 */
     drawn: () => [...drawn],
     /** 回放状态（测试用）：mode / index / playing，加上速度、回放到的日期、图上几根 K 线。 */
