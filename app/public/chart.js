@@ -3,7 +3,7 @@ import { baseCandleStyle, candleBar as styledBar } from "./candles.js";
 import { createOverlay } from "./chartoverlay.js";
 import { earningsMarks, logicalOf } from "./earnings.js";
 import { measure, measureLines } from "./measure.js";
-import { CANDLE_ALPHA, SPECS, alpha, lineStyle } from "./lines.js";
+import { BAND_ALPHA, CANDLE_ALPHA, GROUPS, SPECS, alpha, bandPoints, lineStyle, nextFocus } from "./lines.js";
 import { gapBands, structureScene } from "./overlays.js";
 import { ohlcRow, weekLabel } from "./readout.js";
 import { DEFAULT_SPEED, OFF, SPEEDS, appendDelta, earliestIndex, indexOnOrBefore, randomIndex, sliceAt, speedMs, step } from "./replay.js";
@@ -60,22 +60,30 @@ export function createChart(box, legendEl) {
     series[s.key] = chart.addLineSeries({ visible: !s.off, priceLineVisible: false, crosshairMarkerVisible: false });
   }
 
-  legendEl.innerHTML = "";
+  // 图例：每组一个「20 线组」按钮（点它聚焦这一组），后面是这组两条线的开关（点它显示 / 隐藏这条线）
+  legendEl.innerHTML = GROUPS.map((n) => `<span class="legend-group" data-group="${n}">`
+    + `<button type="button" class="group-focus" data-group="${n}" aria-pressed="false" style="--c: var(--ma${n})"`
+    + ` title="聚焦 ${n} 线组：MA${n} 和 EMA${n} 之间填上色带，另外两组变淡；再点一次或按 Esc 取消">${n} 线组</button></span>`).join("");
   for (const s of SPECS) {
     const b = document.createElement("button");
     b.type = "button";
     b.setAttribute("aria-pressed", String(!s.off));
     b.dataset.line = s.key;
-    if (s.off) b.title = "MA200 朴素规则的对照线（收盘在上方持有，否则空仓），默认不画";
+    b.title = s.off ? "MA200 朴素规则的对照线（收盘在上方持有，否则空仓），默认不画" : `显示 / 隐藏 ${s.key}`;
     b.innerHTML = `<i class="${s.kind.toLowerCase()}" style="--c: var(${s.token})"></i>${s.key}`;
     b.addEventListener("click", () => {
       const on = b.getAttribute("aria-pressed") !== "true";
       b.setAttribute("aria-pressed", String(on));
       series[s.key].applyOptions({ visible: on });
+      paintRibbon();
       showReadout(null);
     });
-    legendEl.appendChild(b);
+    (legendEl.querySelector(`.legend-group[data-group="${s.group}"]`) ?? legendEl).appendChild(b);
   }
+  legendEl.addEventListener("click", (e) => {
+    const g = e.target.closest(".group-focus");
+    if (g) setFocus(nextFocus(shownFocus(), { type: "click", group: Number(g.dataset.group) }));
+  });
 
   // 对数坐标：等比涨幅等高，钟表方向才可比（文章 2.4）。默认开，记在本机。
   let logScale = true;
@@ -267,6 +275,8 @@ export function createChart(box, legendEl) {
   help.hidden = true;
   help.innerHTML = `
     <p><b>悬停读数</b>：鼠标停在某天，上方显示那天的开高低收、涨跌、成交量（"1.2× 均量"是和 50 日均量比，超过 2 倍的大量标黄）和 6 条线。用来看"那次回调碰到了哪条线、守没守住"。</p>
+    <p><b>聚焦一组</b>：点图例里的「20 线组」「60 线组」「120 线组」，这一组的 MA 和 EMA 之间填上色带，另外两组变淡。
+      色带变宽是两种算法分歧变大，收窄、翻面是在转折；三组色带一起画太乱，所以一次只看一组。再点一次或按 Esc 取消；点 MA20 这类小按钮是显示 / 隐藏那一条线。</p>
     <p><b>缩放</b>：按住 ⌘（或 Ctrl）滚轮，或触控板双指捏合，以最新一天为准放大缩小；按住拖动可以左右平移。只滚轮时滚动的是页面。</p>
     <p><b>固定范围</b>（1 周 / 1 月 / 半年 / 1 年 / 全部）：均线的斜率（几点钟方向）只有在同样长的时间里比才不失真，所以要固定时长、用对数坐标。
       <b>1 年</b>（默认）判断现在是几点钟、属于哪种趋势；<b>全部</b>看大周期和横盘有多长（"横有多长，竖有多高"）；<b>半年</b>看最近的细节，比如这次回调比上次深还是浅；<b>1 周、1 月</b>看最近几根 K 线怎么走。</p>
@@ -353,12 +363,36 @@ export function createChart(box, legendEl) {
     toneColors = Object.fromEntries(Object.entries(TONE_TOKENS).map(([k, t]) => [k, faded(t)]));
     candles.setData(view.candles.map(candleBar));
     vol.setData(view.volume.map(volBar));
-    const colors = Object.fromEntries(SPECS.map((s) => [s.token, css(s.token)]));
-    for (const s of SPECS) series[s.key].applyOptions(lineStyle(s, colors));
+    paintLines();
     paintLevels();
     paintMarkers();
     paintOverlay();
   }
+  // ---------- 聚焦一组：这组的 MA、EMA 照常、中间填色带，另外两组变淡；记在本机 ----------
+  let focus = null;
+  try { focus = nextFocus(null, { type: "click", group: Number(localStorage.getItem("dma-focus")) }); } catch { /* 隐私模式 */ }
+  let practicing = false;
+  const shownFocus = () => (practicing ? null : focus); // 练习时图例收起了，没法取消聚焦：不聚焦
+  function setFocus(next) {
+    focus = next;
+    try { localStorage.setItem("dma-focus", focus ? String(focus) : ""); } catch { /* 忽略 */ }
+    paintLines();
+  }
+  function paintLines() {
+    const f = shownFocus();
+    const colors = Object.fromEntries(SPECS.map((s) => [s.token, css(s.token)]));
+    for (const s of SPECS) series[s.key].applyOptions(lineStyle(s, colors, f));
+    if (f) legendEl.dataset.focus = String(f); else delete legendEl.dataset.focus;
+    legendEl.querySelectorAll(".group-focus").forEach((b) => b.setAttribute("aria-pressed", String(Number(b.dataset.group) === f)));
+    paintRibbon();
+  }
+  /** 色带跟着图上的数据走（回放截到哪天就画到哪天）；这组有一条线被隐藏了就不画。 */
+  function paintRibbon() {
+    const f = shownFocus();
+    const both = f && series[`MA${f}`].options().visible && series[`EMA${f}`].options().visible;
+    structLayer.setRibbon(both ? bandPoints(view, f) : [], f ? alpha(css(`--ma${f}`), BAND_ALPHA) : "");
+  }
+
   const volBar = (v) => ({ time: v.time, value: v.value, color: css(v.spike ? "--drop" : "--line") });
   function paintMarkers() {
     const drop = css("--drop");
@@ -535,6 +569,7 @@ export function createChart(box, legendEl) {
       const p = view.lines[s.key]?.at(-1);
       if (p?.time === t) series[s.key].update({ ...p });
     }
+    paintRibbon();
     paintMarkers();
     showReadout(null);
   }
@@ -719,10 +754,11 @@ export function createChart(box, legendEl) {
   });
   document.addEventListener("mouseup", () => { dragging = false; });
 
-  // 快捷键：Shift+↓ 播放 / 暂停，Shift+→ 前进一根；Esc 退出画线、测量、选起点。焦点在输入框里时不管。
+  // 快捷键：Shift+↓ 播放 / 暂停，Shift+→ 前进一根；Esc 退出画线、测量、选起点，再按一次取消聚焦。焦点在输入框里时不管。
   document.addEventListener("keydown", (e) => {
     if (e.target.closest?.("input, textarea, select, [contenteditable]")) return;
     if (e.key === "Escape" && tool !== "none") { setTool("none"); return; }
+    if (e.key === "Escape" && shownFocus()) { setFocus(null); return; }
     if (rs.mode !== "replay" || !e.shiftKey || e.metaKey || e.ctrlKey || e.altKey) return;
     const action = { ArrowDown: "toggle", ArrowRight: "forward", ArrowLeft: "back" }[e.key];
     if (!action) return;
@@ -770,6 +806,7 @@ export function createChart(box, legendEl) {
       candles.update(candleBar(delta.candle));
       for (const v of delta.volume) vol.update(volBar(v));
       for (const s of SPECS) for (const p of delta.lines[s.key] ?? []) series[s.key].update({ ...p });
+      paintRibbon();
       paintMarkers();
       showReadout(null);
       // 最新一根跑出右边时跟上
@@ -787,6 +824,8 @@ export function createChart(box, legendEl) {
     setPractice(on) {
       if (on) leaveReplay();
       replayBtn.hidden = on;
+      practicing = on;
+      paintLines();
     },
     /** 停止回放、回到完整数据（取数失败、中栏收起图表时用）。 */
     stopReplay() { leaveReplay(); },
@@ -818,6 +857,8 @@ export function createChart(box, legendEl) {
       const { color, lineWidth, lineStyle: style, visible, lastValueVisible, title } = series[s.key].options();
       return [s.key, { color, lineWidth, lineStyle: style, visible, lastValueVisible, title }];
     })),
+    /** 聚焦的线组（20 / 60 / 120）和色带（测试用）：{ group, band: [{ i, ma, ema }] }。 */
+    focus: () => ({ group: shownFocus(), band: structLayer.ribbon().points }),
     /** 当前画在图上的价位线（测试和问鸿雁用）。 */
     levels: () => (levelsShown() ? levels.map(({ kind, title, price }) => ({ kind, title, price })) : []),
     /** 自己画的线（价格列表）。 */

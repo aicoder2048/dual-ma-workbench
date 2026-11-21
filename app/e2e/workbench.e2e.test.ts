@@ -992,6 +992,71 @@ describe("缺口", () => {
   }, 30_000);
 });
 
+describe("聚焦一组", () => {
+  const focus = (page: Page) => page.evaluate(async () => (await import("/app.js")).getChart().focus());
+  const styles = (page: Page) => page.evaluate(async () => (await import("/app.js")).getChart().lineStyles());
+
+  test("点「20 线组」：20 组的 MA、EMA 之间填色带，另外两组变淡；再点一次取消；按 Esc 也取消；刷新后还记得", async () => {
+    const { page, errors } = await open();
+    await page.waitForSelector("#chart canvas");
+    await scrollIntoCenter(page, ".chart-card");
+    for (const n of [20, 60, 120]) expect({ n, ok: await notCovered(page, `.group-focus[data-group="${n}"]`) }).toEqual({ n, ok: true });
+    expect(await focus(page)).toEqual({ group: null, band: [] });
+    const shot = () => page.locator("#chart").screenshot();
+    const plain = await shot();
+    await page.click('.group-focus[data-group="20"]');
+    const on = await focus(page);
+    expect(on.group).toBe(20);
+    // 色带从两条线都有值的第一根画到最新一根，值就是这两条线的值
+    expect(on.band).toHaveLength(CHART.candles.length);
+    expect(on.band.at(-1)).toEqual({ i: CHART.candles.length - 1, ma: CHART.lines.MA20.at(-1)!.value, ema: CHART.lines.EMA20.at(-1)!.value });
+    expect(await page.getAttribute('.group-focus[data-group="20"]', "aria-pressed")).toBe("true");
+    const s = await styles(page);
+    expect(s.MA20.color).toBe("#1c2430");
+    expect([s.MA60.color, s.EMA120.color].every((c: string) => c.startsWith("rgba(") && c.endsWith(",0.2)"))).toBe(true);
+    expect([s.EMA20.title, s.MA60.title]).toEqual(["EMA20", ""]);
+    expect(Buffer.compare(plain, await shot())).not.toBe(0); // 色带真的画在图上
+    // 图例里一条线的开关照常：隐藏 EMA20，色带没了；再打开，色带回来
+    await page.click('#legend button[data-line="EMA20"]');
+    expect((await focus(page)).band).toEqual([]);
+    await page.click('#legend button[data-line="EMA20"]');
+    expect((await focus(page)).band.length).toBeGreaterThan(0);
+    await page.click('.group-focus[data-group="20"]');
+    expect(await focus(page)).toEqual({ group: null, band: [] });
+    await page.click('.group-focus[data-group="60"]');
+    await page.reload();
+    await page.waitForSelector("#chart canvas");
+    expect((await focus(page)).group).toBe(60);
+    await page.keyboard.press("Escape");
+    expect(await focus(page)).toEqual({ group: null, band: [] });
+    expect((await styles(page)).MA20.color).toBe("#1c2430");
+    expect(errors).toEqual([]);
+    await page.close();
+  }, 30_000);
+
+  test("回放时色带跟着截到的那天走，往后放一根就多一根", async () => {
+    const { page, errors } = await open();
+    await page.waitForSelector("#chart canvas");
+    await scrollIntoCenter(page, ".chart-card");
+    await page.click('.group-focus[data-group="120"]');
+    await page.click(".replay-toggle");
+    await page.click(".replay-start");
+    await page.fill(".replay-menu input", CHART.candles[200].time);
+    await page.waitForFunction(async () => (await import("/app.js")).getChart().replay().mode === "replay");
+    await page.click(".replay-play"); // 暂停
+    const at = async () => (await focus(page)).band.at(-1)?.i;
+    const idx = (await page.evaluate(async () => (await import("/app.js")).getChart().replay())).index;
+    expect(await at()).toBe(idx);
+    expect((await focus(page)).band).toHaveLength(idx + 1); // 回放那天之后的线不画
+    await page.click(".replay-forward");
+    expect(await at()).toBe(idx + 1);
+    await page.click(".replay-exit");
+    expect(await at()).toBe(CHART.candles.length - 1);
+    expect(errors).toEqual([]);
+    await page.close();
+  }, 30_000);
+});
+
 describe("日 / 周切换", () => {
   const chartApi = <T,>(page: Page, fn: string) => page.evaluate(async (fn) => (await import("/app.js")).getChart()[fn](), fn) as Promise<T>;
   const W = CHART.weekly;
@@ -1958,7 +2023,8 @@ describe("盲测练习", () => {
   }, [REAL_TICKER, REAL[0].date, REAL.at(-1)!.date]);
 
   test("出题 → 记计划 → 往后放到进场、止损 → 揭晓；控件都在默认视图里，揭晓前看不到真实信息", async () => {
-    const { page, errors } = await open();
+    // 平时聚焦着 20 线组：练习时图例收起了，没法取消，所以不聚焦
+    const { page, errors } = await open((p) => p.addInitScript(() => localStorage.setItem("dma-focus", "20")));
     expect(await usable(page, "#practice-btn")).toBe(true);
     await page.click("#practice-btn");
     await page.click("#pp-tab-combo");
@@ -1983,6 +2049,7 @@ describe("盲测练习", () => {
     expect(await page.isDisabled(".gaps-toggle")).toBe(true);
     // 周线不能切（练习的图只到现在那根，周线会用到之后的 K 线）
     expect(await page.isDisabled('[data-frame="week"]')).toBe(true);
+    expect(await page.evaluate(async () => (await import("/app.js")).getChart().focus())).toEqual({ group: null, band: [] });
     for (const sel of ['[data-act="plan"]', '[data-act="step"]', '[data-act="play"]', '[data-act="reveal"]']) {
       expect({ sel, ok: await usable(page, `#practice ${sel}`) }).toEqual({ sel, ok: true });
     }

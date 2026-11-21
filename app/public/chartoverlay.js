@@ -14,6 +14,7 @@ export function createOverlay(chart, series, box) {
   let scene = { segments: [], levels: [], marks: [], bands: [] };
   let colors = {};
   let candles = [];
+  let ribbon = { points: [], color: "" };
   let request = null;
 
   const layer = document.createElement("div");
@@ -51,7 +52,20 @@ export function createOverlay(chart, series, box) {
     g.fillText(text, left, py - 2);
   }
 
+  /** 聚焦那组 MA 和 EMA 之间的色带：沿 MA 画过去、沿 EMA 画回来，围成一块填色。 */
+  const drawRibbon = (g) => {
+    const pts = ribbon.points.map((p) => ({ x: x(p.i), ma: y(p.ma), ema: y(p.ema) })).filter((p) => ok(p.x, p.ma, p.ema));
+    if (pts.length < 2) return;
+    g.fillStyle = ribbon.color;
+    g.beginPath();
+    pts.forEach((p, k) => (k ? g.lineTo(p.x, p.ma) : g.moveTo(p.x, p.ma)));
+    for (let k = pts.length - 1; k >= 0; k--) g.lineTo(pts[k].x, pts[k].ema);
+    g.closePath();
+    g.fill();
+  };
+
   const drawBands = (g) => {
+    drawRibbon(g);
     for (const b of scene.bands) {
       const xa = x(b.from - 0.5), xb = x(b.to + 0.5), yt = y(b.top), yb = y(b.bottom);
       if (!ok(xa, xb, yt, yb)) continue;
@@ -131,7 +145,13 @@ export function createOverlay(chart, series, box) {
       placeMarks();
       request?.();
     },
+    /** 聚焦那组的色带：points 是 lines.js 的 bandPoints，空数组不画。 */
+    setRibbon(points, color) {
+      ribbon = { points, color };
+      request?.();
+    },
     /** 现在画着的东西（测试和问鸿雁用）。 */
     scene: () => scene,
+    ribbon: () => ribbon,
   };
 }

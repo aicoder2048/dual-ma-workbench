@@ -151,6 +151,13 @@ h1 { margin: 0; font-size: 30px; line-height: 1.15; }
 .legend button[aria-pressed="false"] { opacity: .4; }
 .legend i { width: 14px; border-top: 3px solid var(--c); }
 .legend i.ema { border-top-width: 1.5px; }
+/* 一组：「20 线组」（点它聚焦）+ MA20、EMA20 两个开关；聚焦一组时其他组的图例也淡下去 */
+.legend-group { display: inline-flex; gap: 3px; align-items: center; transition: opacity .15s; }
+.legend .group-focus { font-family: var(--sans); color: var(--muted); border-color: transparent; padding: 1px 8px; }
+.legend .group-focus:hover { color: var(--fg); border-color: var(--line); }
+.legend .group-focus[aria-pressed="false"] { opacity: 1; }
+.legend .group-focus[aria-pressed="true"] { color: var(--fg); border-color: var(--c); background: color-mix(in srgb, var(--c) 14%, transparent); font-weight: 600; }
+.legend[data-focus] .legend-group:not(:has(.group-focus[aria-pressed="true"])) { opacity: .45; }
 .caption { font-size: 12px; color: var(--muted); margin: 8px 0 0; }
 
 /* ===================== 对话 ===================== */

@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { SPECS, alpha, lineStyle } from "../public/lines.js";
+import { FADED_ALPHA, SPECS, alpha, bandPoints, lineStyle, nextFocus } from "../public/lines.js";
+import { sliceAt } from "../public/replay.js";
 
 /** app.css 里每个主题的颜色 token：light（:root）、dark、ink。 */
 const THEMES = (() => {
@@ -53,6 +54,54 @@ describe("均线样式", () => {
         expect({ theme, n, distinct: Math.abs(ma - ema) > 1.5 }).toEqual({ theme, n, distinct: true });
       }
     }
+  });
+});
+
+describe("聚焦一组", () => {
+  test("聚焦 60：60 组照常、写出 EMA60 的标签；20、120 组和 MA200 淡下去，不写标签", () => {
+    const t = THEMES.light;
+    expect(lineStyle(spec("EMA60"), t, 60)).toMatchObject({ color: t["--ema60"], lastValueVisible: true, title: "EMA60" });
+    expect(lineStyle(spec("MA60"), t, 60)).toMatchObject({ color: t["--ma60"], title: "MA60" });
+    for (const key of ["MA20", "EMA20", "MA120", "EMA120", "MA200"]) {
+      expect(lineStyle(spec(key), t, 60)).toMatchObject({ color: alpha(t[spec(key).token], FADED_ALPHA), lastValueVisible: false, title: "" });
+    }
+  });
+
+  test("点一组聚焦，再点同一组取消，点另一组换过去；Esc（clear）取消", () => {
+    expect(nextFocus(null, { type: "click", group: 20 })).toBe(20);
+    expect(nextFocus(20, { type: "click", group: 20 })).toBe(null);
+    expect(nextFocus(20, { type: "click", group: 120 })).toBe(120);
+    expect(nextFocus(60, { type: "clear" })).toBe(null);
+  });
+
+  test("本机存的值坏了（不是 20 / 60 / 120）当作不聚焦", () => {
+    for (const bad of [0, Number.NaN, 200, 59]) expect(nextFocus(null, { type: "click", group: bad })).toBe(null);
+  });
+});
+
+describe("色带", () => {
+  const days = ["2026-01-02", "2026-01-05", "2026-01-06", "2026-01-07", "2026-01-08"];
+  const pts = (vals: (number | null)[]) => days.flatMap((time, i) => (vals[i] == null ? [] : [{ time, value: vals[i]! }]));
+  const data = {
+    candles: days.map((time) => ({ time, open: 1, high: 1, low: 1, close: 1 })),
+    volume: days.map((time) => ({ time, value: 1 })),
+    lines: { MA20: pts([null, 10, 11, 12, 13]), EMA20: pts([9, 9.5, 10.5, 12.5, 14]), MA60: pts([null, null, null, null, 20]) },
+    drops: [],
+  };
+
+  test("MA 和 EMA 都有值的那几根，按图上第几根排", () => {
+    expect(bandPoints(data, 20)).toEqual([
+      { i: 1, ma: 10, ema: 9.5 }, { i: 2, ma: 11, ema: 10.5 }, { i: 3, ma: 12, ema: 12.5 }, { i: 4, ma: 13, ema: 14 },
+    ]);
+  });
+
+  test("回放截到第 3 根：色带也只到第 3 根，不露出之后的线", () => {
+    expect(bandPoints(sliceAt(data, 2), 20).map((p: { i: number }) => p.i)).toEqual([1, 2]);
+  });
+
+  test("这组少一条线（EMA60 没有）或没有聚焦：没有色带", () => {
+    expect(bandPoints(data, 60)).toEqual([]);
+    expect(bandPoints(data, null)).toEqual([]);
   });
 });
 
