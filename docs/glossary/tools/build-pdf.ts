@@ -32,6 +32,8 @@ md = md.replace(/\n(#{1,2} )/g, (m, h, off) => {
 // 中西文交界的自动间距（xCJKecglue）会在「（P25）」「0.74，」里多出空格；源文本该有的空格已经写了，这里关掉。
 // techdoc 说关它会和代码高亮冲突，这份文档没有代码块。
 md = "```{=latex}\n\\xeCJKsetup{CJKecglue={\\hskip 0pt}}\n```\n\n" + md;
+// 第一部分也另起一页，别挂在目录页底下
+md = BREAK + md;
 const dir = mkdtempSync(join(tmpdir(), "glossary-pdf-"));
 const tmp = join(dir, "glossary.md");
 writeFileSync(tmp, md);
