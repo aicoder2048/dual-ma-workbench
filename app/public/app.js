@@ -360,6 +360,12 @@ $("star").addEventListener("click", async () => {
   }
 });
 document.querySelectorAll("[data-open-settings]").forEach((b) => b.addEventListener("click", () => openSettings()));
+// 看大局第 ⑤ 问的「看周线」：把 K 线图切到周线，滚到图上
+document.addEventListener("click", (e) => {
+  if (!e.target.closest("[data-show-week]")) return;
+  document.querySelector('.chart-card .frame-toggle [data-frame="week"]')?.click();
+  document.querySelector(".chart-card")?.scrollIntoView({ block: "start", behavior: "smooth" });
+});
 
 /** 操作失败（加自选、取消自选）：单独一行，和盘中提醒分开。 */
 function alertInline(message) {

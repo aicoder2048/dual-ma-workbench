@@ -190,7 +190,51 @@ export function fiveSteps(v) {
       <td class="num">${t?.progress ?? 0}/5${last ? `<span class="sub">上一轮 ${last}</span>` : ""}</td></tr>`;
   }).join("");
   return `<table class="vt steps5"><thead><tr><th>线组</th>${STEP_NAMES.map((n) => `<th>${n}</th>`).join("")}<th>进度</th></tr></thead><tbody>${rows}</tbody></table>
-    <p class="legend-note">每对线组现在站在哪边、这一轮往反方向走到第几个进度点 ${ruleBtn("J15")}。双交叉要同一对周期的 MA、EMA 都交叉 ${ruleBtn("J16")}。</p>`;
+    <p class="legend-note">拐头分 EMA、MA，交叉分第一个和双交叉 ${ruleBtn("J15")}；双交叉要同一对周期的 MA、EMA 都交叉 ${ruleBtn("J16")}。</p>`;
+}
+
+/**
+ * LEI 的趋势五步（视频 H 01:31）：站上（跌破）短期均线 → 短期均线拐头 → 短期和中期交叉 → 短中长期排列 → 大幅乖离，然后反向。
+ * 前三步用 20/60 这一轮转折的日期（脚本的转折进度）；第 4 步看 6 条线的排列；第 5 步看离 20 线的乖离分位。
+ */
+export function leiFiveSteps(v) {
+  const d = v.regime.direction;
+  if (!d) return "";
+  const dir = d > 0 ? "向上" : "向下", side = d > 0 ? "多头" : "空头";
+  const p = v.steps.find((x) => x.pair === "20/60");
+  const turn = p?.side === side && p.completed?.direction === dir ? p.completed : p?.current?.direction === dir ? p.current : null;
+  const at = (n) => turn?.steps.find((x) => x.step === n)?.date;
+  const cross = at("第一个交叉"), dbl = at("双交叉");
+  const l = (n) => v.lines.find((x) => x.period === n);
+  const ordered = (k) => d > 0 ? l(20)[k] > l(60)[k] && l(60)[k] > l(120)[k] : l(20)[k] < l(60)[k] && l(60)[k] < l(120)[k];
+  const ma = ordered("ma"), ema = ordered("ema");
+  const stretched = d > 0 ? v.bias.pctl >= v.bias.extreme : v.bias.pctl <= 1 - v.bias.extreme;
+  const verb = d > 0 ? "站上" : "跌破";
+  const steps = [
+    [`${verb} 20 线组`, at("破线"), at("破线") ? `✓ ${at("破线").slice(5)}` : "—"],
+    [`20 线组拐头${dir}`, at("MA 拐头"), at("MA 拐头") ? `✓ ${at("MA 拐头").slice(5)}` : at("EMA 拐头") ? `半步：EMA ${at("EMA 拐头").slice(5)}，MA 还没拐` : "—"],
+    [`20/60 交叉`, cross, cross ? `✓ ${cross.slice(5)}${dbl ? `，双${d > 0 ? "金" : "死"}叉 ${dbl.slice(5)}` : "，还差双交叉"}` : "—"],
+    [`${side}排列`, ma && ema, ma && ema ? "✓ MA、EMA 都排好了" : ma || ema ? `半步：${ma ? "MA" : "EMA"} 排好了，${ma ? "EMA" : "MA"} 还没有` : "—"],
+    [`大幅乖离`, stretched, stretched ? `✓ 离 20 线 ${pct(v.bias.value)}，${Math.round(v.bias.pctl * 100)}% 分位` : `没有（${Math.round(v.bias.pctl * 100)}% 分位）`],
+  ];
+  let reached = 0;
+  for (const [, ok] of steps) { if (!ok) break; reached++; }
+  const half = reached < 5 && steps[reached][2].startsWith("半步");
+  const ahead = steps.slice(reached + 1).map(([, ok], i) => (ok ? reached + 2 + i : 0)).filter(Boolean);
+  const trend = d > 0 ? "上涨" : "下跌";
+  const say = [
+    `${trend}的第 1 步还没走出来。`,
+    `已经${verb} 20 线组，走到第 1 步。下一步看 20 线组拐头。`,
+    `20 线组已经拐头，走到第 2 步。下一步看 20/60 交叉。`,
+    `20/60 已经交叉，走到第 3 步。下一步看短中长期排成${side}。`,
+    `已经排成${side}，走到第 4 步：${d > 0 ? "赚钱" : "亏钱"}效应出来了。下一步要防大幅乖离。`,
+    `${trend}已经走到第 5 步：大幅乖离。LEI 说走完这一步"然后呢再会进行一个反向的变化"（视频 H 02:24），也就是回归。`,
+  ][reached]
+    + (half ? `第 ${reached + 1} 步走了一半。` : "")
+    + (ahead.includes(5) && reached < 4 ? `但第 5 步的大幅乖离已经出现：LEI 说走完第 5 步"然后呢再会进行一个反向的变化"（视频 H 02:24），要防回归。` : "");
+  const rows = steps.map(([name, ok, txt], i) => `<tr class="${ok ? "done" : ""}"><th>${i + 1}</th><td>${name}</td><td>${txt}</td></tr>`).join("");
+  return `<table class="vt lei5"><thead><tr><th></th><th>LEI 趋势五步（${trend}）</th><th>现在</th></tr></thead><tbody>${rows}</tbody></table>`
+    + soLine(say);
 }
 
 /** 周线、小时线的排列：大一级定方向（J11），小一级找进场点（P13）。 */
@@ -769,21 +813,19 @@ function checkStage(v) {
     转折中: `20 线组已经交叉，算转折，不再是普通的回撤 / 反弹。`,
   }[r.stage] ?? "类型没定，阶段按过渡状态看。";
   return check("④", "20 线组走到哪一步？", `<b>${r.stage ? esc(r.stage) : esc(r.name)}</b>${r.depth ? `（${esc(r.depth)}）` : ""}`,
-    fiveSteps(v) + crossTable(v) + soLine(`${so}破线、拐头算回撤，交叉了算转折（J15）。`));
+    leiFiveSteps(v) + `<p class="sub-title">转折进度：第 1–3 步的细账</p>` + fiveSteps(v) + crossTable(v)
+    + soLine(`${so}破线、拐头算回撤，交叉了算转折（J15）。`));
 }
 
 function checkFrames(v) {
-  const r = v.regime;
+  const r = v.regime, w = v.weekly;
   const daily = SIDE_WORD[r.direction];
-  const rel = (f, big) => {
-    if (!f.available) return "";
-    const same = f.arr_ma === f.arr_ema ? f.arr_ma : null;
-    if (!same || !daily) return `${big}排列不一致`;
-    return same === `${daily}` || same.startsWith(daily) ? `${big}和日线同向` : `${big}和日线方向相反`;
-  };
-  const so = [rel(v.weekly, "周线（大一级）"), rel(v.hourly, "小时线（小一级）")].filter(Boolean).join("；");
-  return check("⑤", "周线、小时线怎么排？", `${frameText("周线", v.weekly)} ${ruleBtn("J11")}；${frameText("小时线", v.hourly)} ${ruleBtn("P13")}`,
-    so ? soLine(`${so}。小时线的排列是吃回撤的条件之一（P13）。`) : "");
+  const same = w.available && w.arr_ma === w.arr_ema ? w.arr_ma : null;
+  const rel = !w.available ? "" : !same ? "周线 MA、EMA 排列不一致，大一级方向还不清楚。"
+    : !daily ? `周线是${same}。` : same.startsWith(daily) ? `大一级也是${same}，和日线同向。` : `大一级还是${same}，和日线方向相反：日线这段${DOWN_UP[r.direction]}在周线上还没改变大方向。`;
+  const btn = w.available ? ` <button type="button" class="link-btn" data-show-week>看周线</button>` : "";
+  return check("⑤", "大一级（周线）是什么背景？", `${frameText("周线", w)}${btn}`,
+    soLine(`${rel}周线不参与定类型，是背景：横盘之后往哪边走（J11），周线能不能拐头（J34），周线乖离到没到 70%（J37）。小一级（小时线）是进场时机，在吃回撤打法的「等什么信号」里（P13）。`));
 }
 
 const check = (n, q, judge, body = "") =>

@@ -672,6 +672,12 @@ details.points-box .points { margin-top: 6px; }
 .clockface .hand { stroke: var(--ma60); stroke-width: 3; stroke-linecap: round; }
 .clockface .hub { fill: var(--ma60); }
 .accel-why th { white-space: nowrap; font-weight: 600; }
+.lei5 th:first-child { width: 2em; color: var(--muted); font-weight: 600; }
+.lei5 tr.done td:last-child { color: var(--fg); font-weight: 600; }
+.lei5 tr:not(.done) td { color: var(--muted); }
+.check .sub-title { margin: 12px 0 4px; font-size: 12.5px; color: var(--muted); }
+.link-btn { background: none; border: 1px solid var(--line); border-radius: 6px; padding: 0 8px; font: inherit; font-size: 12px; color: var(--accent); cursor: pointer; margin-left: 8px; }
+.link-btn:hover, .link-btn:focus-visible { border-color: var(--accent); }
 .check-sum { margin: 8px 0 0; padding-top: 8px; border-top: 1px solid var(--line); font-size: 14px; }
 
 /* 规则层：五步进度、门槛路径、求解、规则清单、计划里的规则编号 */
