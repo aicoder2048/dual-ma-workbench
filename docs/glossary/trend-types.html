@@ -8,15 +8,17 @@
 <link rel="stylesheet" href="glossary.css">
 <style>
 .wrap{grid-template-columns:minmax(0,1fr)} /* glossary.css 的 .wrap 没设列宽，图的 min-width 会把窄屏撑宽 */
-:root{--l60:#2f5fd0;--l120:#0f8a8a}
-@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--l60:#7ea2ff;--l120:#4cc9c9}}
-:root[data-theme="dark"]{--l60:#7ea2ff;--l120:#4cc9c9}
+:root{--l60:#2f5fd0;--l120:#0f8a8a;--l20:#8a4fd0}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--l60:#7ea2ff;--l120:#4cc9c9;--l20:#c4a0ff}}
+:root[data-theme="dark"]{--l60:#7ea2ff;--l120:#4cc9c9;--l20:#c4a0ff}
 .cell{fill:none;stroke:var(--line);stroke-width:1}
 .cell-t{fill:var(--ink);font:700 15px var(--font)}
 .cell-c{fill:var(--ink);font:600 13px var(--font)}
+.cell-c2{fill:var(--ink);font:600 12px var(--font)} .note2{fill:var(--muted);font-size:12px}
 .l60{fill:none;stroke:var(--l60);stroke-width:3.2;stroke-linecap:round}
 .l120{fill:none;stroke:var(--l120);stroke-width:3.2;stroke-linecap:round;stroke-dasharray:8 4}
-.l60-l{fill:var(--l60)} .l120-l{fill:var(--l120)}
+.l60-l{fill:var(--l60)} .l120-l{fill:var(--l120)} .l20-l{fill:var(--l20)}
+.l20{fill:none;stroke:var(--l20);stroke-width:1.8;stroke-linecap:round}
 .clock{fill:none;stroke:var(--muted);stroke-width:1.2}
 .clock-tk{stroke:var(--muted);stroke-width:1.2}
 .hand{stroke:var(--ink);stroke-width:2.5;stroke-linecap:round}
@@ -172,6 +174,45 @@
       <h3>加速下跌 <span class="verdict no">5~6 点</span></h3>
       <p>60 线在 5 点钟以下，或 20 线乖离到自身历史最低 5%。<b>不杀跌，不抢反弹。等底部构造和 20 线组拐头向上再进。</b></p>
     </article>
+  </section>
+
+  <section class="panel">
+    <h2>五种过渡状态里 20、60、120 三条线的样子（示意）</h2>
+    <div class="chart">
+      <svg viewBox="0 58 910 284" role="img" aria-label="五个小图：空头结构反弹中，60 在 120 上方但已向下，20 跌破 60 后往上弹；多头结构回撤中是它的镜像；顶部转折中，60 在 120 上方向下，20 一路往下；底部转折中是它的镜像；失序，60 和 120 交叉缠绕、方向说不清">
+<rect class="cell" x="6" y="66" width="170" height="268" rx="8"/>
+<text class="cell-t" x="91.0" y="92" text-anchor="middle">空头结构反弹中</text>
+<path class="l120" d="M20.0,215 Q80.0,195 142.0,190"/><path class="l60" d="M20.0,190 Q75.0,132 142.0,165"/><path class="l20" d="M20.0,172 C52.0,112 84.0,186 114.0,214 Q130.0,224 142.0,206"/>
+<text class="lbl l60-l" x="146" y="169">60</text><text class="lbl l120-l" x="146" y="194">120</text><text class="lbl l20-l" x="146" y="210">20</text>
+<text class="cell-c2" x="91.0" y="288" text-anchor="middle">60 在 120 上方，60 向下</text><text class="note2" x="91.0" y="308" text-anchor="middle">20/60 双死叉后往上弹</text>
+<rect class="cell" x="188" y="66" width="170" height="268" rx="8"/>
+<text class="cell-t" x="273.0" y="92" text-anchor="middle">多头结构回撤中</text>
+<path class="l120" d="M202.0,145 Q262.0,165 324.0,170"/><path class="l60" d="M202.0,170 Q257.0,228 324.0,195"/><path class="l20" d="M202.0,188 C234.0,248 266.0,174 296.0,146 Q312.0,136 324.0,154"/>
+<text class="lbl l60-l" x="328" y="199">60</text><text class="lbl l120-l" x="328" y="174">120</text><text class="lbl l20-l" x="328" y="158">20</text>
+<text class="cell-c2" x="273.0" y="288" text-anchor="middle">60 在 120 下方，60 向上</text><text class="note2" x="273.0" y="308" text-anchor="middle">20/60 双金叉后往下回</text>
+<rect class="cell" x="370" y="66" width="170" height="268" rx="8"/>
+<text class="cell-t" x="455.0" y="92" text-anchor="middle">顶部转折中</text>
+<path class="l120" d="M384.0,215 Q444.0,190 506.0,182"/><path class="l60" d="M384.0,186 Q436.0,128 506.0,158"/><path class="l20" d="M384.0,162 C416.0,108 456.0,150 506.0,216"/>
+<text class="lbl l60-l" x="510" y="162">60</text><text class="lbl l120-l" x="510" y="186">120</text><text class="lbl l20-l" x="510" y="220">20</text>
+<text class="cell-c2" x="455.0" y="288" text-anchor="middle">60 在 120 上方，60 向下</text><text class="note2" x="455.0" y="308" text-anchor="middle">20 还在往下，没有反弹</text>
+<rect class="cell" x="552" y="66" width="170" height="268" rx="8"/>
+<text class="cell-t" x="637.0" y="92" text-anchor="middle">底部转折中</text>
+<path class="l120" d="M566.0,145 Q626.0,170 688.0,178"/><path class="l60" d="M566.0,174 Q618.0,232 688.0,202"/><path class="l20" d="M566.0,198 C598.0,252 638.0,210 688.0,144"/>
+<text class="lbl l60-l" x="692" y="206">60</text><text class="lbl l120-l" x="692" y="182">120</text><text class="lbl l20-l" x="692" y="148">20</text>
+<text class="cell-c2" x="637.0" y="288" text-anchor="middle">60 在 120 下方，60 向上</text><text class="note2" x="637.0" y="308" text-anchor="middle">20 还在往上，没有回撤</text>
+<rect class="cell" x="734" y="66" width="170" height="268" rx="8"/>
+<text class="cell-t" x="819.0" y="92" text-anchor="middle">失序</text>
+<path class="l120" d="M748.0,206 Q808.0,186 870.0,150"/><path class="l60" d="M748.0,150 Q798.0,238 870.0,186"/><path class="l20" d="M748.0,176 Q783.0,138 816.0,196 T870.0,214"/>
+<text class="lbl l60-l" x="874" y="190">60</text><text class="lbl l120-l" x="874" y="154">120</text><text class="lbl l20-l" x="874" y="218">20</text>
+<text class="cell-c2" x="819.0" y="288" text-anchor="middle">60/120 次序、方向对不上</text><text class="note2" x="819.0" y="308" text-anchor="middle">不够平、不够密，不算横盘</text>
+      </svg>
+    </div>
+    <div class="legend">
+      <span><i style="border-color:var(--l20)"></i>20 线组（细线）</span>
+      <span><i style="border-color:var(--l60)"></i>60 线组（实线）</span>
+      <span><i style="border-color:var(--l120);border-top-style:dashed"></i>120 线组（虚线）</span>
+      <span>顶部、底部转折中还有一种：60 已到 120 另一边、跟着走了，只差 120 拐过来</span>
+    </div>
   </section>
 
   <section class="panel">
