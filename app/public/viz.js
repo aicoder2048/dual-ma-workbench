@@ -365,16 +365,20 @@ export function allRules(v) {
 // ---------- 悬停提示 ----------
 export function installTips() {
   const box = document.getElementById("viz-tip");
+  // 出现时就定位：中栏滚动、鼠标不动时，元素滚到鼠标下只有 pointerover，没有 pointermove
+  const place = (e) => {
+    box.style.left = `${Math.max(8, Math.min(e.clientX + 12, innerWidth - box.offsetWidth - 8))}px`;
+    box.style.top = `${e.clientY + 14}px`;
+  };
   document.addEventListener("pointerover", (e) => {
     const el = e.target.closest("[data-tip]");
     if (!el) return;
     box.textContent = el.dataset.tip;
     box.hidden = false;
+    place(e);
   });
   document.addEventListener("pointermove", (e) => {
-    if (box.hidden) return;
-    box.style.left = `${Math.min(e.clientX + 12, innerWidth - box.offsetWidth - 8)}px`;
-    box.style.top = `${e.clientY + 14}px`;
+    if (!box.hidden) place(e);
   });
   document.addEventListener("pointerout", (e) => {
     if (e.target.closest("[data-tip]") && !e.relatedTarget?.closest?.("[data-tip]")) box.hidden = true;

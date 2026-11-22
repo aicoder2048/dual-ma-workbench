@@ -3513,3 +3513,24 @@ describe("结论卡片上的价位：点一下，图上那条线亮几秒", () =
     await page.close();
   }, 40_000);
 });
+
+describe("悬停提示的位置", () => {
+  // 中栏滚动时，鼠标不动、元素滚到鼠标下面：浏览器只发 pointerover，不发 pointermove。
+  // 提示框以前只在 pointermove 里定位，于是出现在页面左上角（或上一次的位置）。
+  test("只有 pointerover、没有 pointermove 时，提示框也出现在鼠标旁边，不在左上角", async () => {
+    const { page, errors } = await open();
+    const at = await page.locator("#verdict .concl-lean").evaluate((el) => {
+      const r = el.getBoundingClientRect();
+      const x = r.left + r.width / 2, y = r.top + r.height / 2;
+      el.dispatchEvent(new PointerEvent("pointerover", { bubbles: true, clientX: x, clientY: y }));
+      return { x, y };
+    });
+    await page.waitForSelector("#viz-tip:not([hidden])");
+    const box = (await page.locator("#viz-tip").boundingBox())!;
+    expect(Math.abs(box.y - (at.y + 14))).toBeLessThan(2);
+    expect(box.x).toBeGreaterThan(at.x - box.width); // 靠右放不下时会往左挪，但不会回到 0
+    expect(box.x).toBeGreaterThan(0);
+    expect(errors).toEqual([]);
+    await page.close();
+  });
+});
