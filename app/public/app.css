@@ -658,6 +658,20 @@ details.points-box .points { margin-top: 6px; }
 .check h3 { margin: 0 0 4px; font: 600 14px var(--heading); }
 .check .judge { margin: 0 0 6px; font-size: 13.5px; color: var(--fg); }
 .check .judge b { color: var(--accent); }
+.check .so { margin: 8px 0 2px; font-size: 13.5px; color: var(--fg); }
+.check .so .pl { margin-right: 8px; display: inline-block; font-size: 11.5px; color: var(--muted); border: 1px solid var(--line); border-radius: 6px; padding: 0 6px; white-space: nowrap; }
+.viz figcaption .ln-where, .viz figcaption .ln-pairs, .viz figcaption .ln-key { display: block; }
+.check .viz.clockface { width: 100%; box-sizing: border-box; display: grid; grid-template-columns: 110px minmax(0, 1fr); gap: 14px; align-items: center; margin: 6px 0; }
+.check .viz.clockface svg { width: 110px; height: 160px; }
+.check .viz.clockface figcaption { font-size: 13px; margin: 0; }
+.clockface .cz { stroke: var(--card); stroke-width: 1; }
+.clockface .cz.fast { fill: color-mix(in srgb, var(--accent) 45%, var(--card)); }
+.clockface .cz.steady { fill: color-mix(in srgb, var(--accent) 20%, var(--card)); }
+.clockface .cz.flat { fill: color-mix(in srgb, var(--muted) 22%, var(--card)); }
+.clockface .ch { font: 10px var(--mono); fill: var(--muted); text-anchor: middle; }
+.clockface .hand { stroke: var(--ma60); stroke-width: 3; stroke-linecap: round; }
+.clockface .hub { fill: var(--ma60); }
+.accel-why th { white-space: nowrap; font-weight: 600; }
 .check-sum { margin: 8px 0 0; padding-top: 8px; border-top: 1px solid var(--line); font-size: 14px; }
 
 /* 规则层：五步进度、门槛路径、求解、规则清单、计划里的规则编号 */

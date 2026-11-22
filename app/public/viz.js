@@ -122,7 +122,47 @@ export function ladder(v) {
       <g ${tip(`收盘 ${f2(v.close)}`)}><line x1="${cx}" x2="${cx}" y1="${axisY - 20}" y2="${axisY + 20}" class="close"/>
       <text x="${cx}" y="${axisY - 24}" text-anchor="middle" class="lbl strong">收盘 ${f2(v.close)}</text></g>
       ${marks}</svg>
-    <figcaption>价位梯子：实心点是 MA，空心圈是 EMA，竖线是收盘价。左低右高。</figcaption></figure>`;
+    <figcaption>${ladderNotes(v)}</figcaption></figure>`;
+}
+
+/** 梯子下面的读法：收盘和 6 条线的位置（成本在头上还是脚下），60/120 两对各自排成什么（第 ① 问判的就是这个）。 */
+function ladderNotes(v) {
+  const vals = v.lines.flatMap((l) => [l.ma, l.ema]);
+  const above = vals.filter((x) => x > v.close).length;
+  const where = above === vals.length ? "收盘在 6 条线<b>全部下方</b>：短、中、长期的持仓成本都压在头上，上方全是阻力。"
+    : above === 0 ? "收盘在 6 条线<b>全部上方</b>：短、中、长期的持仓成本都在脚下，回撤有支撑。"
+    : `收盘夹在中间：上方 ${above} 条、下方 ${vals.length - above} 条。`;
+  const l60 = v.lines.find((l) => l.period === 60), l120 = v.lines.find((l) => l.period === 120);
+  const pair = (k, a, b) => {
+    const gap = Math.abs(a - b);
+    return `${k}60 ${f2(a)} ${a > b ? "＞" : "＜"} ${k}120 ${f2(b)}：${k} 那对是${a > b ? "多头" : "空头"}（差 ${f2(gap)}）`;
+  };
+  return `<span class="ln-where">${where}</span><span class="ln-pairs">${pair("MA", l60.ma, l120.ma)}；${pair("EMA", l60.ema, l120.ema)}。</span>`
+    + `<span class="ln-key muted">实心点是 MA，空心圈是 EMA，竖线是收盘价，左低右高。</span>`;
+}
+
+/** 钟面：右半圈按 J2 的刻度分区（走平 ±15°、加速 ±60°，视频 B 00:47、00:36），指针是 MA60 的方向。 */
+const CLOCK_ZONES = [[60, 90, "加速"], [15, 60, "稳定"], [-15, 15, "走平"], [-60, -15, "稳定"], [-90, -60, "加速"]];
+export function clockZone(angle) {
+  const z = CLOCK_ZONES.find(([lo, hi]) => angle >= lo && angle <= hi)?.[2] ?? "走平";
+  return z === "走平" ? "走平" : `${z}${angle > 0 ? "向上" : "向下"}`;
+}
+export function clockDial(c) {
+  const R = 58, cx = 18, cy = 80;
+  const pt = (deg, r) => [cx + r * Math.cos((deg * Math.PI) / 180), cy - r * Math.sin((deg * Math.PI) / 180)];
+  const arc = (lo, hi, cls) => {
+    const [x1, y1] = pt(hi, R), [x2, y2] = pt(lo, R);
+    return `<path class="cz ${cls}" d="M${cx},${cy} L${x1.toFixed(1)},${y1.toFixed(1)} A${R},${R} 0 0 1 ${x2.toFixed(1)},${y2.toFixed(1)} Z"/>`;
+  };
+  const zones = CLOCK_ZONES.map(([lo, hi, n]) => arc(lo, hi, n === "加速" ? "fast" : n === "稳定" ? "steady" : "flat")).join("");
+  const hours = [[90, "12"], [60, "1"], [30, "2"], [0, "3"], [-30, "4"], [-60, "5"], [-90, "6"]]
+    .map(([d, h]) => { const [x, y] = pt(d, R + 10); return `<text x="${x.toFixed(1)}" y="${(y + 4).toFixed(1)}" class="ch">${h}</text>`; }).join("");
+  const a = Math.max(-90, Math.min(90, c.angle)), [hx, hy] = pt(a, R - 8);
+  return `<figure class="viz clockface"><svg viewBox="0 0 110 160" role="img" aria-label="${c.line} 指向 ${c.hour}，${c.angle.toFixed(0)}°">
+      ${zones}${hours}
+      <line x1="${cx}" y1="${cy}" x2="${hx.toFixed(1)}" y2="${hy.toFixed(1)}" class="hand"/><circle cx="${cx}" cy="${cy}" r="3.5" class="hub"/>
+    </svg><figcaption><b>${c.line} ${c.angle >= 0 ? "+" : ""}${c.angle.toFixed(0)}°</b>，${esc(c.hour)}<br>
+      <span class="muted">深色是加速（1 点以上 / 5 点以下），浅色是稳定，中间灰色是走平（2 点半到 3 点半）。</span></figcaption></figure>`;
 }
 
 /** 乖离分位条：0–100%，两端（脚本的 EXTREME_PCTL）是"大幅乖离"区。 */
@@ -650,25 +690,110 @@ export function forecastAnswer(r) {
 }
 
 /**
- * 看大局的证据：按脚本的判断顺序排成四问（rules.md J1–J7）。
- * ① 60/120 线组次序和方向 → 有没有类型；② 60 线几点钟 → 稳定还是横盘；③ 钟表或乖离 → 是不是加速；④ 20 线组走到哪一步 → 阶段。
+ * 看大局的证据：按脚本的判断顺序排成五问（rules.md J1–J8、J15）。每问先写结论，再给证据，最后一句"所以"。
+ * 类型可能从两条路来：60/120 排好了（J1），或者还没排好但乖离到了一端、60 线组已经朝这边走（J3 的加速起点）。
+ * 两条路要分开说，不然 60/120 没排好却"有类型"读着像话说了一半。
  */
-function bigPictureEvidence(v) {
+const SIDE_WORD = { 1: "多头", [-1]: "空头" };
+const WAY_WORD = { 1: "向上", 0: "不一致", [-1]: "向下" };
+const DOWN_UP = { 1: "上涨", [-1]: "下跌" };
+
+function typeRoute(r) {
+  if (r.type === "横盘") return "range";
+  if (!r.type) return "none";
+  return r.order && r.dir60 === r.order && r.dir120 !== -r.order ? "ordered" : "accel-start";
+}
+
+function checkOrder(v, route) {
   const r = v.regime;
-  const pctl = Math.round(v.bias.pctl * 100);
-  const SIDE = { 1: "多头", 0: "不一致", [-1]: "空头" };
-  const WAY = { 1: "向上", 0: "不一致", [-1]: "向下" };
-  const check = (n, q, judge, body = "") =>
-    `<section class="check"><h3>${n} ${q}</h3><p class="judge">${judge}</p>${body}</section>`;
+  const l60 = v.lines.find((l) => l.period === 60), l120 = v.lines.find((l) => l.period === 120);
+  const ma = l60.ma > l120.ma ? 1 : -1, ema = l60.ema > l120.ema ? 1 : -1;
+  const order = ma === ema ? `MA、EMA 两对都是${SIDE_WORD[ma]}` : `MA 那对是${SIDE_WORD[ma]}，EMA 那对是${SIDE_WORD[ema]}`;
+  const dirs = `60 线组${WAY_WORD[r.dir60]}、120 线组${WAY_WORD[r.dir120]}`;
+  const judge = {
+    ordered: `排好了：${order}，${dirs} → <b>能定类型</b>`,
+    "accel-start": `还没排好（${order}），但已经能定成<b>${esc(r.type)}</b>`,
+    range: `没有方向：${order}，${dirs}；60 线走平、6 条线靠拢 → <b>横盘</b>`,
+    none: `没排好（${order}，${dirs}）→ <b>定不出五种类型</b>，按 20/60 的结构叫「${esc(r.transition ?? r.name)}」`,
+  }[route];
+  const so = {
+    ordered: `类型只看 60、120 两组（J1）：两组次序和方向一致，才能叫出五种类型之一。下面第 ②、③ 问分稳定还是加速。`,
+    "accel-start": `按 60/120 本来定不出类型（J1 要两对次序相同）。是第 ③ 问的乖离到了历史一端，加上 60 线组已经${WAY_WORD[r.direction]}，按 J3 判成了${esc(r.type)}：一段新${DOWN_UP[r.direction]}刚开头的加速。`,
+    range: `横盘不分稳定、加速，第 ②、③ 问只作参考。`,
+    none: `类型只看 60、120 两组（J1）。两组对不上，就不硬套五种类型，打法按过渡状态给。`,
+  }[route];
+  return check("①", "60/120 线组排好了吗？", judge, ladder(v) + soLine(so));
+}
+
+function checkClock(v, route) {
+  const r = v.regime, c = r.clock60, zone = clockZone(c.angle);
+  const steep = Math.abs(c.angle) >= 60;
+  const spread = `6 条线拉开 ${v.spread.toFixed(1)}%（靠拢要不到 5%）`;
+  const so = route === "range" ? `${spread}，60 线走平，所以是横盘。`
+    : route === "none" ? `类型没定，这一问只作参考。${spread}。`
+    : r.accel && !steep ? `单看 60 线<b>不算加速</b>：它${zone === "走平" ? "快走平了" : `只是${zone}`}。判成加速是因为第 ③ 问的乖离。${spread}，不是横盘。`
+    : r.accel ? `60 线${zone}，这本身就是加速。${spread}。`
+    : `60 线${zone}，是稳定${DOWN_UP[r.direction] ?? ""}的样子。${spread}，不是横盘。`;
+  return check("②", "60 线几点钟？", `${esc(c.hour)}：<b>${zone}</b>`, clockDial(c) + soLine(so));
+}
+
+function checkAccel(v) {
+  const r = v.regime, pctl = Math.round(v.bias.pctl * 100), ext = Math.round((1 - v.bias.extreme) * 100);
+  const bias = `离 20 线 ${pct(v.bias.value)}，在自身历史排 ${pctl}% 分位（两端各 ${ext}% 算大幅乖离）`;
+  if (!r.accel) return check("③", "是不是加速？", `<b>不是加速</b>`, biasMeter(v) + soLine(`${bias}，60 线也不到 1 点钟 / 5 点钟。没有大幅偏离成本，没有回归的压力。`));
+  const start = r.accel.phase === "起点";
+  const side = SIDE_WORD[r.direction];
+  const p = v.steps.find((x) => x.pair === "60/120");
+  const cross = p?.current?.steps.find((x) => x.step === "第一个交叉")?.date;
+  const why = r.accel.by === "钟表" ? `60 线 ${esc(r.clock60.hour)}，过了加速那一档` : bias;
+  const where = start
+    ? `最近 60 根里，60/120 还没排成${side}${cross ? `（${cross.slice(5)} 才第一次交叉）` : ""}：这段${DOWN_UP[r.direction]}才刚开头`
+    : `最近 60 根里，60/120 一直是${side}：这段${DOWN_UP[r.direction]}已经走了很久`;
+  const table = `<table class="vt accel-why"><tbody>
+      <tr><th>是不是加速</th><td>${why} → <b>是</b></td></tr>
+      <tr><th>出现在哪一头 ${ruleBtn("J8")}</th><td>${where} → <b>${start ? "趋势刚开始" : "趋势即将结束"}</b></td></tr></tbody></table>`;
+  const lei = start
+    ? `LEI 说这种加速常出现在刚突破密集成交区的时候，视频 B 09:11「真正大行情的突破 往往就是这种斜率加速的行情」。`
+    : `LEI 说趋势快结束时的加速常见于大牛市见顶、大熊市见底（视频 B 09:15）。`;
+  return check("③", "是不是加速？", `<b>是</b>，加速出现在<b>${start ? "趋势刚开始" : "趋势即将结束"}</b>`,
+    biasMeter(v) + table + soLine(`${lei}两种都大幅偏离了成本，有回归的需要：要么快速回来找均线，要么横着走等均线（视频 B 09:37）。`));
+}
+
+function checkStage(v) {
+  const r = v.regime;
+  const d = DOWN_UP[r.direction] ?? "";
+  const so = {
+    延伸: `20 线组还没开始往回转，${d}还在走。`,
+    回撤中: `20 线组已经开始往回转（${esc(r.depth ?? "破线或拐头")}），但还没交叉，算回撤，不算转折。`,
+    反弹中: `20 线组已经开始往回转（${esc(r.depth ?? "破线或拐头")}），但还没交叉，算反弹，不算转折。`,
+    转折中: `20 线组已经交叉，算转折，不再是普通的回撤 / 反弹。`,
+  }[r.stage] ?? "类型没定，阶段按过渡状态看。";
+  return check("④", "20 线组走到哪一步？", `<b>${r.stage ? esc(r.stage) : esc(r.name)}</b>${r.depth ? `（${esc(r.depth)}）` : ""}`,
+    fiveSteps(v) + crossTable(v) + soLine(`${so}破线、拐头算回撤，交叉了算转折（J15）。`));
+}
+
+function checkFrames(v) {
+  const r = v.regime;
+  const daily = SIDE_WORD[r.direction];
+  const rel = (f, big) => {
+    if (!f.available) return "";
+    const same = f.arr_ma === f.arr_ema ? f.arr_ma : null;
+    if (!same || !daily) return `${big}排列不一致`;
+    return same === `${daily}` || same.startsWith(daily) ? `${big}和日线同向` : `${big}和日线方向相反`;
+  };
+  const so = [rel(v.weekly, "周线（大一级）"), rel(v.hourly, "小时线（小一级）")].filter(Boolean).join("；");
+  return check("⑤", "周线、小时线怎么排？", `${frameText("周线", v.weekly)} ${ruleBtn("J11")}；${frameText("小时线", v.hourly)} ${ruleBtn("P13")}`,
+    so ? soLine(`${so}。小时线的排列是吃回撤的条件之一（P13）。`) : "");
+}
+
+const check = (n, q, judge, body = "") =>
+  `<section class="check"><h3>${n} ${q}</h3><p class="judge">${judge}</p>${body}</section>`;
+const soLine = (t) => `<p class="so"><span class="pl">所以</span>${t}</p>`;
+
+function bigPictureEvidence(v) {
+  const route = typeRoute(v.regime);
   return `<p class="evidence-title">证据：类型 × 阶段是按下面的顺序判出来的</p>`
-    + check("①", "60/120 线组排好了吗？", `次序${SIDE[r.order]}，60 线组${WAY[r.dir60]}、120 线组${WAY[r.dir120]} → <b>${r.type ? "有类型" : "定不出类型，按 20/60 的结构命名"}</b>`,
-      ladder(v))
-    + check("②", "60 线几点钟？", `MA60 ${r.clock60.angle >= 0 ? "+" : ""}${r.clock60.angle.toFixed(0)}°，${esc(r.clock60.hour)}（2 点半到 3 点半算走平，1 点钟以上算加速）；6 条线相差 ${v.spread.toFixed(1)}% → <b>${r.type === "横盘" ? "横盘" : r.type ? "有斜率" : "不看"}</b>`)
-    + check("③", "是不是加速？", `离 20 线 ${pct(v.bias.value)}，在自身历史排 ${pctl}% 分位（两端各 ${Math.round((1 - v.bias.extreme) * 100)}% 算大幅乖离）→ <b>${r.accel ? `加速出现在${{ 起点: "趋势刚开始", 末端: "趋势即将结束" }[r.accel.phase] ?? esc(r.accel.phase)}` : "不是加速"}</b>`,
-      biasMeter(v))
-    + check("④", "20 线组走到哪一步？", `${r.stage ? `${esc(r.stage)}${r.depth ? `（${esc(r.depth)}）` : ""}` : esc(r.name)}：破线、拐头算回撤，交叉了算转折。`,
-      fiveSteps(v) + crossTable(v))
-    + check("⑤", "周线、小时线怎么排？", `${frameText("周线", v.weekly)} ${ruleBtn("J11")}；${frameText("小时线", v.hourly)} ${ruleBtn("P13")}`)
+    + checkOrder(v, route) + checkClock(v, route) + checkAccel(v) + checkStage(v) + checkFrames(v)
     + `<p class="check-sum">所以是 <b>${esc(v.trend)}</b>。</p>`
     + `<details class="ref"><summary>趋势类型对照（现在是哪一种）</summary>${trendTable(v)}</details>`;
 }
