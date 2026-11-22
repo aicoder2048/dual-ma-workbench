@@ -990,6 +990,9 @@ RULES: tuple[Rule, ...] = (
     Rule("J47", Kind.VERDICT, "超跌反弹的目标是上方最近那座筹码山", j47_bounce_target),
     Rule("J48", Kind.VERDICT, "收盘翻过山顶，可能开启大行情", j48_over_the_top),
     Rule("J49", Kind.VERDICT, "筹码山在上方爬山难，在下方山路轻松", j49_mountain_side),
+    Rule("J50", Kind.VERDICT, "筹码峰是公允价格，峰越大越可靠", None),
+    Rule("J51", Kind.VERDICT, "跌到重要筹码峰不容易直接再跌，撑不住去下一座", None),
+    Rule("J52", Kind.VERDICT, "回撤中 20/60 交叉了，下方筹码峰多半挡不住", None),
     Rule("P1", Kind.ACTION, "横盘中段不做", p1_range_wait),
     Rule("P2", Kind.ACTION, "横盘末期埋伏", p2_ambush),
     Rule("P3", Kind.ACTION, "埋伏的底线", p3_ambush_stop),
@@ -1034,6 +1037,10 @@ RULES: tuple[Rule, ...] = (
     Rule("P43", Kind.ACTION, "黑绿线：20 在 60 下方，变绿平仓不做多", p43_bwl_no_long),
     Rule("P44", Kind.ACTION, "黑绿线：灰色不做动作", p44_bwl_gray),
     Rule("P45", Kind.ACTION, "黑绿线：上升趋势里一直是绿，没出现灰或黑之前不用关心", p45_bwl_steady),
+    Rule("P46", Kind.ACTION, "两点钟大多头买回撤，买在重要均线和重要筹码峰共振处", None),
+    Rule("P47", Kind.ACTION, "回撤到位等抵抗性 K 线进场，止损在它的最低价", None),
+    Rule("P48", Kind.ACTION, "持仓底线：不跌破筹码峰平台", None),
+    Rule("P49", Kind.ACTION, "三点钟方向做突破不做回撤，止损在突破 K 线最低价", None),
 )
 BY_ID = {r.id: r for r in RULES}
 
