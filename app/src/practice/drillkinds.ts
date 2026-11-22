@@ -8,12 +8,13 @@
 import { ACCEL_WHERE, type Analysis, type Construct, type PairProgress, type StepName, type Turn } from "../citations.ts";
 import { buildPlans, playKey } from "../plan.ts";
 import { entryStateOf } from "./discipline.ts";
+import { fill } from "./fill.ts";
 import { bucketOf, CROSS_CHOICES, type RevealPart, type RevealSpec } from "./reveal.ts";
 
-export const KINDS = ["chart", "signal", "dropoff", "construct", "play", "project", "steps"] as const;
+export const KINDS = ["chart", "signal", "dropoff", "construct", "play", "fill", "project", "steps"] as const;
 export type Kind = (typeof KINDS)[number];
 export const KIND_LABEL: Record<Kind, string> = {
-  chart: "看图", signal: "看信号", dropoff: "看抵扣价", construct: "看构造和 2B", play: "看打法", project: "推演揭晓", steps: "五步点图",
+  chart: "看图", signal: "看信号", dropoff: "看抵扣价", construct: "看构造和 2B", play: "看打法", fill: "打法补全", project: "推演揭晓", steps: "五步点图",
 };
 
 /** 一问：几个选项，answer 是对的那个的位置。 */
@@ -39,10 +40,12 @@ export interface ClickTask {
  * 选择题有 parts；推演揭晓题另有 reveal（交卷后拿真实走势对照什么）；五步点图题没有选项，答案在 click。
  */
 interface DraftBase { cls: string; view: View; marks: Mark[]; context: string | null; evidence: string[]; rules: Rule[]; hint: string | null }
-export type ChoiceKind = Exclude<Kind, "project" | "steps">;
+export type ChoiceKind = Exclude<Kind, "project" | "steps" | "fill">;
 export type Draft =
   | (DraftBase & { kind: ChoiceKind; parts: Part[] })
   | (DraftBase & { kind: "project"; parts: Part[]; reveal: RevealSpec })
+  /** 打法补全：alts[i] 是第 0 问选了第 i 个类型时，后面每格按那个类型该填什么（和答案一样写 null；选对的那行整行 null）。 */
+  | (DraftBase & { kind: "fill"; parts: Part[]; alts: ((string | null)[] | null)[] })
   | (DraftBase & { kind: "steps"; click: ClickTask });
 
 /** dates：图上到题目那一根为止的日期（挪过的），用来把日期换成相对位置。 */
@@ -95,7 +98,7 @@ export function shuffle<T>(xs: readonly T[], rand: () => number): T[] {
 }
 
 /** 六个选项：对的那个，加同方向的 3 个、其余随机，按词表的顺序排（位置固定，好记）。 */
-function regimeChoices(name: string, rand: () => number): string[] {
+export function regimeChoices(name: string, rand: () => number): string[] {
   const family = UP_NAMES.includes(name as never) ? UP_NAMES : DOWN_NAMES.includes(name as never) ? DOWN_NAMES : REGIME_NAMES.filter((n) => !UP_NAMES.includes(n) && !DOWN_NAMES.includes(n));
   const near = shuffle(family.filter((n) => n !== name), rand).slice(0, 3);
   const rest = shuffle(REGIME_NAMES.filter((n) => n !== name && !near.includes(n)), rand).slice(0, CHART_CHOICES - 1 - near.length);
@@ -466,4 +469,4 @@ export function gradeClicks(task: Pick<ClickTask, "steps" | "tolerance">, picks:
 const steps: Generator = (c) => c.a.steps.flatMap((p) => [p.completed, p.current].map((t) => stepsDraft(c, p, t)).filter((d): d is Draft => d !== null));
 
 /** 每种题一个出题函数。加题型：在 KINDS 加一个键，在这里登记。 */
-export const GENERATORS: Record<Kind, Generator> = { chart, signal, dropoff, construct, play, project, steps };
+export const GENERATORS: Record<Kind, Generator> = { chart, signal, dropoff, construct, play, fill, project, steps };

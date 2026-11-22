@@ -2929,6 +2929,87 @@ describe("盲测练习", () => {
     expect(errors).toEqual([]);
     await page.close();
   }, 120_000);
+
+  test("识别题：打法补全先判类型再逐格选；类型选错时每格写出按你选的类型该填什么；空仓、持仓都出", async () => {
+    const { page, errors } = await open();
+    await page.click("#practice-btn");
+    await page.waitForSelector("#dr-question[data-drill]");
+    const stored = async () => {
+      const id = await page.getAttribute("#dr-question", "data-drill");
+      return drillBank.drills().find((d) => d.id === id)!;
+    };
+    /** 切到打法补全，直到出一道 want（空仓 / 持仓）的题。 */
+    const fillOf = async (want: "空仓" | "持仓") => {
+      for (let n = 0; n < 12; n++) {
+        const shown = await page.getAttribute("#dr-question", "data-drill");
+        if (n === 0) await page.click('.dr-kinds [data-kind="fill"]');
+        else await page.click('.dr-feedback [data-act="next"]');
+        await page.waitForFunction((was) => document.querySelector(".dr-kind")?.textContent === "打法补全" && document.getElementById("dr-question")?.dataset.drill !== was && !document.querySelector(".dr-verdict"), shown);
+        const d = await stored();
+        if (d.kind !== "fill") throw new Error("kind");
+        if ((d.context ?? "").startsWith(want)) return d;
+        // 不是要的处境：随便答掉换下一题
+        for (let i = 0; i < d.parts.length; i++) await page.click(`.dr-part[data-part="${i}"] .dr-choice[data-choice="0"]`);
+        await page.waitForSelector(".dr-verdict");
+      }
+      throw new Error(`题库里没有${want}的打法补全`);
+    };
+    expect(await usable(page, '.dr-kinds [data-kind="fill"]')).toBe(true);
+
+    // ---- 空仓：六问（类型 + 五格），题干不说类型；每个选项都点得到 ----
+    const d = await fillOf("空仓");
+    if (d.kind !== "fill") throw new Error("kind");
+    expect(await page.locator(".dr-part").count()).toBe(6);
+    expect(await page.textContent(".dr-context")).not.toContain(d.parts[0].choices[d.parts[0].answer]);
+    const prompts = await page.locator(".dr-prompt").allTextContents();
+    expect(prompts.join(" ")).toContain("能不能做");
+    expect(prompts.join(" ")).toContain("止损");
+    // 六问放不进一屏：右栏自己滚动，像用户一样滚到那一问再点
+    expect(await page.evaluate(() => { const el = document.querySelector(".dr-panel")!; return el.scrollHeight > el.clientHeight && getComputedStyle(el).overflowY === "auto"; })).toBe(true);
+    for (let i = 0; i < d.parts.length; i++) {
+      await page.locator(`.dr-part[data-part="${i}"]`).scrollIntoViewIfNeeded();
+      for (let j = 0; j < d.parts[i].choices.length; j++) {
+        expect({ i, j, ok: await usable(page, `.dr-part[data-part="${i}"] .dr-choice[data-choice="${j}"]`) }).toEqual({ i, j, ok: true });
+      }
+    }
+    expect(await visibleLeaks(page)).toEqual([]);
+    await page.locator('.dr-part[data-part="1"]').scrollIntoViewIfNeeded();
+    await shot(page, "drill-fill-flat-question");
+    // 类型故意选错（选一个打法不同的），格子全按归雁的答案选
+    const wrong = d.parts[0].choices.findIndex((_, i) => i !== d.parts[0].answer && d.alts[i] !== null);
+    expect(wrong).toBeGreaterThanOrEqual(0);
+    await page.click(`.dr-part[data-part="0"] .dr-choice[data-choice="${wrong}"]`);
+    for (let i = 1; i < d.parts.length; i++) await page.click(`.dr-part[data-part="${i}"] .dr-choice[data-choice="${d.parts[i].answer}"]`);
+    await page.waitForSelector(".dr-verdict");
+    expect(await page.textContent(".dr-verdict")).toContain("答错了");
+    for (const sel of [".dr-fill-note", ".dr-answers", ".dr-evidence li", '.dr-feedback [data-act="next"]']) {
+      expect({ sel, ok: await usable(page, sel) }).toEqual({ sel, ok: true });
+    }
+    expect(await page.textContent(".dr-fill-note")).toContain(d.parts[0].choices[wrong]);
+    const alts = (d.alts[wrong] ?? []).filter((x) => x !== null);
+    expect(await page.locator(".dr-alt").count()).toBe(alts.length);
+    if (alts.length) expect(await usable(page, ".dr-alt")).toBe(true);
+    expect(await page.textContent(".dr-evidence")).toContain("归雁判的类型");
+    expect(await page.locator(".dr-choice.right").count()).toBe(6);
+    expect(await visibleLeaks(page)).toEqual([]);
+    await shot(page, "drill-fill-flat-feedback");
+
+    // ---- 持仓：五格换成拿着还是走、浮盈 / 浮亏；全选对就答对，不写"按你选的类型" ----
+    const h = await fillOf("持仓");
+    if (h.kind !== "fill") throw new Error("kind");
+    const hp = (await page.locator(".dr-prompt").allTextContents()).join(" ");
+    expect(hp).toContain("拿着还是走");
+    expect(hp).toContain("浮盈 / 浮亏");
+    expect(await visibleLeaks(page)).toEqual([]);
+    await shot(page, "drill-fill-holding-question");
+    for (let i = 0; i < h.parts.length; i++) await page.click(`.dr-part[data-part="${i}"] .dr-choice[data-choice="${h.parts[i].answer}"]`);
+    await page.waitForSelector(".dr-verdict");
+    expect(await page.textContent(".dr-verdict")).toContain("答对了");
+    expect(await page.locator(".dr-fill-note, .dr-alt").count()).toBe(0);
+    await shot(page, "drill-fill-holding-feedback");
+    expect(errors).toEqual([]);
+    await page.close();
+  }, 120_000);
 });
 
 describe("回测页", () => {

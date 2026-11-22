@@ -11,6 +11,8 @@ import {
   TWO_B_CHOICES, type Draft, type Kind,
 } from "../src/practice/drillkinds.ts";
 import { bucketOf } from "../src/practice/reveal.ts";
+import { FILL_CELLS, FILL_PHRASES, keyOfRegime } from "../src/practice/fill.ts";
+import { PLAY_KEYS } from "../src/plan.ts";
 import { admit, DrillBank, scanRunner, type Drill, type DrillView } from "../src/practice/drills.ts";
 import { seeded } from "../src/practice/pool.ts";
 import { Analyzer } from "../src/analyze.ts";
@@ -130,6 +132,75 @@ describe("出题函数：答案就是分析里的字段", () => {
       const prices = [a.trade_plan.flat.entry?.price, a.trade_plan.flat.stop?.price, ...a.trade_plan.flat.targets.map((t) => t.price)];
       for (const x of prices) if (x != null) expect(x / a.close).toBeGreaterThan(0.2), expect(x / a.close).toBeLessThan(5);
       expect(picked(d, 1)).toBe(stop && buys ? STOP_CHOICES.find((c) => stop.label.startsWith(c.slice(0, 5)))! : "不设（这时不进场）");
+    }
+  });
+});
+
+
+describe("打法补全：先判类型，再按找打法的格子逐格选", () => {
+  const sitOf = (cls: string) => (cls.endsWith("·空仓") ? "flat" : cls.endsWith("·浮盈") ? "profit" : "loss") as "flat" | "profit" | "loss";
+
+  test("短语表覆盖每套打法 × 处境 × 格：缺一项就失败；同一格不同打法的短语有区分", () => {
+    expect(Object.keys(FILL_PHRASES).sort()).toEqual([...PLAY_KEYS].sort());
+    for (const key of PLAY_KEYS) {
+      const t = FILL_PHRASES[key];
+      for (const v of [t.flat.signal, t.flat.entry, t.flat.stop, t.holding.signal, t.holding.stop, t.holding.pnl.profit, t.holding.pnl.loss]) {
+        expect({ key, ok: typeof v === "string" && v.length > 0 }).toEqual({ key, ok: true });
+      }
+    }
+    // 等什么信号：每套打法一句，不全是同一句（否则这格考不出东西）
+    expect(new Set(PLAY_KEYS.map((k) => FILL_PHRASES[k].flat.signal)).size).toBeGreaterThanOrEqual(7);
+    expect(FILL_CELLS.flat.map((c) => c.title)).toEqual(["能不能做", "等什么信号", "在哪进", "止损放哪", "目标看哪"]);
+    expect(FILL_CELLS.holding.map((c) => c.title)).toEqual(["拿着还是走", "盯什么信号", "在哪走", "目标看哪", "浮盈 / 浮亏怎么办"]);
+  });
+
+  test("类型名换成打法：稳定、加速照类型；转折中和三种过渡状态是过渡；多头回撤、空头反弹各自一套", () => {
+    expect(keyOfRegime("稳定上涨·回撤中")).toBe("稳定上涨");
+    expect(keyOfRegime("加速下跌·延伸")).toBe("加速下跌");
+    expect(keyOfRegime("加速上涨·顶部转折中")).toBe("过渡");
+    expect(keyOfRegime("横盘")).toBe("横盘");
+    expect(keyOfRegime("多头结构回撤中")).toBe("多头结构回撤中");
+    expect(keyOfRegime("空头结构反弹中")).toBe("空头结构反弹中");
+    for (const n of ["顶部转折中", "底部转折中", "失序"]) expect(keyOfRegime(n)).toBe("过渡");
+  });
+
+  test("答案从当天的交易计划取：第 0 问 = 类型；① = 计划的结论词；止损、目标看交易计划；其余是这套打法的短语；空仓、持仓都出", () => {
+    const ds = draftsOf("fill");
+    expect(ds.length).toBeGreaterThan(0);
+    const sits = new Set(ds.map(({ d }) => sitOf(d.cls) === "flat" ? "flat" : "holding"));
+    expect([...sits].sort()).toEqual(["flat", "holding"]);
+    for (const { a, d } of ds) {
+      if (d.kind !== "fill") throw new Error("kind");
+      const key = a.trade_plan.key;
+      const sit = sitOf(d.cls);
+      const flat = sit === "flat";
+      const plan = buildPlans(a)[sit];
+      expect(d.parts).toHaveLength(6);
+      expect(picked(d, 0)).toBe(a.regime.name);
+      expect(picked(d, 1)).toBe(plan.verdict);
+      expect(d.cls.startsWith(`${key}·`)).toBe(true);
+      const t = FILL_PHRASES[key];
+      const target = plan.trade.targets[0]?.kind;
+      if (flat) {
+        expect(picked(d, 2)).toBe(t.flat.signal);
+        expect(picked(d, 3)).toBe(t.flat.entry);
+        if (plan.trade.entry === null) expect(picked(d, 4).startsWith("—")).toBe(true);
+        else expect(picked(d, 4)).toBe((plan.stop?.label ?? t.flat.stop).replace("（守住）", ""));
+      } else {
+        expect(picked(d, 2)).toBe(t.holding.signal);
+        expect(picked(d, 3)).toBe(t.holding.stop);
+        expect(picked(d, 5)).toBe(t.holding.pnl[sit as "profit" | "loss"]);
+      }
+      // 目标格：持仓题不出"不进场"这种空仓才有的选项
+      if (!flat) expect(d.parts[4].choices.some((c) => c.includes("不进场"))).toBe(false);
+      if (target) expect(picked(d, 5 - (flat ? 0 : 1))).toContain({ 缺口: "缺口", 前高: "前高" }[target] ?? (target.includes("全部汇聚") ? "全部汇聚" : "均线密集"));
+      else expect(picked(d, 5 - (flat ? 0 : 1)).startsWith("—")).toBe(true);
+      // 类型判错时每格按你选的类型该填什么：选对的那一行是 null
+      expect(d.alts).toHaveLength(d.parts[0].choices.length);
+      expect(d.alts[d.parts[0].answer]).toBeNull();
+      for (const row of d.alts) if (row) expect(row).toHaveLength(5);
+      // 不给类型：题干不能说出类型名
+      expect(d.context ?? "").not.toContain(a.regime.name);
     }
   });
 });
@@ -384,6 +455,28 @@ describe("题库", () => {
     expect(readFileSync(join(dir, "answers.json"), "utf8")).toBe("{oops");
     writeFileSync(join(dir, "answers.json"), JSON.stringify({ version: 1, answers: [{ drill: "x" }] }));
     expect(() => b.overview()).toThrow(/不合法/);
+  });
+
+
+  test("打法补全：类型选错，揭晓时每格写出按你选的类型该填什么；选对不写", async () => {
+    const { b } = shared;
+    const { drill } = await b.next("fill");
+    expect(drill).not.toBeNull();
+    const d = b.drills().find((x) => x.id === drill!.id)!;
+    if (d.kind !== "fill") throw new Error("kind");
+    const right = d.parts.map((p) => p.answer);
+    const wrongType = d.parts[0].choices.findIndex((c, i) => i !== d.parts[0].answer && d.alts[i] !== null);
+    expect(wrongType).toBeGreaterThanOrEqual(0);
+    const fb = await b.answer(drill!.id, { picks: [wrongType, ...right.slice(1)], ms: 3000 });
+    expect(fb.correct).toBe(false);
+    expect(fb.fill).toEqual({ type: d.parts[0].choices[wrongType], key: keyOfRegime(d.parts[0].choices[wrongType]), cells: d.alts[wrongType]! });
+    expect(fb.evidence.some((e) => e.startsWith("归雁判的类型"))).toBe(true);
+    const { drill: again } = await b.next("fill");
+    if (!again) return;
+    const d2 = b.drills().find((x) => x.id === again.id)! as Extract<Drill, { kind: "fill" }>;
+    const fb2 = await b.answer(again.id, { picks: d2.parts.map((p) => p.answer), ms: 3000 });
+    expect(fb2.correct).toBe(true);
+    expect(fb2.fill).toBeNull();
   });
 
   test("题型参数不对：400", async () => {

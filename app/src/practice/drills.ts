@@ -27,6 +27,7 @@ import { labeler, rebase, relabel, toCsv } from "./blind.ts";
 import { GENERATORS, gradeClicks, KIND_LABEL, KINDS, shuffle, stepMeaning, type Draft, type Kind } from "./drillkinds.ts";
 import { balancedPick, drillStats, kindWeights, weighted, type Answer, type DrillStats } from "./drillstats.ts";
 import { pickStart, pickTicker, POOL, windowStart, type PoolEntry } from "./pool.ts";
+import { keyOfRegime } from "./fill.ts";
 import { CROSS_DAYS, crossMarks, horizonOf, revealOf, type RevealResult } from "./reveal.ts";
 import type { PriceSource } from "./service.ts";
 import { PracticeError } from "./session.ts";
@@ -78,6 +79,7 @@ const StepNameT = Type.Union(["破线", "EMA 拐头", "MA 拐头", "第一个交
 /** 三种题：选择题、推演揭晓（选择题 + 交卷后对照真实走势）、五步点图（在图上点 K 线）。 */
 const DrillT = Type.Union([
   Type.Object({ ...Base, kind: ChoiceKindT, parts: PartsT }, Strict),
+  Type.Object({ ...Base, kind: Type.Literal("fill"), parts: PartsT, alts: Type.Array(Type.Union([Type.Array(Type.Union([Type.String(), Type.Null()])), Type.Null()])) }, Strict),
   Type.Object({ ...Base, kind: Type.Literal("project"), parts: PartsT, reveal: Type.Object({ close: Type.Number(), parts: Type.Array(RevealPartT, { minItems: 1 }) }, Strict) }, Strict),
   Type.Object({
     ...Base, kind: Type.Literal("steps"),
@@ -105,7 +107,7 @@ const ChartT = Type.Object({
 const MAX_MS = 10 * 60_000;
 /** 选择题交每一问选的位置；点图题交依次点的 K 线（图表的时间键）。 */
 const AnswerInput = Type.Union([
-  Type.Object({ picks: Type.Array(Type.Integer({ minimum: 0, maximum: 20 }), { minItems: 1, maxItems: 4 }), ms: Type.Number({ minimum: 0 }) }, Strict),
+  Type.Object({ picks: Type.Array(Type.Integer({ minimum: 0, maximum: 20 }), { minItems: 1, maxItems: 6 }), ms: Type.Number({ minimum: 0 }) }, Strict),
   Type.Object({ clicks: Type.Array(Type.String({ maxLength: 10 }), { minItems: 1, maxItems: 5 }), ms: Type.Number({ minimum: 0 }) }, Strict),
 ]);
 const NextInput = Type.Union([KindT, Type.Null()]);
@@ -182,6 +184,8 @@ export interface Feedback {
   parts: { prompt: string; choices: string[]; pick: number; answer: number }[];
   steps: StepResult[] | null;
   reveal: RevealView | null;
+  /** 打法补全选错类型时：你选的类型、它的打法、每格按它该填什么（和答案一样是 null）。选对或别的题型是 null。 */
+  fill: { type: string; key: string; cells: (string | null)[] } | null;
   evidence: string[]; rules: Drill["rules"]; hint: string | null; ms: number;
   stats: DrillStats;
 }
@@ -379,6 +383,8 @@ export class DrillBank {
       if (!d) throw new PracticeError(answers.some((x) => x.drill === id) ? "这一题已经答过了" : `没有这一题：${id}`, answers.some((x) => x.drill === id) ? 409 : 404);
       const ms = Math.min(body.ms, MAX_MS);
       const g = d.kind === "steps" ? this.gradeSteps(d, body) : this.gradeChoices(d, body);
+      // 揭晓要读这段行情的图表：先取，再删题（删掉最后一题时这段的文件也删了）
+      const reveal = d.kind === "project" ? this.revealOf(d) : null;
       const record: Answer = { drill: id, kind: d.kind, cls: d.cls, picks: g.picks, answers: g.answers, correct: g.correct, ms, at: this.now() };
       const all = [...answers, record];
       writeAtomic(this.answersFile, { version: 1, answers: all });
@@ -387,7 +393,7 @@ export class DrillBank {
       if (!rest.some((x) => x.window === d.window)) this.dropWindow(d.window);
       if (this.o.autoFill) void this.topUp();
       return {
-        correct: record.correct, ms, parts: g.parts, steps: g.steps, reveal: d.kind === "project" ? this.revealOf(d) : null,
+        correct: record.correct, ms, parts: g.parts, steps: g.steps, reveal, fill: d.kind === "fill" ? fillOf(d, g.picks[0]) : null,
         evidence: d.evidence, rules: d.rules, hint: d.hint, stats: drillStats(all),
       };
     });
@@ -452,6 +458,14 @@ export class DrillBank {
       parts: revealOf(d.reveal, d.parts.map((p) => p.choices[p.answer]), series),
     };
   }
+}
+
+/** 打法补全：第 0 问选错类型时，给出每格按那个类型该填什么。 */
+function fillOf(d: Extract<Drill, { kind: "fill" }>, pick: number): Feedback["fill"] {
+  const row = d.alts[pick];
+  if (pick === d.parts[0].answer || !row) return null;
+  const type = d.parts[0].choices[pick];
+  return { type, key: keyOfRegime(type), cells: row };
 }
 
 /** 草稿里的日期（挪过的）一律换成 T+n：T0 是题目那一根。 */

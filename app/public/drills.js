@@ -6,9 +6,10 @@ import { createDrillChart } from "./drillchart.js";
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const KINDS = [["", "按弱项"], ["chart", "看图"], ["signal", "看信号"], ["dropoff", "看抵扣价"], ["construct", "看构造和 2B"], ["play", "看打法"],
-  ["project", "推演揭晓"], ["steps", "五步点图"]];
+  ["fill", "打法补全"], ["project", "推演揭晓"], ["steps", "五步点图"]];
 const KIND_TITLE = {
   "": "错得多的题型出得多：按每种最近 20 题的错误率挑",
+  fill: "不告诉类型：先判类型，再按找打法的格子逐格选；交卷后对照归雁当天的找打法",
   project: "停在 T0 按收平推演，交卷后放出之后的真实走势对照",
   steps: "在图上依次点出一轮转折的破线、拐头、交叉",
 };
@@ -196,8 +197,14 @@ function renderFeedback() {
     b.classList.toggle("right", j === p.answer);
     b.classList.toggle("wrong", j === p.pick && j !== p.answer);
   }));
-  const parts = !f.parts.length ? "" : f.parts.length > 1 ? `<ul class="dr-answers">${f.parts.map((p, i) =>
-    `<li class="${p.pick === p.answer ? "ok" : "no"}"><b>${i + 1}.</b> ${p.pick === p.answer ? "✓" : "✗"} 答案：${esc(p.choices[p.answer])}${p.pick === p.answer ? "" : `（你选 ${esc(p.choices[p.pick])}）`}</li>`).join("")}</ul>`
+  // 打法补全选错类型：每格下面写"按你选的类型，这格该填什么"（第 0 问是类型，格子从第 1 问起）
+  const alt = (i) => {
+    const x = f.fill && i > 0 ? f.fill.cells[i - 1] : null;
+    return x ? `<span class="dr-alt">按你选的「${esc(f.fill.type)}」，这格该填：${esc(x)}</span>` : "";
+  };
+  const fillNote = f.fill ? `<p class="dr-fill-note">类型判成了「${esc(f.fill.type)}」（打法「${esc(f.fill.key)}」）。后面的格子按归雁判的类型给分；每格下面是按你选的类型该填什么，对得上说明打法记得，只是类型认错了。</p>` : "";
+  const parts = !f.parts.length ? "" : f.parts.length > 1 ? `${fillNote}<ul class="dr-answers">${f.parts.map((p, i) =>
+    `<li class="${p.pick === p.answer ? "ok" : "no"}"><b>${i + 1}.</b> ${p.pick === p.answer ? "✓" : "✗"} 答案：${esc(p.choices[p.answer])}${p.pick === p.answer ? "" : `（你选 ${esc(p.choices[p.pick])}）`}${alt(i)}</li>`).join("")}</ul>`
     : f.correct ? "" : `<p class="dr-answer">答案：<b>${esc(f.parts[0].choices[f.parts[0].answer])}</b></p>`;
   // 两问以上的题、点图题答完收起作答区（下面逐问 / 逐步写了答案），依据留在默认视图里
   $("dr-question").classList.toggle("answered", f.parts.length > 1 || Boolean(f.steps));
@@ -218,6 +225,8 @@ function renderFeedback() {
     <p class="dr-rules">${f.rules.map((r) => `<span class="dr-rule"><b>${esc(r.id)}</b>${esc(r.name)}</span>`).join("")}</p>
     ${f.hint ? `<p class="dr-hint">${esc(f.hint)}</p>` : ""}
     <ul class="dr-evidence">${f.evidence.map((e) => `<li>${esc(e)}</li>`).join("")}</ul>`;
+  // 长题（打法补全六问）答到最后一问时右栏滚在底下：作答区收起后回到顶上，先看到对错
+  box.closest(".dr-panel").scrollTop = 0;
 }
 
 /** 图表时间键 → T+n（相对题目那一根）。 */
