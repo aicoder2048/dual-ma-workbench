@@ -25,6 +25,15 @@
 .kv th{color:var(--muted);font-weight:600;white-space:nowrap}
 .kv td.num{font-family:var(--mono);font-variant-numeric:tabular-nums;white-space:nowrap}
 .tblwrap{overflow-x:auto}
+.cell{fill:none;stroke:var(--line);stroke-width:1}
+.cell-t{fill:var(--ink);font:700 15px var(--font)}
+.cell-c2{fill:var(--ink);font:600 12px var(--font)} .note2{fill:var(--muted);font-size:12px}
+.fl-q{fill:var(--panel);stroke:var(--muted);stroke-width:1.2}
+.fl-r{fill:var(--bg);stroke:var(--ma);stroke-width:1.6}
+.fl-qt{fill:var(--ink);font:600 14px var(--font)} .fl-qs{fill:var(--muted);font-size:13px}
+.fl-rt{fill:var(--ink);font:700 15px var(--font)} .fl-rs{fill:var(--muted);font-size:13px}
+.fl-arr{stroke:var(--muted);stroke-width:1.5;fill:none} .fl-headp{fill:var(--muted)}
+.hlb{fill:var(--ink);opacity:.7} .hlb.new{fill:var(--down);opacity:.85}
 </style>
 </head>
 <body>
@@ -97,7 +106,53 @@
     <p>QQQ 2026-11-20 收在 608.45，当天创新低 606.23，最高 643.28。工作台的进度从 <b>643.28</b> 算起，最少还差 2 根。</p>
   </section>
 
-  <p class="mirror"><b>顶部构造反过来读</b>：新高之后，先出现更低的高点，再出现更低的低点。进度写成"下一根最低价低于 X"，最高价超过新高那根就作废（J20、J22）。<b>极端构造</b>：第二根又创新高又跌破前一根最低价，就当新高，仍要第三根跌破它的最低价。底部同理。</p>
+  <section class="panel" data-section="顶部构造和极端构造">
+    <h2>顶部构造：反过来读，外加作废和极端构造（示意）</h2>
+    <div class="chart">
+      <svg viewBox="0 0 910 294" role="img" aria-label="三个小图：顶部构造三步，新高之后先跌破新高那根的最低价、再跌破下一根的最低价就完成；作废，最高价又超过新高那根就从新高重新找；极端构造，第二根又创新高又跌破前一根最低价，就当新高，要第三根跌破它的最低价才完成">
+<rect class="cell" x="6" y="6" width="292" height="282" rx="8"/>
+<text class="cell-t" x="152" y="32" text-anchor="middle">顶部构造三步（底部反过来）</text>
+<line class="ref void" x1="28" y1="90" x2="212" y2="90"/><text class="rl void" x="218" y="94">作废线</text>
+<line class="ref" x1="28" y1="138" x2="212" y2="138"/><text class="rl" x="218" y="142">走一步</text>
+<line class="ref done" x1="28" y1="170" x2="212" y2="170"/><text class="rl done" x="218" y="174">完成线</text>
+<rect class="hlb" x="49" y="90" width="14" height="48" rx="2"/>
+<text class="note2" x="56" y="214" text-anchor="middle">新高</text>
+<rect class="hlb" x="109" y="110" width="14" height="60" rx="2"/>
+<text class="note2" x="116" y="214" text-anchor="middle">更低高点</text>
+<rect class="hlb" x="169" y="140" width="14" height="52" rx="2"/>
+<text class="note2" x="176" y="214" text-anchor="middle">更低低点</text>
+<text class="cell-c2" x="152" y="252" text-anchor="middle">跌破新高那根的最低价：走一步</text>
+<text class="note2" x="152" y="272" text-anchor="middle">再跌破这根的最低价：完成</text>
+<rect class="cell" x="312" y="6" width="292" height="282" rx="8"/>
+<text class="cell-t" x="458" y="32" text-anchor="middle">作废：又创新高</text>
+<line class="ref void" x1="334" y1="90" x2="518" y2="90"/><text class="rl void" x="524" y="94">作废线</text>
+<rect class="hlb" x="355" y="90" width="14" height="60" rx="2"/>
+<text class="note2" x="362" y="214" text-anchor="middle">新高</text>
+<rect class="hlb" x="415" y="110" width="14" height="55" rx="2"/>
+<text class="note2" x="422" y="214" text-anchor="middle">更低高点</text>
+<rect class="hlb new" x="475" y="72" width="14" height="58" rx="2"/>
+<text class="note2" x="482" y="214" text-anchor="middle">又创新高</text>
+<text class="cell-c2" x="458" y="252" text-anchor="middle">最高价超过新高那根：作废</text>
+<text class="note2" x="458" y="272" text-anchor="middle">从这根新高重新找（J22）</text>
+<rect class="cell" x="618" y="6" width="292" height="282" rx="8"/>
+<text class="cell-t" x="764" y="32" text-anchor="middle">极端构造</text>
+<line class="ref done" x1="640" y1="172" x2="824" y2="172"/><text class="rl done" x="830" y="176">完成线</text>
+<rect class="hlb" x="661" y="100" width="14" height="50" rx="2"/>
+<text class="note2" x="668" y="214" text-anchor="middle">新高</text>
+<rect class="hlb new" x="721" y="84" width="14" height="88" rx="2"/>
+<text class="note2" x="728" y="214" text-anchor="middle">当新高</text>
+<rect class="hlb" x="781" y="130" width="14" height="60" rx="2"/>
+<text class="note2" x="788" y="214" text-anchor="middle">跌破它</text>
+<text class="cell-c2" x="764" y="252" text-anchor="middle">第二根又创新高、又跌破前一根最低价</text>
+<text class="note2" x="764" y="272" text-anchor="middle">就当新高；第三根跌破它的最低价才完成</text>
+      </svg>
+    </div>
+    <div class="legend">
+      <span>柱子是一根 K 线的最低价到最高价</span>
+      <span>进度写成"下一根最低价低于 X"（J20、J22）</span>
+      <span>底部构造同理，上下反过来</span>
+    </div>
+  </section>
 
   <section class="panel">
     <h2>和加速行情的打法有什么关系</h2>
@@ -110,7 +165,26 @@
         <tr><th>持仓，见了构造</th><td>只是提醒。等 20 线组拐头向下再走（P9）</td><td>不加仓，等 20 线组拐头向上</td></tr>
       </table>
     </div>
-    <p style="margin-top:10px">交易计划写成"先等底部构造完成（最高价越过 X）"，再加收盘站上 EMA20 和 MA20 抵扣价中较高者。</p>
+  </section>
+
+  <section class="panel">
+    <h2>加速下跌的进场：两道门槛按顺序过</h2>
+    <div class="chart">
+      <svg viewBox="0 10 910 98" role="img" aria-label="流程：① 底部构造完成，最高价越过完成价；② 收盘站上 EMA20 和 MA20 抵扣价中较高的那个，20 线组一起拐头向上；然后进场，进场价取两道门槛里较高的">
+<defs><marker id="fl-head" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="fl-headp" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="fl-q" x="10" y="20" width="260" height="78" rx="8"/>
+<text class="fl-qt" x="140.0" y="54.0" text-anchor="middle">① 底部构造完成</text>
+<text class="fl-qs" x="140.0" y="74.0" text-anchor="middle">最高价越过 X（完成价）</text>
+<line class="fl-arr" x1="270" y1="59" x2="306" y2="59" marker-end="url(#fl-head)"/>
+<rect class="fl-q" x="310" y="20" width="360" height="78" rx="8"/>
+<text class="fl-qt" x="490.0" y="54.0" text-anchor="middle">② 收盘站上 EMA20 和 MA20 抵扣价</text>
+<text class="fl-qs" x="490.0" y="74.0" text-anchor="middle">中较高的那个：20 线组一起拐头向上（J19）</text>
+<line class="fl-arr" x1="670" y1="59" x2="706" y2="59" marker-end="url(#fl-head)"/>
+<rect class="fl-r" x="710" y="20" width="190" height="78" rx="8"/>
+<text class="fl-rt" x="805.0" y="54.0" text-anchor="middle">进场</text>
+<text class="fl-rs" x="805.0" y="74.0" text-anchor="middle">进场价取两道门槛里较高的</text>
+      </svg>
+    </div>
   </section>
 
   <footer class="src">

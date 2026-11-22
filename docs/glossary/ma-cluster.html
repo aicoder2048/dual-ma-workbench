@@ -17,6 +17,16 @@
 .panel p{margin:0 0 8px;font-size:14px;color:var(--muted)} .panel p b{color:var(--ink)}
 .panel ul{margin:0;padding-left:18px;color:var(--muted);font-size:14px;display:grid;gap:6px} .panel ul b{color:var(--ink)}
 .read{font-size:12px;font-weight:700;color:var(--muted);border:1px solid var(--line);border-radius:4px;padding:0 5px;margin-right:4px}
+.cell{fill:none;stroke:var(--line);stroke-width:1}
+.cell-t{fill:var(--ink);font:700 15px var(--font)}
+.cell-c2{fill:var(--ink);font:600 12px var(--font)} .note2{fill:var(--muted);font-size:12px}
+.fl-q{fill:var(--panel);stroke:var(--muted);stroke-width:1.2}
+.fl-r{fill:var(--bg);stroke:var(--ma);stroke-width:1.6}
+.fl-qt{fill:var(--ink);font:600 14px var(--font)} .fl-qs{fill:var(--muted);font-size:13px}
+.fl-rt{fill:var(--ink);font:700 15px var(--font)} .fl-rs{fill:var(--muted);font-size:13px}
+.fl-arr{stroke:var(--muted);stroke-width:1.5;fill:none} .fl-headp{fill:var(--muted)}
+.px{fill:none;stroke:var(--close);stroke-width:2.2}
+.blk{stroke:var(--down);stroke-width:2.4}
 </style>
 </head>
 <body>
@@ -197,7 +207,42 @@
     </ul>
   </section>
 
-  <p class="mirror"><b>它也是大行情的起点</b>：视频 G 14:33「往往是一波大行情的开始」。看密集出现在哪：<b>下跌途中的</b>，反弹时是阻力；<b>横盘末端的</b>，是埋伏的前提（P1、P2、J13）。</p>
+  <section class="panel" data-section="密集出现在哪">
+    <h2>密集出现在哪，用法不同（示意，不是真实行情）</h2>
+    <div class="chart">
+      <svg viewBox="0 0 910 274" role="img" aria-label="两个小图：左边下跌途中的密集，价格跌下去后反弹到这一带受阻，是第一阻力/目标位；右边横盘末端的密集，线越挤越紧然后张嘴向上，是埋伏的前提">
+<rect class="cell" x="6" y="6" width="440" height="262" rx="8"/>
+<text class="cell-t" x="226" y="32" text-anchor="middle">下跌途中的密集：反弹时是阻力</text>
+<rect class="dense" x="140" y="96" width="110" height="22" rx="3"/>
+<path class="ma l60" d="M30,60 Q95,90 140,104 L250,110 Q330,140 410,200"/>
+<path class="ema" d="M30,80 Q100,100 140,110 L250,104 Q320,150 410,210"/>
+<path class="px" d="M30,70 L80,100 L140,112 L190,100 L250,116 L300,170 L345,205 L385,150 L405,118"/>
+<line class="lvl" x1="250" y1="107" x2="430" y2="107"/>
+<line class="blk" x1="398" y1="100" x2="412" y2="114"/><line class="blk" x1="412" y1="100" x2="398" y2="114"/>
+<text class="note2" x="195" y="88" text-anchor="middle">线挤在一起</text>
+<text class="cell-c2" x="226" y="236" text-anchor="middle">拐头向上以后，最近的这片密集是第一阻力/目标位</text>
+<text class="note2" x="226" y="256" text-anchor="middle">收盘站上过的不再算（P25、ADR 0025）</text>
+<rect class="cell" x="464" y="6" width="440" height="262" rx="8"/>
+<text class="cell-t" x="684" y="32" text-anchor="middle">横盘末端的密集：埋伏的前提</text>
+<rect class="dense" x="700" y="118" width="90" height="22" rx="3"/>
+<path class="ma l60" d="M490,150 Q560,115 620,140 Q670,160 700,132 L790,128 Q830,110 870,80"/>
+<path class="ema" d="M490,110 Q560,165 620,125 Q670,105 700,126 L790,134 Q835,100 870,62"/>
+<path class="px" d="M490,130 L530,105 L570,160 L610,112 L650,150 L700,124 L760,136 L790,128 L830,90 L868,58"/>
+<text class="note2" x="745" y="110" text-anchor="middle">越挤越紧</text>
+<text class="note2" x="842" y="132" text-anchor="middle">张嘴</text>
+<text class="cell-c2" x="684" y="236" text-anchor="middle">横得够久、线够密（相差 &lt; 2%）、开始张嘴，才小仓位埋伏</text>
+<text class="note2" x="684" y="256" text-anchor="middle">P1、P2、J13</text>
+      </svg>
+    </div>
+    <div class="legend">
+      <span><i style="border-color:var(--g60)"></i>60 线组</span>
+      <span><i style="border-color:var(--ema);border-top-width:2px"></i>20 线组</span>
+      <span><i style="border-color:var(--close);border-top-width:2px"></i>价格</span>
+      <span>浅紫色块：线挤在一起的那段</span>
+    </div>
+  </section>
+
+  <p class="mirror"><b>横盘末端的密集也是大行情的起点</b>：视频 G 14:33「往往是一波大行情的开始」（P1、P2、J13）。</p>
   <p class="mirror"><b>脚本怎么认（找阻力用）</b>：20、60 四条线相差不到价格的 2%，同时 MA60 比 20 根前低，就算一片密集区。价位取这几条线的平均。六条线都挤在一起，叫"20/60/120 全部汇聚"。正在形成的那片不算。2% 借自 J13，20 根是脚本的选择。</p>
   <footer class="src">
     <div><b>规则</b>：<span class="tag">P25</span> 下跌趋势拐头向上，下跌途中的均线密集区是阻力，也是目标位。<span class="tag">J13</span> 横盘末期：均线相差 &lt; 2%。<span class="tag">J34</span> 周线拐头先看日线均线密集。<span class="tag">ADR 0025</span> 收盘站上过的密集区不再当目标位。</div>
