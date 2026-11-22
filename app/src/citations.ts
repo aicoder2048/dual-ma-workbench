@@ -291,7 +291,7 @@ export function buildFacts(a: Analysis): Facts {
   put("趋势初判", "类型 × 阶段（规则判定）", a.regime.name);
   put("打法", "脚本按类型、阶段和规则结果给的打法", a.play.text);
   const ln = a.lean;
-  put("模糊判断", "接下来几周对谁有利（类型线 MA60、MA120 的方向和能保持几天）", `${ln.label}（${ln.score >= 0 ? "+" : ""}${ln.score.toFixed(2)}）`);
+  put("模糊判断", "接下来约 6 周对谁有利（类型线 MA60、MA120 的方向和能保持几天）", `${ln.label}（${ln.score >= 0 ? "+" : ""}${ln.score.toFixed(2)}）`);
   for (const b of ln.basis) {
     put(`模糊判断.${b.line}`, `${b.line} 收盘不变能朝今天的方向走几天`, `${b.direction}，${b.hold_days}/${b.days} 天；天天这样走要守在 ${f2(b.level)}（${pct(b.level_pct, 1)}）`);
   }
@@ -354,7 +354,7 @@ export function buildFacts(a: Analysis): Facts {
   if (a.bwl) put("黑绿线", `黑绿线读数（P40–P45，颜色：${a.bwl.source.name}；只是读数，交易计划没用它）`, a.bwl.text);
   for (const [k, label, value] of profileFacts(a)) put(k, label, value);
   const fc = buildForecast(a, plans);
-  put("推演.结论", "模糊判断翻成的一句话：均线接下来几周往哪走，回撤 / 反弹该怎么看", fc.headline);
+  put("推演.结论", "模糊判断翻成的一句话：均线接下来约 6 周往哪走，回撤 / 反弹该怎么看", fc.headline);
   for (const g of fc.groups) put(`推演.${g.group}线组`, `${g.group} 线组最近的关键变化：现在朝哪走、收盘不变哪天拐头、明天站上 / 跌破哪就拐头`, `${g.now}：${g.text}${g.aux ? `${g.aux}（推演求解，辅助）` : ""}`);
   put("推演.保持", `类型线 MA60、MA120 未来 ${fc.days} 天能保持多久、守在哪`, fc.hold);
   put("推演.最早", "这套打法的条件最早哪天能齐", fc.earliest);

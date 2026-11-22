@@ -48,7 +48,7 @@ export interface Check { id: string; name: string; status: RuleResult["status"];
  */
 export interface Forecast {
   days: number;
-  /** 模糊判断翻成动作的一句话，例如"接下来几周均线向下：反弹是减仓机会，不是抄底机会"（LEAN_CALL）。 */
+  /** 模糊判断翻成动作的一句话，例如"接下来约 6 周均线向下：反弹是减仓机会，不是抄底机会"（LEAN_CALL）。 */
   headline: string;
   /** 20、60 线组最近的关键变化；aux 是推演求解给的那句（辅助），没有就是 null。 */
   groups: GroupChange[];
@@ -738,7 +738,7 @@ export function buildForecast(a: Analysis, plans = buildPlans(a)): Forecast {
   const earliest = earliestOf(a, l, key, plans);
   const aux = [...(earliest.solved ? ["earliest" as const] : []), ...(solved ? ["invalid" as const] : [])];
   return {
-    days: FORECAST_DAYS, headline: `接下来几周${LEAN_CALL[a.lean.label]}`, groups: [groupChange(a, 20), groupChange(a, 60)], leanEvidence: LEAN_EVIDENCE,
+    days: FORECAST_DAYS, headline: `接下来约 6 周${LEAN_CALL[a.lean.label]}`, groups: [groupChange(a, 20), groupChange(a, 60)], leanEvidence: LEAN_EVIDENCE,
     hold: holdText(a), earliest: earliest.text, invalid, aux, solves: solves.slice(0, 3), evidence: SOLVER_EVIDENCE,
   };
 }

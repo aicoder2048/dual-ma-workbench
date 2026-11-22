@@ -512,7 +512,7 @@ def render_markdown(a: dict) -> str:
     if a["warning"]:
         out += ["> [!warning] " + a["warning"], ""]
     ln, af, r = a["lean"], a["lean"]["after"], a["regime"]
-    out += ["## 0) 模糊判断：接下来几周对谁有利", "",
+    out += ["## 0) 模糊判断：接下来约 6 周对谁有利", "",
             f"**{ln['label']}**（分数 {ln['score']:+.2f}，−1 最空、+1 最多）。依据是类型线组往哪走、能保持多久：", ""]
     for b in ln["basis"]:
         way = {"上": "上行", "下": "下行", "平": "走平"}[b["direction"]]

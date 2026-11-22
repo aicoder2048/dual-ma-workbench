@@ -155,10 +155,10 @@ describe("做推演：三问，跨度 30 天", () => {
 
 describe("做推演先给结论：模糊判断翻成动作，再说关键变化（ADR 0030）", () => {
   test("明显偏空（NVDA）：反弹是减仓机会，不是抄底机会", () => {
-    expect(buildForecast(bear).headline).toBe("接下来几周均线向下：反弹是减仓机会，不是抄底机会");
+    expect(buildForecast(bear).headline).toBe("接下来约 6 周均线向下：反弹是减仓机会，不是抄底机会");
   });
   test("明显偏多（SPY 2024-04-19）：回撤是加仓机会", () => {
-    expect(buildForecast(spy).headline).toBe("接下来几周均线向上：回撤是加仓机会，不是离场信号");
+    expect(buildForecast(spy).headline).toBe("接下来约 6 周均线向上：回撤是加仓机会，不是离场信号");
   });
   test("五档各一句；不明时说不明、按打法的价位做", () => {
     expect(new Set(Object.values(LEAN_CALL)).size).toBe(5);
