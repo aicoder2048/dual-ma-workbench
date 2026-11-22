@@ -27,7 +27,7 @@ let md = readFileSync(SRC, "utf8")
 // 每个部分、每个术语另起一页；部分标题页只放标题，术语紧跟着另起一页会留大片空白，所以部分标题和它的第一个术语放同一页
 md = md.replace(/\n(#{1,2} )/g, (m, h, off) => {
   const prev = md.slice(Math.max(0, off - 200), off);
-  return /\n# [^\n]*\n\s*$/.test(prev) ? m : `\n${BREAK}${h}`;
+  return /(^|\n)# [^\n]*\n\s*$/.test(prev) ? m : `\n${BREAK}${h}`;
 });
 // 图和紧跟的图注包进一个 minipage，不让图注一个人掉到下一页顶上
 md = md.replace(/^(!\[\]\([^)]+\))\n\n(图 \d+　[^\n]*)$/gm,
