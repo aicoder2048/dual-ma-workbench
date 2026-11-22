@@ -13,7 +13,7 @@ import { closePage, initPracticePage, openPage } from "./practicepage.js";
 import { closePage as closeBacktest, initBacktest } from "./backtest.js";
 import { resolveTicker } from "./names.js";
 import { applyRemoteSettings, initSettings, openSettings } from "./settings.js";
-import { chartLevels, conclusionCard, forecastAnswer, holdingRow, installTips, leanName, planBody, playAnswer, pnlText, stanceOf, stepVisuals, trendAnswer } from "./viz.js";
+import { chartLevels, conclusionCard, deepWord, forecastAnswer, holdingRow, installTips, leanName, planBody, playAnswer, pnlText, stanceOf, stepVisuals, trendAnswer } from "./viz.js";
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -110,7 +110,7 @@ function renderKpis(a) {
   const sign = (x, d = 2) => `${x >= 0 ? "+" : ""}${x.toFixed(d)}`;
   const tiles = [
     { k: "收盘", v: a.close.toFixed(2), s: `<span class="${a.change_pct >= 0 ? "bullish" : "bearish"}">${sign(a.change_pct)}%</span>` },
-    { k: "趋势类型", v: `<span class="${stanceOf(a.lean)}">${a.regime.name}</span>`, s: `MA ${a.arr_ma} · EMA ${a.arr_ema}` },
+    { k: "趋势类型", v: `<span class="${stanceOf(a.lean)}">${a.regime.name}</span>${deepWord(a.regime) ? `<small class="kpi-deep">${deepWord(a.regime)}</small>` : ""}`, s: `MA ${a.arr_ma} · EMA ${a.arr_ema}` },
     { k: "离 20 线", v: `${sign(a.bias20, 1)}%`, s: `历史 ${Math.round(a.bias_pctl * 100)}% 分位` },
   ];
   if (a.volume) tiles.push({ k: "量比", v: `${a.volume.ratio.toFixed(1)}×`, s: `近 20 日大量 ${a.volume.spikes.length} 天` });

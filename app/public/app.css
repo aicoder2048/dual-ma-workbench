@@ -133,6 +133,7 @@ h1 { margin: 0; font-size: 30px; line-height: 1.15; }
 .kpi .k { font-size: 11px; color: var(--muted); }
 .kpi .v { font: 600 17px/1.3 var(--mono); }
 .kpi .s { font-size: 11px; color: var(--muted); }
+.kpi .kpi-deep { margin-left: 6px; font: 600 11px var(--sans, inherit); color: var(--muted); border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; vertical-align: middle; }
 .warn { background: var(--warn-bg); color: var(--warn-fg); border-radius: 10px; padding: 10px 14px; font-size: 14px; display: flex; gap: 10px; align-items: flex-start; }
 #warning-text { flex: 1; }
 .warn-x { border: 0; background: transparent; color: inherit; cursor: pointer; font-size: 18px; line-height: 1; padding: 0 2px; opacity: .7; }
@@ -663,6 +664,18 @@ details.points-box .points { margin-top: 6px; }
 .viz figcaption .ln-where, .viz figcaption .ln-pairs, .viz figcaption .ln-key { display: block; }
 .check .viz.clockface { width: 100%; box-sizing: border-box; display: grid; grid-template-columns: 110px minmax(0, 1fr); gap: 14px; align-items: center; margin: 6px 0; }
 .check .viz.clockface svg { width: 110px; height: 160px; }
+.check .viz.stagetree { margin: 8px 0; overflow-x: auto; }
+.check .viz.stagetree svg { display: block; width: 100%; max-width: 640px; min-width: 520px; height: auto; }
+.check .viz.stagetree figcaption { font-size: 12px; color: var(--muted); margin-top: 4px; }
+.stage-tree .st-q, .stage-tree .st-res { fill: var(--card); stroke: var(--line); stroke-width: 1.2; }
+.stage-tree .st-q.on { stroke: var(--muted); }
+.stage-tree .st-res.on { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 2; }
+.stage-tree .st-tt { fill: var(--fg); font: 600 13px var(--sans); }
+.stage-tree .st-sub { fill: var(--muted); font: 12px var(--sans); }
+.stage-tree .st-arr { stroke: var(--line); stroke-width: 1.4; }
+.stage-tree .st-arr.on { stroke: var(--accent); stroke-width: 2.2; }
+.stage-tree .st-hd { fill: var(--line); } .stage-tree .st-hd.on { fill: var(--accent); }
+.stage-tree .st-lab { fill: var(--faint); font: 12px var(--sans); } .stage-tree .st-lab.on { fill: var(--accent); font-weight: 600; }
 .check .viz.clockface figcaption { font-size: 13px; margin: 0; }
 .clockface .cz { stroke: var(--card); stroke-width: 1; }
 .clockface .cz.fast { fill: color-mix(in srgb, var(--accent) 45%, var(--card)); }

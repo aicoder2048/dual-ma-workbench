@@ -333,3 +333,50 @@ describe("做推演：先给结论，再给数据（ADR 0030）", () => {
     expect(tip).toContain("未来一段时间");
   });
 });
+
+describe("看大局第 ④ 问：稳定类型里 20/60 已交叉是深回撤，不是「还没交叉」（J7）", () => {
+  const plain = (h: string) => h.replace(/<[^>]+>/g, "").replace(/\s+/g, "");
+  const fourth = (a: Analysis) => {
+    const r = buildReport(a);
+    const ev = stepVisuals("big_picture", r.visual, r.forecast);
+    return plain(ev.slice(ev.indexOf("④")));
+  };
+  const spy = spyFixture as unknown as Analysis;
+  test("已交叉：写深回撤，不写还没交叉，也不说交叉了就算转折", () => {
+    const deep = { ...spy, regime: { ...spy.regime, crossed: true } } as Analysis;
+    const t = fourth(deep);
+    expect(t).toContain("20/60已交叉");
+    expect(t).toContain("深回撤");
+    expect(t).not.toContain("还没交叉");
+    expect(t).not.toContain("交叉了算转折");
+  });
+  test("没交叉：照旧是普通回撤", () => {
+    const t = fourth({ ...spy, regime: { ...spy.regime, crossed: false } } as Analysis);
+    expect(t).toContain("还没交叉");
+    expect(t).not.toContain("20/60已交叉");
+    expect(t).not.toContain("是深回撤");
+  });
+});
+
+describe("看大局第 ④ 问：阶段决策树高亮当天走的路；过渡状态写明为什么", () => {
+  const spy = spyFixture as unknown as Analysis;
+  const ev = (a: Analysis) => { const r = buildReport(a); return stepVisuals("big_picture", r.visual, r.forecast); };
+  const result = (h: string) => h.match(/class="stage-tree"[^>]*data-result="([^"]+)"/)?.[1];
+  test("普通回撤：① 是 → ② 否，落在回撤中", () => expect(result(ev(spy))).toBe("回撤中"));
+  test("20/60 已交叉：① 是 → ② 是 → ③ 稳定，落在深回撤", () =>
+    expect(result(ev({ ...spy, regime: { ...spy.regime, crossed: true } } as Analysis))).toBe("深回撤"));
+  test("高亮只亮当天那条路：亮着的结果框正好一个", () => {
+    const h = ev(spy);
+    const tree = h.slice(h.indexOf('class="stage-tree"'), h.indexOf("</svg>", h.indexOf('class="stage-tree"')));
+    expect(tree.match(/class="st-res on"/g)?.length).toBe(1);
+  });
+  test("过渡状态：不画树，写出是哪一种、凭什么", () => {
+    const why = "60 在 120 上方，但 60 线组已经向下；20/60 已是空头、20 线组正往上走：结构已经坏了，这是反弹";
+    const a = { ...spy, regime: { ...spy.regime, type: null, stage: null, transition: "空头结构反弹中", name: "空头结构反弹中", why } } as unknown as Analysis;
+    const h = ev(a);
+    expect(h).not.toContain('class="stage-tree"');
+    const t = h.replace(/<[^>]+>/g, "").replace(/\s+/g, "");
+    expect(t).toContain("20/60已是空头");
+    expect(t).not.toContain("类型没定，阶段按过渡状态看");
+  });
+});
