@@ -71,16 +71,16 @@ describe("结论：做法跟着阶段走，带触发价、止损和风险（SPY 
   test("盈亏比不到 3:1：空仓的做法改成不做，写出差多少", () => {
     expect(p.flat.action).toBe("不做：盈亏比 1.94:1，不到 3:1。");
     const rr = p.flat.items.find((i) => i.label === "盈亏比")!;
-    expect(rr.text).toContain("目标得到 537.73");
+    expect(rr.text).toContain("第一阻力得在 537.73 以上");
     expect(rr.text).toContain("止损收紧到 492.40");
     expect(rr.rules).toEqual(["P24"]);
   });
   test("空仓的五样都在计划里：触发、止损、目标、盈亏比、股数（没填账户给每 1 万元风险的股数）", () => {
     const labels = p.flat.items.map((i) => i.label);
-    for (const l of ["目标", "盈亏比", "股数"]) expect(labels).toContain(l);
-    expect(p.flat.items.find((i) => i.label === "目标")!.text).toContain("前高 524.61");
-    expect(p.flat.items.find((i) => i.label === "到目标")!.text).toBe(spy.trade_plan.flat.at_target!); // P25 读交易计划，不在前端重算
-    expect(p.holding.items.find((i) => i.label === "到目标")!.text).toContain("就继续拿，按止损和失效离场");
+    for (const l of ["阻力位/目标位", "盈亏比", "股数"]) expect(labels).toContain(l);
+    expect(p.flat.items.find((i) => i.label === "阻力位/目标位")!.text).toContain("前高 524.61");
+    expect(p.flat.items.find((i) => i.label === "到第一阻力")!.text).toBe(spy.trade_plan.flat.at_target!); // P25 读交易计划，不在前端重算
+    expect(p.holding.items.find((i) => i.label === "到第一阻力")!.text).toContain("就继续拿，按止损和失效离场");
     expect(p.flat.items.find((i) => i.label === "股数")!.text).toContain("每 1 万元风险对应 804 股");
     expect(p.flat.trade).toBe(spy.trade_plan.flat);
     expect(p.holding.trade).toBe(spy.trade_plan.holding);
@@ -683,8 +683,8 @@ describe("下跌趋势的持仓没有目标位：数据字段照脚本的说明�
   });
   test("持仓那份计划不列「目标」「到目标」两行", () => {
     const labels = buildPlans(a).holding.items.map((i) => i.label);
-    expect(labels).not.toContain("目标");
-    expect(labels).not.toContain("到目标");
+    expect(labels).not.toContain("阻力位/目标位");
+    expect(labels).not.toContain("到第一阻力");
   });
 });
 
@@ -699,14 +699,14 @@ describe("上方的筹码山只作参考（P38，ADR 0018）：不进目标、�
   test("单列一行「参考」：山脚（离现价多远）到山顶这条带，写明只作参考、不算进盈亏比，规则 P38", () => {
     expect(row(p.flat, "参考")).toEqual({
       label: "参考", rules: ["P38"],
-      text: "上方最近的筹码山：山脚 510.00（+3.0%）到山顶 520.00 这条带。只作参考，不排进第一目标，不算进盈亏比。",
+      text: "上方最近的筹码山：山脚 510.00（+3.0%）到山顶 520.00 这条带。只作参考，不排进第一阻力，不算进盈亏比。",
     });
     expect(row(p.holding, "参考")).toEqual(row(p.flat, "参考"));
   });
   test("「目标」「盈亏比」两行和没有筹码山时一样，目标的规则只有 P25", () => {
-    expect(row(p.flat, "目标")).toEqual(row(plain.flat, "目标"));
+    expect(row(p.flat, "阻力位/目标位")).toEqual(row(plain.flat, "阻力位/目标位"));
     expect(row(p.flat, "盈亏比")).toEqual(row(plain.flat, "盈亏比"));
-    expect(row(p.flat, "目标")!).toMatchObject({ rules: ["P25"] });
+    expect(row(p.flat, "阻力位/目标位")!).toMatchObject({ rules: ["P25"] });
   });
   test("上方没有整座的筹码山：不写这一行", () => {
     expect(row(plain.flat, "参考")).toBeUndefined();

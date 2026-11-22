@@ -42,9 +42,9 @@ const turnsWhy = (c) => (c.practice ? "练习里不标：这是题目要你自�
 export const LAYERS = [
   { key: "ma", group: "均线", label: "均线", hint: "MA、EMA 20 / 60 / 120", presets: SIMPLE, available: always,
     title: "6 条均线和点开了的 MA200。画哪几条、聚焦哪一组，在上面的图例里选" },
-  { key: "levels", group: "价位线", label: "价位线", hint: "触发、止损、目标、判断失效", presets: SIMPLE,
+  { key: "levels", group: "价位线", label: "价位线", hint: "触发、止损、阻力、判断失效", presets: SIMPLE,
     available: (c) => (c.replay ? "回放时收起：价位线属于最新一天的结论" : null),
-    title: "把结论里的触发价、止损、目标和推翻判断的价位画成虚线" },
+    title: "把结论里的触发价、止损、阻力位和推翻判断的价位画成虚线" },
   { key: "drops", group: "抵扣价", label: "抵扣价", hint: "小黄点", presets: SIMPLE, available: always,
     title: "小黄点：明天各条 MA 要扣掉的那根 K 线（抵扣价）" },
   // 颜色按什么规则算、怎么读，都由图表数据的 tone_source 说（自带规则或本机的着色插件），这里不留一份
@@ -61,14 +61,14 @@ export const LAYERS = [
   { key: "swings", group: "波段", label: "波段", hint: "连起构造高低点的细线", presets: STRUCTURE, available: structureWhy,
     title: "波段：把顶部构造的最高点连到底部构造的最低点，最后一段虚线是还在形成的那个构造" },
   { key: "gaps", group: "缺口", label: "缺口", hint: "没补的向下缺口", presets: STRUCTURE, available: gapsWhy,
-    title: "没补的向下缺口：从跳空那天画到现在的色带，上沿是跳空前一天的最低价，下沿是还没补的那段的底；交易计划拿它当目标位的标「目标位」。默认只画目标位和离现价最近的上下各一个" },
+    title: "没补的向下缺口：从跳空那天画到现在的色带，上沿是跳空前一天的最低价，下沿是还没补的那段的底；交易计划拿它当阻力位的标「阻力位」。默认只画阻力位和离现价最近的上下各一个" },
   { key: "gapsAll", group: "缺口", label: "全部", presets: ALL,
-    hint: (c) => `离得远、不是目标位的那 ${c.moreGaps} 个也画`,
+    hint: (c) => `离得远、不是阻力位的那 ${c.moreGaps} 个也画`,
     available: (c) => (c.moreGaps > 0 ? null : "没有更多：要紧的那几个就是全部"),
-    title: "把离得远、不是目标位的缺口也画出来" },
+    title: "把离得远、不是阻力位的缺口也画出来" },
   { key: "profile", group: "筹码", label: "筹码", hint: "按价格统计成交量", presets: ALL, available: profileWhy,
     title: "筹码分布：按价格统计图上看得见的那段 K 线的成交量，画成贴着价格轴的横向山（视频 O）。"
-      + "虚线框是筹码山，标出山脚（下沿）、山顶（上沿）；交易计划记下的上方最近那座描细实线，写着「参考带」（P38）：只作参考，不排进第一目标、不算盈亏比。筹码分布只当价位参考，不是买卖信号" },
+      + "虚线框是筹码山，标出山脚（下沿）、山顶（上沿）；交易计划记下的上方最近那座描细实线，写着「参考带」（P38）：只作参考，不排进第一阻力、不算盈亏比。筹码分布只当价位参考，不是买卖信号" },
 ];
 
 /** 一个预设的状态 { [key]: boolean }。 */

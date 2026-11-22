@@ -747,7 +747,7 @@ describe("K 线图工具", () => {
     // NVDA 加速下跌：等构造完成、20 线组一起拐头（212.21），拐头失败止损 183.08，目标缺口 228.86；推翻判断：30 天内 20/60 双金叉的价位
     const on = await levels();
     expect(on.map((l: { kind: string; title: string }) => [l.kind, l.title]))
-      .toEqual([["trigger", "触发"], ["stop", "进场后止损"], ["target", "目标"], ["invalid", "判断失效"]]);
+      .toEqual([["trigger", "触发"], ["stop", "进场后止损"], ["target", "第一阻力/目标位"], ["invalid", "判断失效"]]);
     expect(on[0].price).toBe(212.21);
     expect(on[1].price).toBeCloseTo(183.08, 2);
     expect(on[2].price).toBe(228.86);
@@ -1149,7 +1149,7 @@ describe("缺口", () => {
     expect((await bands()).map((b: any) => [b.date, b.from, b.to, b.target])).toEqual([
       [GAPS[0].date, 150, CHART.candles.length - 1, false], [GAPS[1].date, 270, CHART.candles.length - 1, true],
     ]);
-    expect((await bands())[1].label).toBe(`缺口 ${GAPS[1].bottom.toFixed(2)}–${GAPS[1].top.toFixed(2)} · 目标位`);
+    expect((await bands())[1].label).toBe(`缺口 ${GAPS[1].bottom.toFixed(2)}–${GAPS[1].top.toFixed(2)} · 阻力位`);
     // 色带真的画在图上：关掉缺口后图的样子变了（结构标注没动）
     const shot = () => page.locator("#chart").screenshot();
     const on = await shot();
@@ -1245,12 +1245,12 @@ describe("筹码分布", () => {
     })).toBe(true);
     const refText = (await refRow.textContent())!;
     expect(refText).toContain("参考上方最近的筹码山：山脚 175.00");
-    expect(refText).toContain("到山顶 185.00 这条带。只作参考，不排进第一目标，不算进盈亏比。");
+    expect(refText).toContain("到山顶 185.00 这条带。只作参考，不排进第一阻力，不算进盈亏比。");
     expect(refText).toContain("P38");
-    const targetText = (await page.locator(planRows, { hasText: "目标 1" }).textContent())!;
+    const targetText = (await page.locator(planRows, { hasText: "第一阻力/目标位：" }).textContent())!;
     expect([targetText.includes("缺口"), targetText.includes("筹码山")]).toEqual([true, false]);
     const lines = await page.evaluate(async () => (await import("/app.js")).getChart().levels());
-    expect(lines.find((l: any) => l.title === "目标").price).toBe((nvda as Analysis).trade_plan.flat.targets[0].price);
+    expect(lines.find((l: any) => l.title === "第一阻力/目标位").price).toBe((nvda as Analysis).trade_plan.flat.targets[0].price);
     await scrollIntoCenter(page, ".chart-card");
     // ⌘ + 滚轮放大：可见范围变短，筹码按新的范围重算
     const box = (await page.locator("#chart").boundingBox())!;
@@ -1477,7 +1477,7 @@ describe("图面去杂：缺口只画要紧的，小字不压在一起", () => {
     await pickPreset(page, "structure");
     expect(await bandDates(page)).toEqual([CROWD_GAPS[0].date, CROWD_GAPS[7].date]);
     const more = await layerItem(page, "gapsAll");
-    expect([more.disabled, more.pressed, more.text]).toEqual([false, "false", "全部离得远、不是目标位的那 6 个也画"]);
+    expect([more.disabled, more.pressed, more.text]).toEqual([false, "false", "全部离得远、不是阻力位的那 6 个也画"]);
     expect(await notCovered(page, layerBtn("gapsAll"))).toBe(true);
     await page.keyboard.press("Escape");
     const before = await tidy(page);
@@ -1491,7 +1491,7 @@ describe("图面去杂：缺口只画要紧的，小字不压在一起", () => {
     const all = await tidy(page);
     expect(all).toMatchObject({ pairs: [], onLine: [] });
     // 目标位那条一定写出来
-    expect((await api<any>(page, "labels")).labels.find((l: any) => l.text.includes("目标位")).hidden).toBe(false);
+    expect((await api<any>(page, "labels")).labels.find((l: any) => l.text.includes("阻力位")).hidden).toBe(false);
     await switchLayer(page, "gapsAll");
     expect(await bandDates(page)).toHaveLength(2);
     // 「缺口」关掉时「全部」也不能点，写着要先打开缺口
@@ -1590,7 +1590,7 @@ describe("中栏：结论 → 看大局 → 找打法 → 做推演", () => {
       expect({ sel, ok: await notCovered(page, sel) }).toEqual({ sel, ok: true });
     }
     expect((await page.textContent("#verdict .concl-now"))!.replace(/\s+/g, "")).toBe("现在加速下跌·延伸");
-    expect((await page.textContent("#verdict .concl-lean"))!.replace(/\s+/g, "")).toBe("模糊判断·接下来几周明显偏空");
+    expect((await page.textContent("#verdict .concl-lean"))!.replace(/\s+/g, "")).toBe("大方向·接下来约6周明显偏空");
     expect(await page.getAttribute("#verdict .concl-lean", "data-tip")).toContain("不预测明天涨跌");
     const flat = (await page.textContent('#verdict .concl-row[data-situation="flat"]'))!;
     expect(flat).toContain("不做：盈亏比 0.57:1"); // 加速下跌等构造和 20 线组拐头再进，但到缺口的空间不够 3:1
@@ -1650,8 +1650,9 @@ describe("中栏：结论 → 看大局 → 找打法 → 做推演", () => {
     expect(f).toContain("不做：盈亏比1.94:1");
     expect(f).toContain("触发500.45");
     expect(f).toContain("止损488.03-2.5%"); // 60 线组拐头（解读），风险按触发价算
-    expect(f).toContain("目标524.61"); // 前高（解读），说明在悬停里
+    expect(f).toContain("阻力524.61"); // 前高（解读），说明在悬停里
     expect(await page.getAttribute(`${flat} [data-item=target]`, "data-tip")).toContain("中长线完好（现在是稳定上涨）就继续拿"); // P25：到目标是检查点
+    expect(await page.getAttribute(`${flat} [data-item=target]`, "data-tip")).toStartWith("第一阻力/目标位："); // 卡片上只写「阻力」，悬停写全称（ADR 0031）
     expect(f).toContain("股数804/万元"); // 没填账户：每 1 万元风险对应的股数
     expect(await page.getAttribute(`${flat} [data-item=rr]`, "class")).toContain("bad");
     expect(await page.textContent(`${holding} [data-item=stop]`)).toContain("488.03"); // 持仓止损按进场原则，不按成本
@@ -1665,7 +1666,7 @@ describe("中栏：结论 → 看大局 → 找打法 → 做推演", () => {
       const d = await (await fetch("/api/analyze?ticker=SPY&asof=2024-04-19")).json();
       return chartLevels(d.report, { pos: "flat", cost: "" }, d.analysis.close).map((l: { kind: string; title: string }) => `${l.kind}:${l.title}`);
     });
-    expect(kinds).toEqual(expect.arrayContaining(["trigger:触发", "stop:进场后止损", "target:目标"]));
+    expect(kinds).toEqual(expect.arrayContaining(["trigger:触发", "stop:进场后止损", "target:第一阻力/目标位"]));
     expect(errors).toEqual([]);
     await page.close();
   }, 30_000);
@@ -1729,13 +1730,13 @@ describe("中栏：结论 → 看大局 → 找打法 → 做推演", () => {
       const open = await page.locator(`${card} .plan-cells details.basis`).evaluateAll((els) => els.filter((e) => (e as HTMLDetailsElement).open).length);
       expect(open).toBe(0);
     };
-    await shown(["能不能做", "等什么信号", "进场价", "止损", "目标和盈亏比", "仓位"]);
+    await shown(["能不能做", "等什么信号", "进场价", "止损", "第一阻力/目标位和盈亏比", "仓位"]);
     expect((await page.textContent(`${card} .pcell[data-cell="go"] .pc-main`))!.replace(/\s+/g, "")).toContain("不做盈亏比0.57:1，不到3:1");
     expect(await page.textContent(`${card} .pcell[data-cell="entry"] .pc-main`)).toContain("212.21");
     expect(await page.textContent(`${card} .pcell[data-cell="stop"] .pc-main`)).toContain("183.08");
     await scrollIntoCenter(page, `${card} .pos-row`);
     await page.click(`${card} [data-pos="holding"]`);
-    await shown(["拿着还是走", "盯什么信号", "止损 / 离场价", "目标", "浮盈 / 浮亏怎么办"]);
+    await shown(["拿着还是走", "盯什么信号", "止损 / 离场价", "第一阻力/目标位", "浮盈 / 浮亏怎么办"]);
     expect(await page.textContent(`${card} .pcell[data-cell="go"] .pc-main`)).toContain("减仓");
     expect(errors).toEqual([]);
     await page.close();
@@ -1765,10 +1766,10 @@ describe("中栏：结论 → 看大局 → 找打法 → 做推演", () => {
     const plan = page.locator('[data-step="play"] .plan-body');
     const titles = () => page.evaluate(async () => (await import("/app.js")).getChart().levels().map((l: { title: string }) => l.title));
     expect(await plan.textContent()).toContain("不做盈亏比 0.57:1");
-    expect(await titles()).toEqual(["触发", "进场后止损", "目标", "判断失效"]);
+    expect(await titles()).toEqual(["触发", "进场后止损", "第一阻力/目标位", "判断失效"]);
     await page.click('[data-pos="holding"]');
     expect(await plan.textContent()).toContain("反弹再减仓");
-    expect(await titles()).toEqual(["盯住", "目标", "判断失效"]);
+    expect(await titles()).toEqual(["盯住", "第一阻力/目标位", "判断失效"]);
     await page.fill("#pos-cost", "200");
     expect(await page.textContent(".pnl")).toContain("-24.5%");
     await page.reload();
@@ -1785,7 +1786,7 @@ describe("中栏：结论 → 看大局 → 找打法 → 做推演", () => {
     const headline = `${card} .fc-headline`;
     expect(await page.locator(headline).isVisible()).toBe(true);
     expect(await notCovered(page, headline)).toBe(true);
-    expect(await page.textContent(headline)).toBe("接下来几周均线向下：反弹是减仓机会，不是抄底机会");
+    expect(await page.textContent(headline)).toBe("接下来约 6 周均线向下：反弹是减仓机会，不是抄底机会");
     // 结论句在推翻条件、关键变化上面
     const tops = await page.$$eval([headline, `${card} .fc-invalid`, `${card} .fc-changes`].join(","), (els) => els.map((e) => e.getBoundingClientRect().top));
     expect([...tops].sort((x, y) => x - y)).toEqual(tops);
@@ -3484,7 +3485,7 @@ describe("结论卡片上的价位：点一下，图上那条线亮几秒", () =
     expect(await levels(page)).toEqual([]);
     await page.focus(chip("target"));
     await page.keyboard.press("Enter");
-    expect(await flashing(page)).toMatchObject({ kind: "target", title: "目标", price: 228.86 });
+    expect(await flashing(page)).toMatchObject({ kind: "target", title: "第一阻力/目标位", price: 228.86 });
     await lineOnScreen(page);
     // 亮着的时候再点另一个：换成那一条，不是两条
     await page.click(chip("trigger"));

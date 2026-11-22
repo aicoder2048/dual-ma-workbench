@@ -101,7 +101,7 @@ describe("结论卡片读起来（ADR 0028）", () => {
 
   test("标题分两段：现在（看大局的类型·阶段）、模糊判断 · 接下来约 6 周（做推演的倾向）", () => {
     expect(text(card)).toContain("现在加速下跌·延伸");
-    expect(text(card)).toContain("模糊判断·接下来约6周明显偏空");
+    expect(text(card)).toContain("大方向·接下来约6周明显偏空");
     expect(tipOf(card, "concl-now")).toContain("看大局");
     expect(tipOf(card, "concl-lean")).toContain("做推演");
     expect(tipOf(card, "concl-lean")).toContain("不预测明天涨跌");
@@ -158,8 +158,8 @@ describe("结论卡片读起来（ADR 0028）", () => {
 });
 
 describe("找打法排成固定的格子，按做决定的顺序（ADR 0029）", () => {
-  const FLAT = ["能不能做", "等什么信号", "进场价", "止损", "目标和盈亏比", "仓位"];
-  const HOLD = ["拿着还是走", "盯什么信号", "止损 / 离场价", "目标", "浮盈 / 浮亏怎么办"];
+  const FLAT = ["能不能做", "等什么信号", "进场价", "止损", "第一阻力/目标位和盈亏比", "仓位"];
+  const HOLD = ["拿着还是走", "盯什么信号", "止损 / 离场价", "第一阻力/目标位", "浮盈 / 浮亏怎么办"];
   const ENT: Record<string, string> = { "&amp;": "&", "&lt;": "<", "&gt;": ">", "&quot;": '"', "&#39;": "'" };
   const text = (html: string) => html.replace(/<[^>]+>/g, "").replace(/&(amp|lt|gt|quot|#39);/g, (m) => ENT[m]).replace(/\s+/g, "");
   /** 计划正文按格子切开：标题、正文、依据（折叠的那段）。 */
@@ -218,7 +218,7 @@ describe("找打法排成固定的格子，按做决定的顺序（ADR 0029）",
     expect(cell(html, "entry").main).toContain(t.entry!.price!.toFixed(2));
     expect(cell(html, "stop").main).toContain(t.stop!.price!.toFixed(2));
     expect(cell(html, "stop").main).toContain("60线组拐头向下");
-    expect(cell(html, "target").main).toContain(`目标1：${t.targets[0].kind}`);
+    expect(cell(html, "target").main).toContain(`第一阻力/目标位：${t.targets[0].kind}`);
     expect(cell(html, "target").main).toContain("盈亏比");
     expect(cell(html, "size").main).toContain(String(t.size!.per_10k));
     expect(cell(html, "signal").main).toContain("吃回撤四个条件");
@@ -288,7 +288,7 @@ describe("做推演：先给结论，再给数据（ADR 0030）", () => {
     expect(at('data-part="invalid"')).toBeLessThan(at('data-part="changes"'));
   });
   test("结论句上面写「模糊判断 · 接下来约 6 周」和档位，和结论卡片同一个说法", () => {
-    expect(text(part("call"))).toContain("模糊判断·接下来约6周明显偏空");
+    expect(text(part("call"))).toContain("大方向·接下来约6周明显偏空");
   });
   test("历史评估小标签（H1）挨着模糊判断，悬停写清结论和出处", () => {
     const tag = part("call").match(/<span class="ev-tag fc-h1"[^>]*>([^<]+)<\/span>/)!;

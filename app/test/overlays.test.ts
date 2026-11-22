@@ -132,7 +132,7 @@ describe("缺口：gaps → 色带", () => {
 
   test("从跳空那根画到最新一根；上沿是前一根最低价，下沿是没补的那段的底；被交易计划用作目标的标出来", () => {
     expect(gapBands(GAPS, TARGETS, CANDLES)[1]).toEqual({
-      from: at("2026-10-27"), to: LAST, top: 232.4, bottom: 221.94, target: true, date: "2026-10-27", label: "缺口 221.94–232.40 · 目标位",
+      from: at("2026-10-27"), to: LAST, top: 232.4, bottom: 221.94, target: true, date: "2026-10-27", label: "缺口 221.94–232.40 · 阻力位",
     });
   });
 

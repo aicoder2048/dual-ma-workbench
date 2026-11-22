@@ -32,7 +32,7 @@ function leanScale(l) {
   const zones = LEAN_SCALE.map((z) => `<span class="${z === l.label ? "on" : ""}">${z}</span>`).join("");
   const a = l.after;
   const same = Math.abs(at(a.score) - at(l.score)) < 12; // 两根针挨着时只写一个标签
-  return `<div class="lean-scale" role="img" aria-label="模糊判断 ${l.label}，分数 ${l.score.toFixed(2)}；价格不变 ${a.days} 天后 ${a.label}">
+  return `<div class="lean-scale" role="img" aria-label="大方向 ${l.label}，分数 ${l.score.toFixed(2)}；价格不变 ${a.days} 天后 ${a.label}">
       <div class="lean-track">
         <span class="pin after" style="left:${pos(a.score)}" ${tip(`价格不变 ${a.days} 天后：${leanName(a)}（${a.score >= 0 ? "+" : ""}${a.score.toFixed(2)}）`)}><i></i>${same ? "" : `<em>${a.days} 天后</em>`}</span>
         <span class="pin now" style="left:${pos(l.score)}" ${tip(`现在：${leanName(l)}（${l.score >= 0 ? "+" : ""}${l.score.toFixed(2)}）`)}><i></i><em>${same ? `现在 ≈ ${a.days} 天后` : "现在"}</em></span>
@@ -83,7 +83,7 @@ export function leanCard(l, close, tie) {
       <div class="ev"><div class="ev-k">排布：短期线组在上还是在下 <span>相差 &lt; ${tie}% 算贴近</span></div>${leanPairs(l)}</div>
       <div class="ev"><div class="ev-k">什么会改变判断 <span>距现价</span></div>${leanFlips(l, close)}</div>
     </div>
-    <p class="lean-foot">模糊判断：看类型线 MA60、MA120 往哪走、收盘不变能保持几天（${l.basis.map((b) => `${b.line} ${b.direction} ${b.hold_days}/${b.days} 天`).join("，")}），不预测明天涨跌。价位过了门槛，才值得反应。</p>`;
+    <p class="lean-foot">大方向：看类型线 MA60、MA120 往哪走、收盘不变能保持几天（${l.basis.map((b) => `${b.line} ${b.direction} ${b.hold_days}/${b.days} 天`).join("，")}），不预测明天涨跌。价位过了门槛，才值得反应。</p>`;
 }
 
 // ---------- 1. 看大局 ----------
@@ -348,10 +348,10 @@ const SITUATION_LABEL = { flat: "空仓", holding: "持仓", profit: "持仓 · 
  * note 换掉"离现价多远"那一格；compact 时不写价位的说明（悬停看），五样放得下一行。
  * 是个按钮：点一下，图上那条线亮几秒（app.js 接到 chart.flashLevel；cls 就是价位线的种类 trigger / stop / target）。
  */
-function priceChip(key, lv, close, cls, { item = cls, note = pct((lv?.price / close - 1) * 100), compact = false, more = "" } = {}) {
+function priceChip(key, lv, close, cls, { item = cls, note = pct((lv?.price / close - 1) * 100), compact = false, more = "", shown = key } = {}) {
   if (!lv) return "";
   return `<button type="button" class="pchip ${cls}" data-item="${item}" data-kind="${cls}" data-price="${lv.price}" data-title="${key}" ${
-    tip(`${key}：${lv.label} ${f2(lv.price)}${more ? `。${more}` : ""}（点一下，图上亮出这条线）`)}><span class="ck">${key}</span>${compact ? "" : esc(lv.label)}
+    tip(`${key}：${lv.label} ${f2(lv.price)}${more ? `。${more}` : ""}（点一下，图上亮出这条线）`)}><span class="ck">${shown}</span>${compact ? "" : esc(lv.label)}
     <b class="num">${f2(lv.price)}</b>${note ? `<span class="num muted">${note}</span>` : ""}</button>`;
 }
 
@@ -364,7 +364,7 @@ function rrChip(t) {
     return `<span class="pchip rr far" data-item="rr" ${tip(`触发价离现价还远，到时重算：按明天的触发价 ${f2(t.entry.price)} 算是 ${t.rr.toFixed(2)}:1（P24）`)}>
     <span class="ck">盈亏比</span>到时重算</span>`;
   }
-  const gap = t.rr_gap ? `：要 3:1，目标得到 ${f2(t.rr_gap.target_for_min)}，或止损收紧到 ${f2(t.rr_gap.stop_for_min)}` : "";
+  const gap = t.rr_gap ? `：要 3:1，第一阻力得在 ${f2(t.rr_gap.target_for_min)} 以上，或止损收紧到 ${f2(t.rr_gap.stop_for_min)}` : "";
   return `<span class="pchip rr ${RR_CLASS[t.rr_verdict]}" data-item="rr" ${tip(`盈亏比 ${t.rr.toFixed(2)}:1，${t.rr_verdict}（P24）${gap}`)}>
     <span class="ck">盈亏比</span><b class="num">${t.rr.toFixed(2)}:1</b>${esc(t.rr_verdict)}</span>`;
 }
@@ -385,9 +385,10 @@ function sizeChip(t) {
 }
 
 /** 目标位标签：脚本给的目标 1、2（P25）；解读的、到第一目标怎么办（at_target）在悬停里说。 */
+/** 结论卡片上的阻力位：那一排最挤，第一个只写「阻力」，悬停和图上的线写全称「第一阻力/目标位」（ADR 0031）。 */
 const targetChips = (t, close, compact) => t.targets.map((x, i) =>
-  priceChip(`目标${t.targets.length > 1 ? i + 1 : ""}`, { label: x.source === "解读" ? `${x.kind}（解读）` : x.kind, price: x.price }, close, "target",
-    { compact, note: compact ? "" : undefined, more: i === 0 ? t.at_target ?? "" : "" })).join("");
+  priceChip(i === 0 ? FIRST_LABEL : `${ORDINAL[i] ?? i + 1}阻力`, { label: x.source === "解读" ? `${x.kind}（解读）` : x.kind, price: x.price }, close, "target",
+    { compact, note: compact ? "" : undefined, more: i === 0 ? t.at_target ?? "" : "", shown: i === 0 ? "阻力" : undefined })).join("");
 
 /**
  * 一行结论。buys：这套打法空仓会不会买（交易计划有进场），不买时空仓的价位叫「先看」，不叫触发。
@@ -421,8 +422,11 @@ export function holdingRow(r, close, p) {
   return conclusionRow(SITUATION_LABEL[k], r.plans[k], close, false, true, cost);
 }
 
+/** 阻力位的序号：第一阻力、第二阻力（LEI 叫目标位，P25）。 */
+const ORDINAL = ["第一", "第二", "第三"];
+const FIRST_LABEL = "第一阻力/目标位";
 const NOW_TIP = "看大局的结论：现在是哪种趋势（类型·阶段），按 6 条均线今天的排列、方向和乖离判的。证据在下面「看大局」。";
-const LEAN_TIP = "做推演的结论（模糊判断）：不预测明天涨跌，只判断接下来约 6 周均线（市场的持仓成本）往哪走、对多头还是空头有利。"
+const LEAN_TIP = "做推演的结论（大方向）：就是 LEI 说的「模糊的正确」，不预测明天涨跌，只判断接下来约 6 周均线（市场的持仓成本）往哪走、对多头还是空头有利。"
   + "约 6 周＝30 个交易日，是脚本定的：LEI 只说「未来一段时间」。60、120 线几天里动不了，太短看不出方向；"
   + "30 天内要扣掉的抵扣价都是已经发生的收盘，再长就要扣还没发生的价格，推演只剩假设。"
   + "依据在下面「做推演」：第一句把它翻成动作，挨着写什么价位推翻它、历史评估靠不靠得住。";
@@ -432,7 +436,7 @@ export function conclusionCard(r, close, p) {
   const buys = r.plans.flat.trade.entry !== null;
   return `<div class="concl-head"><span class="eyebrow">结论</span>
       <span class="concl-now" ${tip(NOW_TIP)}><span class="ck">现在</span><b class="concl-trend">${esc(r.trend.type)}</b></span>
-      <span class="concl-lean" ${tip(LEAN_TIP)}><span class="ck">模糊判断 · 接下来约 6 周</span><span class="lean-label ${stanceOf(r.visual.lean)}">${esc(r.visual.lean.label)}</span></span>
+      <span class="concl-lean" ${tip(LEAN_TIP)}><span class="ck">大方向 · 接下来约 6 周</span><span class="lean-label ${stanceOf(r.visual.lean)}">${esc(r.visual.lean.label)}</span></span>
       <button type="button" id="journal-add" class="journal-add" title="把此刻的计划记进交易日志，之后对照结果">记入日志</button>
       <button type="button" class="ask-card" data-ask-card="verdict" aria-haspopup="menu">问鸿雁</button></div>
     ${conclusionRow("空仓", r.plans.flat, close, true, buys, null)}
@@ -493,7 +497,7 @@ export function chartLevels(r, p, close) {
   const lines = [
     plan.trigger && { kind: "trigger", price: plan.trigger.price, title: flat ? (buys ? "触发" : "先看") : "盯住" },
     plan.stop && { kind: "stop", price: plan.stop.price, title: flat ? "进场后止损" : "止损" },
-    ...targets.map((t, i) => ({ kind: "target", price: t.price, title: `目标${targets.length > 1 ? i + 1 : ""}` })),
+    ...targets.map((t, i) => ({ kind: "target", price: t.price, title: i === 0 ? FIRST_LABEL : `${ORDINAL[i] ?? i + 1}阻力` })),
   ].filter(Boolean);
   // 同一个价位只画一条（例如空头结构反弹中：先看的就是推翻判断的理顺价位）
   const same = inv && lines.find((l) => Math.abs(l.price - inv.price) < 0.005);
@@ -559,8 +563,8 @@ const CELLS = {
       lead: (c) => priceLine(c.buys ? "触发价" : "先看", c.plan.trigger, c.close, c.buys ? "" : "（不是买点）"), empty: () => "这套打法空仓不买，没有进场价。" },
     { key: "stop", title: "止损", main: ["进场后止损"], basis: ["推演"], notes: ["财报", earningsNote],
       lead: (c) => priceLine("止损价", c.plan.stop, c.close, riskNote(c)), empty: () => "不进场，没有止损。" },
-    { key: "target", title: "目标和盈亏比", main: ["目标", "到目标", "盈亏比"], basis: ["参考"],
-      empty: (c) => (c.buys ? `算不了：${c.plan.trade.notes.join("；") || "目标位算不出"}。` : "不进场，不算目标和盈亏比。") },
+    { key: "target", title: "第一阻力/目标位和盈亏比", main: ["阻力位/目标位", "到第一阻力", "盈亏比"], basis: ["参考"],
+      empty: (c) => (c.buys ? `算不了：${c.plan.trade.notes.join("；") || "第一阻力算不出"}。` : "不进场，不算阻力位和盈亏比。") },
     { key: "size", title: "仓位", main: ["股数"],
       empty: (c) => (c.buys ? `算不了：${c.plan.trade.notes.join("；") || "没有止损价"}。` : "不进场，不算股数。") },
   ],
@@ -570,8 +574,8 @@ const CELLS = {
       lead: (c) => priceLine("盯住", c.plan.trigger, c.close) },
     { key: "stop", title: "止损 / 离场价", main: ["止损"], basis: ["推演"], notes: ["财报", earningsNote],
       lead: (c) => priceLine("止损价", c.plan.stop, c.close, riskNote(c)), empty: () => "没有止损价。" },
-    { key: "target", title: "目标", main: ["目标", "到目标"], basis: ["参考"],
-      empty: (c) => `${c.plan.trade.notes.find((n) => n.includes("目标")) ?? "上方没有目标位"}。` },
+    { key: "target", title: "第一阻力/目标位", main: ["阻力位/目标位", "到第一阻力"], basis: ["参考"],
+      empty: (c) => `${c.plan.trade.notes.find((n) => /阻力|目标/.test(n)) ?? "上方没有阻力位"}。` },
     { key: "pnl", title: "浮盈 / 浮亏怎么办", main: ["盈亏", "仓位"],
       lead: (c) => (c.k === "holding" ? `<p class="pc-note">没填成本：在结论卡片的「持仓成本」填上，就按浮盈 / 浮亏给建议。</p>` : "") },
   ],
@@ -634,7 +638,7 @@ export function forecastAnswer(r) {
   const anyAux = f.aux.includes("invalid") || f.groups.some((g) => g.aux);
   return `<div class="answer forecast">
       <div class="fc-call ${stanceOf(l)}" data-part="call">
-        <div class="fc-eyebrow"><span class="ak">模糊判断 · 接下来约 6 周</span><b class="fc-label">${esc(l.label)}</b>`
+        <div class="fc-eyebrow"><span class="ak">大方向 · 接下来约 6 周</span><b class="fc-label">${esc(l.label)}</b>`
     + `<span class="ev-tag fc-h1" tabindex="0" ${tip(f.leanEvidence.tip)}>${esc(f.leanEvidence.tag)}</span></div>
         <p class="fc-headline">${esc(f.headline)}</p>
         <p class="fc-basis">依据（只看 ${f.days} 天，不预测明天涨跌）：${esc(f.hold)}</p>
@@ -676,7 +680,7 @@ export function stepVisuals(key, v, f) {
   if (key === "play") return allRules(v);
   if (key === "forecast") {
     const long = { ...v, hurdles: v.hurdles.filter((h) => h.days === days) };
-    return `<details class="ref more fc-data"><summary>依据：打法的条件、门槛路径、模糊判断的证据、抵扣价、持平情景、全部求解</summary>`
+    return `<details class="ref more fc-data"><summary>依据：打法的条件、门槛路径、大方向的证据、抵扣价、持平情景、全部求解</summary>`
       + `<p class="fc-earliest"><span class="pl">打法的条件最早哪天齐</span>${esc(f.earliest)}${f.aux.includes("earliest") ? AUX_TAG : ""}</p>`
       + (f.solves.length ? `<p class="evidence-title">和这套打法有关的求解（${days} 天，辅助）</p>${solveList(f.solves)}` : "")
       + `<p class="evidence-title">MA60、MA120 未来 ${days} 天要扣掉的价格里最高、最低是多少</p>` + hurdleTable(long)

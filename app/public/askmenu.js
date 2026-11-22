@@ -43,7 +43,7 @@ export function cardQuestions(card, analysis, report) {
     add(r.record.setup?.ci_crosses_zero === true, "回测的 90% 区间跨过 0，说明什么？");
     add(f.trade.entry === null, "这套打法为什么空仓不买？");
     const far = Boolean(f.trade.entry?.far);
-    add(f.trade.rr !== null && !far, f.trade.rr !== null && `盈亏比 ${f.trade.rr.toFixed(2)}:1 是怎么算的，目标位从哪来？`);
+    add(f.trade.rr !== null && !far, f.trade.rr !== null && `盈亏比 ${f.trade.rr.toFixed(2)}:1 是怎么算的，第一阻力从哪来？`);
     add(far, "触发价为什么离现价还远，20 线组最早什么时候拐头？");
     add(true, "空仓和持仓的做法为什么不一样？");
   } else if (card === "play") {

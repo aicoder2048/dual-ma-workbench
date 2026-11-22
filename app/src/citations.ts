@@ -298,7 +298,7 @@ export function buildFacts(a: Analysis): Facts {
   put("模糊判断.方向", "6 条均线的方向票数", `${ln.up} 上 · ${ln.flat} 平 · ${ln.down} 下`);
   put("模糊判断.排布", `20/60、60/120 线组谁在上（≈ 是相差不到价格 ${a.thresholds.ORDER_TIE_PCT.value}%）`,
     ln.pairs.map((p) => `${p.pair} ${p.rel > 0 ? ">" : p.rel < 0 ? "<" : "≈"}`).join("，"));
-  put("模糊判断.10天后", `价格不变 ${ln.after.days} 天后的模糊判断`, `${ln.after.label}（${ln.after.up} 上 · ${ln.after.down} 下）`);
+  put("模糊判断.10天后", `价格不变 ${ln.after.days} 天后的大方向`, `${ln.after.label}（${ln.after.up} 上 · ${ln.after.down} 下）`);
   for (const f of ln.flips) put(`改变判断.${f.line}`, `什么会改变判断（转${f.toward}）：${f.line}`, f.text);
   for (const r of a.rules) put(`规则.${r.id}`, `规则 ${r.id} ${r.name}`, `${r.status}${r.yields_to ? `，${r.yields_to} 优先` : ""}：${r.basis}`);
   for (const p of a.steps) put(`五步.${p.pair}`, `${p.pair} 的五个进度点（破线、EMA 拐头、MA 拐头、第一个交叉、双交叉）`, stepsText(p));
@@ -354,7 +354,7 @@ export function buildFacts(a: Analysis): Facts {
   if (a.bwl) put("黑绿线", `黑绿线读数（P40–P45，颜色：${a.bwl.source.name}；只是读数，交易计划没用它）`, a.bwl.text);
   for (const [k, label, value] of profileFacts(a)) put(k, label, value);
   const fc = buildForecast(a, plans);
-  put("推演.结论", "模糊判断翻成的一句话：均线接下来约 6 周往哪走，回撤 / 反弹该怎么看", fc.headline);
+  put("推演.结论", "大方向翻成的一句话：均线接下来约 6 周往哪走，回撤 / 反弹该怎么看", fc.headline);
   for (const g of fc.groups) put(`推演.${g.group}线组`, `${g.group} 线组最近的关键变化：现在朝哪走、收盘不变哪天拐头、明天站上 / 跌破哪就拐头`, `${g.now}：${g.text}${g.aux ? `${g.aux}（推演求解，辅助）` : ""}`);
   put("推演.保持", `类型线 MA60、MA120 未来 ${fc.days} 天能保持多久、守在哪`, fc.hold);
   put("推演.最早", "这套打法的条件最早哪天能齐", fc.earliest);
@@ -398,7 +398,7 @@ export function profileFacts(a: Pick<Analysis, "profile" | "close" | "trade_plan
     ["筹码.上方", `收盘上方最近的整座筹码山：反弹的目标区间（J47；${note}）`, above ? band(above) : "上方没有整座的筹码山"],
     ["筹码.下方", "收盘下方最近的整座筹码山", below ? band(below) : "下方没有整座的筹码山"],
     ["筹码.所在", "收盘所在的筹码山（在山里照 P25 看中长线，P39）", inside ? band(inside) : "不在哪座山里"],
-    ["筹码.参考带", "交易计划记下的上方最近的筹码山（P38）：只作参考，不排进第一目标、不算盈亏比",
+    ["筹码.参考带", "交易计划记下的上方最近的筹码山（P38）：只作参考，不排进第一阻力、不算盈亏比",
       ref ? `${f2(ref.foot)}–${f2(ref.top)}` : "进场价（持仓是现价）上方没有整座的筹码山"],
   ];
 }

@@ -880,6 +880,10 @@ def p23_exit_by_entry(c: Ctx) -> Result:
     return _met(True, f"{who}：{stop.reason}", {} if stop.price is None else {"止损": stop.price})
 
 
+# 阻力位的序号：第一阻力、第二阻力（LEI 叫目标位，P25）
+ORDINAL = ("第一", "第二", "第三")
+
+
 def p24_reward_risk(c: Ctx) -> Result:
     """满足 = 盈亏比不到 3:1，不做（和 P17"排列不合理不买"满足就不买一样读）。"""
     if c.plan is None:
@@ -888,13 +892,13 @@ def p24_reward_risk(c: Ctx) -> Result:
     if f.entry is None or f.entry.price is None:
         return _met(False, "空仓这套打法今天没有进场价，不用算盈亏比")
     if f.rr is None:
-        return Result(Status.CHART, "盈亏比算不了：" + ("；".join(f.notes) or "没有目标位或止损"))
-    lv = {"进场": f.entry.price, "止损": f.stop.price, "目标 1": f.targets[0].price}
+        return Result(Status.CHART, "盈亏比算不了：" + ("；".join(f.notes) or "没有阻力位或止损"))
+    lv = {"进场": f.entry.price, "止损": f.stop.price, "第一阻力": f.targets[0].price}
     if f.entry.far is not None:   # 按明天算的盈亏比是假设数，不判"不做"；回测另按 rr_verdict 让位（docs/adr/0026.md 后续）
         from tradeplan import RR_FAR, far_text   # tradeplan 导入本模块，这里晚一点导入
         return _met(False, f"{RR_FAR}：按明天的触发价算是 {f.rr:.2f}:1；{far_text(f.entry.far, f.entry.price)}", lv)
     if f.rr_verdict == "不做":
-        return _met(True, f"{f.rr:.2f}:1 < 3:1，不做；要 3:1 目标得到 {_f(f.rr_gap['target_for_min'])}，"
+        return _met(True, f"{f.rr:.2f}:1 < 3:1，不做；要 3:1 第一阻力得在 {_f(f.rr_gap['target_for_min'])} 以上，"
                           f"或止损收紧到 {_f(f.rr_gap['stop_for_min'])}", lv)
     return _met(False, f"{f.rr:.2f}:1，{f.rr_verdict}（≥ 3:1 可做，≥ 5:1 理想）", lv)
 
@@ -910,9 +914,9 @@ def p25_targets(c: Ctx) -> Result:
         return _no_plan()
     p = _target_plan(c)
     if not p.targets:
-        return _met(False, next((n for n in p.notes if "目标" in n), "上方没有目标位"))
-    basis = "；".join(f"目标 {i} {t.kind} {_f(t.price)}（{t.date}）" for i, t in enumerate(p.targets, 1))
-    return _met(True, f"{basis}。{p.at_target}", {f"目标 {i}": t.price for i, t in enumerate(p.targets, 1)})
+        return _met(False, next((n for n in p.notes if "阻力" in n), "上方没有阻力位"))
+    basis = "；".join(f"{ORDINAL[i - 1] if i <= len(ORDINAL) else f'第 {i} '}阻力 {t.kind} {_f(t.price)}（{t.date}）" for i, t in enumerate(p.targets, 1))
+    return _met(True, f"{basis}。{p.at_target}", {f"阻力 {i}": t.price for i, t in enumerate(p.targets, 1)})
 
 
 def p38_profile_reference(c: Ctx) -> Result:
@@ -927,7 +931,7 @@ def p38_profile_reference(c: Ctx) -> Result:
     if m is None:
         return _met(False, f"{ref} 上方没有整座的筹码山")
     return _met(True, f"{ref} 上方最近的筹码山 {_f(m.foot)}–{_f(m.top)}（山脚到山顶这条带，J47，{m.date}）。"
-                      "只作参考，不排进第一目标、不算盈亏比（ADR 0018）", {"山脚": m.foot, "山顶": m.top})
+                      "只作参考，不排进第一阻力、不算盈亏比（ADR 0018）", {"山脚": m.foot, "山顶": m.top})
 
 
 RULES: tuple[Rule, ...] = (
@@ -1010,7 +1014,7 @@ RULES: tuple[Rule, ...] = (
     Rule("P22", Kind.ACTION, "突破买入的止损：起涨 K 线最低价", p22_breakout_stop),
     Rule("P23", Kind.ACTION, "什么原则进，就什么原则出", p23_exit_by_entry),
     Rule("P24", Kind.ACTION, "盈亏比不到 3:1 不做", p24_reward_risk),
-    Rule("P25", Kind.ACTION, "目标位：缺口和均线密集区；到第一目标中长线完好就继续拿", p25_targets),
+    Rule("P25", Kind.ACTION, "第一阻力（LEI 叫目标位）：缺口和均线密集区；到了中长线完好就继续拿", p25_targets),
     Rule("P26", Kind.ACTION, "预期没到、底线没破就拿着", None),
     Rule("P28", Kind.ACTION, "前高过不去是止盈点", None),
     Rule("P29", Kind.ACTION, "标志性动作当参考点", None),
