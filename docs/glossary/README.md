@@ -15,7 +15,7 @@
 ## 打印版 PDF
 
 ```bash
-bun docs/glossary/tools/build-pdf.ts   # 生成 docs/glossary/双均线概念图解.pdf（US Letter，封面 + 目录 + 每个术语一节，带页码）
+bun docs/glossary/tools/build-pdf.ts   # 生成 docs/glossary/双均线概念图解.pdf（US Letter，封面、目录、每个术语一章）
 ```
 
-每页单独渲染再合并，各页自带的样式互不干扰。PDF 约 10MB，不进仓库。
+用 techdoc-pdf 技能排版（pandoc → XeLaTeX）：脚本在浏览器里把每张示意图连同算好的样式存成矢量 PDF，按页面结构把文字转成 markdown（对照卡 → 小标题，表格 → 管道表），再交给 `~/.claude/skills/techdoc-pdf/techdoc.py`。目录只列 16 个术语。PDF 不进仓库；`KEEP_BUILD=1` 保留中间的 markdown 和图。
