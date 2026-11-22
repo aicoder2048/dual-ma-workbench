@@ -2037,9 +2037,15 @@ describe("看大局的证据：按判断顺序的五问", () => {
     expect(qs.map((q) => q.replace(/\s+/g, ""))).toEqual(["①60/120线组排好了吗？", "②60线几点钟？", "③是不是加速？", "④20线组走到哪一步？", "⑤周线、小时线怎么排？"]);
     for (const q of await step.locator(".check h3").all()) expect(await q.isVisible()).toBe(true);
     const verdicts = await step.locator(".check .judge").allTextContents();
-    expect(verdicts[0]).toContain("有类型");
-    expect(verdicts[1]).toContain("点");
+    expect(verdicts[0]).toMatch(/能定(类型|成加速下跌)/); // 先写结论：能不能定类型、从哪条路定的
+    expect(verdicts[1]).toMatch(/点.*：(走平|稳定向下|加速向下)/); // 钟点 + 落在哪一档
     expect(verdicts[2]).toContain("加速出现在趋势刚开始");
+    // 每问都有一句「所以」，看得见；② 画钟面，③ 把"是不是加速"和"出现在哪一头"分成两行
+    for (const so of await step.locator(".check .so").all()) expect(await so.isVisible()).toBe(true);
+    expect(await step.locator(".check .so").count()).toBe(5);
+    expect(await step.locator(".check").nth(1).locator(".viz.clockface svg .hand").count()).toBe(1);
+    expect((await step.locator("table.accel-why").textContent())!.replace(/\s+/g, "")).toContain("出现在哪一头");
+    expect(await step.locator(".check").nth(0).locator("figcaption").textContent()).toMatch(/6 条线全部(下方|上方)|收盘夹在中间/);
     expect(verdicts[3]).toContain("延伸");
     expect(verdicts[4]).toContain("周线 MA 多头");
     expect(verdicts[4]).toContain("小时线 MA 空头");
