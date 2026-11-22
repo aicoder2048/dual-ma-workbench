@@ -807,18 +807,25 @@ function checkAccel(v) {
     biasMeter(v) + table + soLine(`${lei}两种都大幅偏离了成本，有回归的需要：要么快速回来找均线，要么横着走等均线（视频 B 09:37）。`));
 }
 
+/** 稳定类型里 20/60 已交叉（regime.crossed，J7）：仍叫回撤中 / 反弹中，是深回撤 / 深反弹。 */
+export const deepWord = (r) => (r.crossed && (r.stage === "回撤中" || r.stage === "反弹中") ? (r.stage === "回撤中" ? "深回撤" : "深反弹") : null);
+
 function checkStage(v) {
   const r = v.regime;
   const d = DOWN_UP[r.direction] ?? "";
+  const word = r.stage === "反弹中" ? "反弹" : "回撤";
+  const deep = deepWord(r);
+  const back = `20 线组已经开始往回转（${esc(r.depth ?? "破线或拐头")}）`;
   const so = {
     延伸: `20 线组还没开始往回转，${d}还在走。`,
-    回撤中: `20 线组已经开始往回转（${esc(r.depth ?? "破线或拐头")}），但还没交叉，算回撤，不算转折。`,
-    反弹中: `20 线组已经开始往回转（${esc(r.depth ?? "破线或拐头")}），但还没交叉，算反弹，不算转折。`,
-    转折中: `20 线组已经交叉，算转折，不再是普通的回撤 / 反弹。`,
+    回撤中: deep ? `${back}，20/60 已交叉，但 60/120 还平行、类型不变：是${deep}。` : `${back}，但还没交叉，算回撤，不算转折。`,
+    反弹中: deep ? `${back}，20/60 已交叉，但 60/120 还平行、类型不变：是${deep}。` : `${back}，但还没交叉，算反弹，不算转折。`,
+    转折中: `加速类型里 20 线组已经交叉，算转折，不再是普通的回撤 / 反弹。`,
   }[r.stage] ?? "类型没定，阶段按过渡状态看。";
-  return check("④", "20 线组走到哪一步？", `<b>${r.stage ? esc(r.stage) : esc(r.name)}</b>${r.depth ? `（${esc(r.depth)}）` : ""}`,
+  const rule = r.stage ? `破线、拐头算${word}；交叉以后，稳定类型仍叫${word}（深${word}），加速类型才叫转折（J7、J15）。` : "";
+  return check("④", "20 线组走到哪一步？", `<b>${r.stage ? esc(r.stage) : esc(r.name)}</b>${deep ? `（${deep}）` : ""}${r.depth ? `（${esc(r.depth)}）` : ""}`,
     leiFiveSteps(v) + `<p class="sub-title">转折进度：第 1–3 步的细账</p>` + fiveSteps(v) + crossTable(v)
-    + soLine(`${so}破线、拐头算回撤，交叉了算转折（J15）。`));
+    + soLine(`${so}${rule}`));
 }
 
 function checkFrames(v) {

@@ -333,3 +333,27 @@ describe("做推演：先给结论，再给数据（ADR 0030）", () => {
     expect(tip).toContain("未来一段时间");
   });
 });
+
+describe("看大局第 ④ 问：稳定类型里 20/60 已交叉是深回撤，不是「还没交叉」（J7）", () => {
+  const plain = (h: string) => h.replace(/<[^>]+>/g, "").replace(/\s+/g, "");
+  const fourth = (a: Analysis) => {
+    const r = buildReport(a);
+    const ev = stepVisuals("big_picture", r.visual, r.forecast);
+    return plain(ev.slice(ev.indexOf("④")));
+  };
+  const spy = spyFixture as unknown as Analysis;
+  test("已交叉：写深回撤，不写还没交叉，也不说交叉了就算转折", () => {
+    const deep = { ...spy, regime: { ...spy.regime, crossed: true } } as Analysis;
+    const t = fourth(deep);
+    expect(t).toContain("20/60已交叉");
+    expect(t).toContain("深回撤");
+    expect(t).not.toContain("还没交叉");
+    expect(t).not.toContain("交叉了算转折");
+  });
+  test("没交叉：照旧是普通回撤", () => {
+    const t = fourth({ ...spy, regime: { ...spy.regime, crossed: false } } as Analysis);
+    expect(t).toContain("还没交叉");
+    expect(t).not.toContain("20/60已交叉");
+    expect(t).not.toContain("是深回撤");
+  });
+});

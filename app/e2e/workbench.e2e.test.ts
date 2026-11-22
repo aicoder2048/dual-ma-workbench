@@ -154,6 +154,10 @@ beforeAll(async () => {
         if (args.includes("--account")) a.trade_plan.flat.size = { ...z, shares: Math.floor(1000 / z.unit_risk), risk_amount: 1000, basis: `1000 ÷ 单位亏损 ${z.unit_risk.toFixed(2)}` };
         return JSON.stringify({ analysis: a, chart: CHART });
       }
+      if (args[0] === "DEEP") { // 稳定上涨里 20/60 已交叉：仍叫回撤中，是深回撤（J7）
+        const a = structuredClone(spy) as Analysis;
+        return JSON.stringify({ analysis: { ...a, label: "DEEP", regime: { ...a.regime, crossed: true } }, chart: CHART });
+      }
       if (args[0] === "BOUNCE") { // 空头结构反弹中：计划里有推演求解的辅助条，清单里有回测不支持的 J18
         const n = nvda as Analysis;
         const flat = { ...n.trade_plan.flat, entry: null, stop: null, targets: [], rr: null, rr_verdict: null, rr_gap: null, risk_pct: null, size: null };
@@ -2061,6 +2065,23 @@ describe("看大局的证据：按判断顺序的五问", () => {
     expect(await row.textContent()).toContain("4/5");
     expect(await step.locator(".check-sum").textContent()).toContain("加速下跌·延伸");
     expect(await step.locator("table.vt th:text('MA 方向')").count()).toBe(0); // 和结论卡片重复的均线表去掉了
+    expect(errors).toEqual([]);
+    await page.close();
+  }, 30_000);
+});
+
+describe("看大局第 ④ 问：稳定类型里 20/60 已交叉是深回撤（J7）", () => {
+  test("顶上小格标深回撤；第 ④ 问写 20/60 已交叉、类型不变，不再说还没交叉", async () => {
+    const { page, errors } = await open(undefined, "DEEP");
+    const kpi = page.locator(".kpi").filter({ hasText: "趋势类型" });
+    expect(await kpi.locator(".kpi-deep").textContent()).toBe("深回撤");
+    expect(await notCovered(page, ".kpi .kpi-deep")).toBe(true);
+    const q4 = page.locator('[data-step="big_picture"] .check').nth(3);
+    await q4.locator(".judge").scrollIntoViewIfNeeded();
+    expect(await q4.locator(".judge").textContent()).toContain("深回撤");
+    const so = (await q4.locator(".so").last().textContent())!.replace(/\s+/g, "");
+    expect(so).toContain("20/60已交叉");
+    expect(so).not.toContain("还没交叉");
     expect(errors).toEqual([]);
     await page.close();
   }, 30_000);

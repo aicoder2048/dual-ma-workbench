@@ -70,6 +70,10 @@ export interface Regime {
   depth: string | null;
   range: { days: number; spread_pct: number; dense: boolean; box_high: number | null; box_low: number | null; opening: string | null } | null;
   accel: { phase: "起点" | "末端"; by: string } | null;
+  /** 20/60 已交叉或到了另一边（J7）：稳定类型里是深回撤 / 深反弹。旧分析没有这个字段。 */
+  crossed?: boolean;
+  /** 过渡状态：为什么叫这个名字。旧分析没有这个字段。 */
+  why?: string | null;
 }
 
 /** J8 的起点 / 末端是加速出现在趋势哪一头（视频 B 08:59），不是阶段：给人读时写「出现在…」，和脚本的 regime.ACCEL_WHERE 一致。 */

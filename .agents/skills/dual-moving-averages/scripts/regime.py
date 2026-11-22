@@ -125,6 +125,8 @@ class Regime:
     depth: str | None         # 回撤 / 反弹到哪一组线
     range: RangeInfo | None
     accel: Accel | None
+    crossed: bool = False     # 20/60 已交叉或到了另一边（J7）：稳定类型里是深回撤 / 深反弹，加速里是转折中
+    why: str | None = None    # 过渡状态：为什么叫这个名字（照 classify 的条件）
 
 
 def _angle(series: pd.Series) -> pd.Series:
@@ -263,11 +265,16 @@ def range_info(df: pd.DataFrame, structure: Structure | None) -> RangeInfo:
 
 # ---------- 类型 × 阶段 ----------
 
+def _crossed(d: int, p20: PairProgress) -> bool:
+    """20/60 已交叉，或 20 线组已经到了 60 线组另一边（J7）。"""
+    on_side = {"多头": UP, "空头": DOWN}.get(p20.side or "", 0) == d
+    return not on_side or _has(p20.current, Step.FIRST_CROSS)
+
+
 def _stage(d: int, p20: PairProgress, steady: bool) -> Stage:
     """J7：20 线组还在类型那一边、没走出反向的一步是延伸；走了破线或拐头是回撤（反弹）。
     20/60 交叉了：稳定趋势里类型还由 60/120 定，仍是回撤（反弹）；加速里是转折。"""
-    on_side = {"多头": UP, "空头": DOWN}.get(p20.side or "", 0) == d
-    crossed = not on_side or _has(p20.current, Step.FIRST_CROSS)
+    crossed = _crossed(d, p20)
     if crossed and not steady:
         return Stage.TURNING
     if crossed or (p20.current and p20.current.progress):
@@ -317,7 +324,7 @@ def classify(df: pd.DataFrame, structure: Structure | None, bias_pctl: float) ->
             label = Transition.TOPPING.value if d == UP else Transition.BOTTOMING.value
         depth = _depth(row, d) if stage != Stage.EXTEND else None
         return Regime(type=t, stage=stage, transition=None, name=f"{t.value}·{label}", direction=d,
-                      depth=depth, range=None, accel=accel, **common)
+                      depth=depth, range=None, accel=accel, crossed=_crossed(d, p20), **common)
 
     # J1、J3、J4：60/120 线组次序和两组方向一致（120 不反向即可），按钟表和乖离分稳定、加速
     if order and dir60 == order and dir120 != -order:

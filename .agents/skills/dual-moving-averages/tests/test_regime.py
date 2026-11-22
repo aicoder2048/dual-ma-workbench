@@ -123,3 +123,20 @@ def test_range_play_says_weekly_direction_is_not_backed_by_the_evaluation():
     a = dma.analyze(load_fixture("AAPL", "2021-04-14"), "AAPL", "fixture")
     text = a["play"]["text"]
     assert "跟周线走" in text and "回测不支持" in text
+
+
+# ---------- 20/60 已交叉：稳定类型里仍叫回撤中 / 反弹中，是深回撤 / 深反弹（J7） ----------
+
+def test_steady_up_with_20_60_crossed_is_flagged_deep():
+    r = regime_of("SPY", "2022-01-25")
+    assert (r["type"], r["stage"], r["crossed"]) == ("稳定上涨", "回撤中", True)
+
+
+def test_steady_down_with_20_60_crossed_is_flagged_deep():
+    r = regime_of("TSLA", "2019-07-12")
+    assert (r["type"], r["stage"], r["crossed"]) == ("稳定下跌", "反弹中", True)
+
+
+def test_ordinary_pullback_is_not_flagged_deep():
+    r = regime_of("SPY", "2024-04-19")
+    assert (r["stage"], r["crossed"]) == ("回撤中", False)
