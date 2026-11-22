@@ -99,9 +99,9 @@ describe("结论卡片读起来（ADR 0028）", () => {
   const card = conclusionCard(r, nv.close, { pos: "flat", cost: "" });
   const spyCard = conclusionCard(spy, spyA.close, { pos: "flat", cost: "" });
 
-  test("标题分两段：现在（看大局的类型·阶段）、模糊判断 · 接下来几周（做推演的倾向）", () => {
+  test("标题分两段：现在（看大局的类型·阶段）、模糊判断 · 接下来约 6 周（做推演的倾向）", () => {
     expect(text(card)).toContain("现在加速下跌·延伸");
-    expect(text(card)).toContain("模糊判断·接下来几周明显偏空");
+    expect(text(card)).toContain("模糊判断·接下来约6周明显偏空");
     expect(tipOf(card, "concl-now")).toContain("看大局");
     expect(tipOf(card, "concl-lean")).toContain("做推演");
     expect(tipOf(card, "concl-lean")).toContain("不预测明天涨跌");
@@ -282,13 +282,13 @@ describe("做推演：先给结论，再给数据（ADR 0030）", () => {
   };
 
   test("第一句是模糊判断翻成的动作，大字，在推翻条件和关键变化前面", () => {
-    expect(text(part("call"))).toContain("接下来几周均线向下：反弹是减仓机会，不是抄底机会");
+    expect(text(part("call"))).toContain("接下来约6周均线向下：反弹是减仓机会，不是抄底机会");
     expect(part("call")).toContain('class="fc-headline');
     expect(at('data-part="call"')).toBeLessThan(at('data-part="invalid"'));
     expect(at('data-part="invalid"')).toBeLessThan(at('data-part="changes"'));
   });
-  test("结论句上面写「模糊判断 · 接下来几周」和档位，和结论卡片同一个说法", () => {
-    expect(text(part("call"))).toContain("模糊判断·接下来几周明显偏空");
+  test("结论句上面写「模糊判断 · 接下来约 6 周」和档位，和结论卡片同一个说法", () => {
+    expect(text(part("call"))).toContain("模糊判断·接下来约6周明显偏空");
   });
   test("历史评估小标签（H1）挨着模糊判断，悬停写清结论和出处", () => {
     const tag = part("call").match(/<span class="ev-tag fc-h1"[^>]*>([^<]+)<\/span>/)!;
@@ -319,12 +319,17 @@ describe("做推演：先给结论，再给数据（ADR 0030）", () => {
   });
   test("偏多（SPY 2024-04-19）：回撤是加仓机会；推翻条件不是求解给的，不标辅助", () => {
     const h = forecastAnswer(buildReport(structuredClone(spyFixture) as Analysis));
-    expect(text(h)).toContain("接下来几周均线向上：回撤是加仓机会");
+    expect(text(h)).toContain("接下来约6周均线向上：回撤是加仓机会");
     expect(h).not.toContain("辅助 · 推演求解");
   });
-  test("结论卡片的「模糊判断 · 接下来几周」悬停：依据在做推演（不再说更多推演）", () => {
+  test("结论卡片的「模糊判断 · 接下来约 6 周」悬停：依据在做推演（不再说更多推演）", () => {
     const tip = conclusionCard(r, nv.close, { pos: "flat", cost: "" }).match(/class="concl-lean"[^>]*data-tip="([^"]+)"/)![1];
     expect(tip).toContain("依据在下面「做推演」");
     expect(tip).not.toContain("更多推演");
+  });
+  test("悬停说清「约 6 周」从哪来：30 个交易日是脚本定的，LEI 只说未来一段时间", () => {
+    const tip = conclusionCard(r, nv.close, { pos: "flat", cost: "" }).match(/class="concl-lean"[^>]*data-tip="([^"]+)"/)![1];
+    expect(tip).toContain("30 个交易日，是脚本定的");
+    expect(tip).toContain("未来一段时间");
   });
 });

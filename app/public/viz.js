@@ -14,7 +14,7 @@ export function clockGlyph(clock) {
     <g transform="rotate(${-deg} 10 10)"><path d="M4 10h11"/><path d="M12 7l3 3-3 3"/></g></svg>`;
 }
 
-// ---------- 模糊判断：接下来几周对谁有利 ----------
+// ---------- 模糊判断：接下来约 6 周对谁有利 ----------
 const LEAN_SCALE = ["明显偏空", "偏空", "不明", "偏多", "明显偏多"];
 /** 和服务端 report.ts 的 stanceOf 同一规则：跟脚本给的档位走。 */
 export const stanceOf = (l) => (l.label.includes("偏多") ? "bullish" : l.label.includes("偏空") ? "bearish" : "neutral");
@@ -422,7 +422,9 @@ export function holdingRow(r, close, p) {
 }
 
 const NOW_TIP = "看大局的结论：现在是哪种趋势（类型·阶段），按 6 条均线今天的排列、方向和乖离判的。证据在下面「看大局」。";
-const LEAN_TIP = "做推演的结论（模糊判断）：不预测明天涨跌，只判断接下来几周均线（市场的持仓成本）往哪走、对多头还是空头有利。"
+const LEAN_TIP = "做推演的结论（模糊判断）：不预测明天涨跌，只判断接下来约 6 周均线（市场的持仓成本）往哪走、对多头还是空头有利。"
+  + "约 6 周＝30 个交易日，是脚本定的：LEI 只说「未来一段时间」。60、120 线几天里动不了，太短看不出方向；"
+  + "30 天内要扣掉的抵扣价都是已经发生的收盘，再长就要扣还没发生的价格，推演只剩假设。"
   + "依据在下面「做推演」：第一句把它翻成动作，挨着写什么价位推翻它、历史评估靠不靠得住。";
 
 /** 结论卡片。标题分「现在」和「往后」两段；整套方法的评估不在卡片上，页面上固定写一次（#method-note，ADR 0028）。 */
@@ -430,7 +432,7 @@ export function conclusionCard(r, close, p) {
   const buys = r.plans.flat.trade.entry !== null;
   return `<div class="concl-head"><span class="eyebrow">结论</span>
       <span class="concl-now" ${tip(NOW_TIP)}><span class="ck">现在</span><b class="concl-trend">${esc(r.trend.type)}</b></span>
-      <span class="concl-lean" ${tip(LEAN_TIP)}><span class="ck">模糊判断 · 接下来几周</span><span class="lean-label ${stanceOf(r.visual.lean)}">${esc(r.visual.lean.label)}</span></span>
+      <span class="concl-lean" ${tip(LEAN_TIP)}><span class="ck">模糊判断 · 接下来约 6 周</span><span class="lean-label ${stanceOf(r.visual.lean)}">${esc(r.visual.lean.label)}</span></span>
       <button type="button" id="journal-add" class="journal-add" title="把此刻的计划记进交易日志，之后对照结果">记入日志</button>
       <button type="button" class="ask-card" data-ask-card="verdict" aria-haspopup="menu">问鸿雁</button></div>
     ${conclusionRow("空仓", r.plans.flat, close, true, buys, null)}
@@ -632,7 +634,7 @@ export function forecastAnswer(r) {
   const anyAux = f.aux.includes("invalid") || f.groups.some((g) => g.aux);
   return `<div class="answer forecast">
       <div class="fc-call ${stanceOf(l)}" data-part="call">
-        <div class="fc-eyebrow"><span class="ak">模糊判断 · 接下来几周</span><b class="fc-label">${esc(l.label)}</b>`
+        <div class="fc-eyebrow"><span class="ak">模糊判断 · 接下来约 6 周</span><b class="fc-label">${esc(l.label)}</b>`
     + `<span class="ev-tag fc-h1" tabindex="0" ${tip(f.leanEvidence.tip)}>${esc(f.leanEvidence.tag)}</span></div>
         <p class="fc-headline">${esc(f.headline)}</p>
         <p class="fc-basis">依据（只看 ${f.days} 天，不预测明天涨跌）：${esc(f.hold)}</p>
