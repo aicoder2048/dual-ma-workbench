@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>五种趋势类型</title>
+<link rel="stylesheet" href="glossary.css">
+<style>
+.wrap{grid-template-columns:minmax(0,1fr)} /* glossary.css 的 .wrap 没设列宽，图的 min-width 会把窄屏撑宽 */
+:root{--l60:#2f5fd0;--l120:#0f8a8a}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--l60:#7ea2ff;--l120:#4cc9c9}}
+:root[data-theme="dark"]{--l60:#7ea2ff;--l120:#4cc9c9}
+.cell{fill:none;stroke:var(--line);stroke-width:1}
+.cell-t{fill:var(--ink);font:700 15px var(--font)}
+.cell-c{fill:var(--ink);font:600 13px var(--font)}
+.l60{fill:none;stroke:var(--l60);stroke-width:3.2;stroke-linecap:round}
+.l120{fill:none;stroke:var(--l120);stroke-width:3.2;stroke-linecap:round;stroke-dasharray:8 4}
+.l60-l{fill:var(--l60)} .l120-l{fill:var(--l120)}
+.clock{fill:none;stroke:var(--muted);stroke-width:1.2}
+.clock-tk{stroke:var(--muted);stroke-width:1.2}
+.hand{stroke:var(--ink);stroke-width:2.5;stroke-linecap:round}
+.hub{fill:var(--ink)}
+.cases.five{grid-template-columns:repeat(auto-fill,minmax(260px,1fr))}
+.tt-tbl{width:100%;border-collapse:collapse;font-size:14px}
+.tt-tbl th,.tt-tbl td{padding:8px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+.tt-tbl th{color:var(--muted);font-weight:600;font-size:13px}
+.tt-tbl td{color:var(--muted)} .tt-tbl td:first-child{color:var(--ink);font-weight:600;white-space:nowrap}
+.tbl-wrap{overflow-x:auto}
+.panel p{margin:0 0 8px;font-size:14px;color:var(--muted)}
+.panel p b,.panel li b{color:var(--ink)}
+.panel ul{margin:0 0 8px;padding-left:18px;color:var(--muted);font-size:14px;display:grid;gap:6px}
+.read{font:700 20px var(--font);margin:4px 0 10px;display:flex;gap:6px;align-items:baseline;flex-wrap:wrap}
+.read .t{color:var(--ink)} .read .dot-sep{color:var(--muted)} .read .s{color:var(--ma)}
+.read small{font:400 13px var(--font);color:var(--muted)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <nav class="crumb" aria-label="导航"><a href="index.html">← 概念图解目录</a><span>总纲</span></nav>
+  <header style="display:grid;gap:8px">
+    <h1>五种趋势类型</h1>
+    <p class="lede">趋势类型只看<b>中间那一组：60 线组和 120 线组</b>。两组谁在上、往哪走、60 线指向几点钟，定出加速上涨、稳定上涨、横盘、稳定下跌、加速下跌五种。20 线组不定类型，只管<b>走到哪个阶段</b>。60/120 自己乱了就不硬套，叫过渡状态。</p>
+  </header>
+
+  <section class="panel">
+    <h2>60、120 两条线在五种类型里的样子（示意，角度按钟表方向画）</h2>
+    <div class="chart">
+      <svg viewBox="0 58 910 284" role="img" aria-label="五个小图：加速上涨里 60 线越走越陡、和 120 线拉开；稳定上涨两条线平行向上约 2 点钟；横盘两条线走平缠在一起；稳定下跌平行向下约 4 点钟；加速下跌 60 线越跌越陡。每格下面一个钟表指针">
+<rect class="cell" x="6" y="66" width="170" height="268" rx="8"/>
+<text class="cell-t" x="91.0" y="92" text-anchor="middle">加速上涨</text>
+<path class="l120" d="M20.0,226.0 L142.0,176.7"/><path class="l60" d="M20.0,214.0 Q95.6,200.0 142.0,112.0"/>
+<text class="lbl l60-l" x="146" y="116.0">60</text><text class="lbl l120-l" x="146" y="180.7">120</text>
+<circle class="clock" cx="40" cy="288" r="20"/>
+<line class="clock-tk" x1="40.0" y1="272.4" x2="40.0" y2="268.0"/>
+<line class="clock-tk" x1="48.6" y1="273.1" x2="50.0" y2="270.7"/>
+<line class="clock-tk" x1="54.9" y1="279.4" x2="57.3" y2="278.0"/>
+<line class="clock-tk" x1="55.6" y1="288.0" x2="60.0" y2="288.0"/>
+<line class="clock-tk" x1="54.9" y1="296.6" x2="57.3" y2="298.0"/>
+<line class="clock-tk" x1="48.6" y1="302.9" x2="50.0" y2="305.3"/>
+<line class="clock-tk" x1="40.0" y1="303.6" x2="40.0" y2="308.0"/>
+<line class="clock-tk" x1="31.4" y1="302.9" x2="30.0" y2="305.3"/>
+<line class="clock-tk" x1="25.1" y1="296.6" x2="22.7" y2="298.0"/>
+<line class="clock-tk" x1="24.4" y1="288.0" x2="20.0" y2="288.0"/>
+<line class="clock-tk" x1="25.1" y1="279.4" x2="22.7" y2="278.0"/>
+<line class="clock-tk" x1="31.4" y1="273.1" x2="30.0" y2="270.7"/>
+<line class="hand" x1="40" y1="288" x2="46.1" y2="272.8"/><circle class="hub" cx="40" cy="288" r="2.5"/>
+<text class="cell-c" x="68" y="285">12 点 ~ 1 点</text><text class="note" x="68" y="304">60 线 ≥ 60°</text>
+<rect class="cell" x="188" y="66" width="170" height="268" rx="8"/>
+<text class="cell-t" x="273.0" y="92" text-anchor="middle">稳定上涨</text>
+<path class="l120" d="M202.0,218.0 L324.0,153.1"/><path class="l60" d="M202.0,196.0 L324.0,125.6"/>
+<text class="lbl l60-l" x="328" y="129.6">60</text><text class="lbl l120-l" x="328" y="157.1">120</text>
+<circle class="clock" cx="222" cy="288" r="20"/>
+<line class="clock-tk" x1="222.0" y1="272.4" x2="222.0" y2="268.0"/>
+<line class="clock-tk" x1="230.6" y1="273.1" x2="232.0" y2="270.7"/>
+<line class="clock-tk" x1="236.9" y1="279.4" x2="239.3" y2="278.0"/>
+<line class="clock-tk" x1="237.6" y1="288.0" x2="242.0" y2="288.0"/>
+<line class="clock-tk" x1="236.9" y1="296.6" x2="239.3" y2="298.0"/>
+<line class="clock-tk" x1="230.6" y1="302.9" x2="232.0" y2="305.3"/>
+<line class="clock-tk" x1="222.0" y1="303.6" x2="222.0" y2="308.0"/>
+<line class="clock-tk" x1="213.4" y1="302.9" x2="212.0" y2="305.3"/>
+<line class="clock-tk" x1="207.1" y1="296.6" x2="204.7" y2="298.0"/>
+<line class="clock-tk" x1="206.4" y1="288.0" x2="202.0" y2="288.0"/>
+<line class="clock-tk" x1="207.1" y1="279.4" x2="204.7" y2="278.0"/>
+<line class="clock-tk" x1="213.4" y1="273.1" x2="212.0" y2="270.7"/>
+<line class="hand" x1="222" y1="288" x2="236.2" y2="279.8"/><circle class="hub" cx="222" cy="288" r="2.5"/>
+<text class="cell-c" x="250" y="285">1 点 ~ 2 点半</text><text class="note" x="250" y="304">2 点钟最典型</text>
+<rect class="cell" x="370" y="66" width="170" height="268" rx="8"/>
+<text class="cell-t" x="455.0" y="92" text-anchor="middle">横盘</text>
+<path class="l120" d="M384.0,176.0 L387.1,175.2 L390.1,174.3 L393.1,173.2 L396.2,172.0 L399.2,170.8 L402.3,169.7 L405.4,168.7 L408.4,168.0 L411.4,167.4 L414.5,167.1 L417.6,167.0 L420.6,167.2 L423.6,167.7 L426.7,168.5 L429.8,169.4 L432.8,170.5 L435.9,171.6 L438.9,172.8 L441.9,173.9 L445.0,174.9 L448.1,175.8 L451.1,176.5 L454.1,176.9 L457.2,177.0 L460.2,176.9 L463.3,176.5 L466.4,175.8 L469.4,174.9 L472.4,173.9 L475.5,172.8 L478.6,171.6 L481.6,170.5 L484.6,169.4 L487.7,168.5 L490.8,167.7 L493.8,167.2 L496.9,167.0 L499.9,167.1 L502.9,167.4 L506.0,168.0"/><path class="l60" d="M384.0,168.0 L387.1,169.6 L390.1,171.2 L393.1,172.5 L396.2,173.7 L399.2,174.5 L402.3,174.9 L405.4,175.0 L408.4,174.7 L411.4,174.0 L414.5,172.9 L417.6,171.7 L420.6,170.2 L423.6,168.5 L426.7,166.9 L429.8,165.3 L432.8,163.9 L435.9,162.7 L438.9,161.8 L441.9,161.2 L445.0,161.0 L448.1,161.2 L451.1,161.8 L454.1,162.7 L457.2,163.9 L460.2,165.3 L463.3,166.9 L466.4,168.5 L469.4,170.2 L472.4,171.7 L475.5,172.9 L478.6,174.0 L481.6,174.7 L484.6,175.0 L487.7,174.9 L490.8,174.5 L493.8,173.7 L496.9,172.5 L499.9,171.2 L502.9,169.6 L506.0,168.0"/>
+<text class="lbl l60-l" x="510" y="162.0">60</text><text class="lbl l120-l" x="510" y="186.0">120</text>
+<circle class="clock" cx="404" cy="288" r="20"/>
+<line class="clock-tk" x1="404.0" y1="272.4" x2="404.0" y2="268.0"/>
+<line class="clock-tk" x1="412.6" y1="273.1" x2="414.0" y2="270.7"/>
+<line class="clock-tk" x1="418.9" y1="279.4" x2="421.3" y2="278.0"/>
+<line class="clock-tk" x1="419.6" y1="288.0" x2="424.0" y2="288.0"/>
+<line class="clock-tk" x1="418.9" y1="296.6" x2="421.3" y2="298.0"/>
+<line class="clock-tk" x1="412.6" y1="302.9" x2="414.0" y2="305.3"/>
+<line class="clock-tk" x1="404.0" y1="303.6" x2="404.0" y2="308.0"/>
+<line class="clock-tk" x1="395.4" y1="302.9" x2="394.0" y2="305.3"/>
+<line class="clock-tk" x1="389.1" y1="296.6" x2="386.7" y2="298.0"/>
+<line class="clock-tk" x1="388.4" y1="288.0" x2="384.0" y2="288.0"/>
+<line class="clock-tk" x1="389.1" y1="279.4" x2="386.7" y2="278.0"/>
+<line class="clock-tk" x1="395.4" y1="273.1" x2="394.0" y2="270.7"/>
+<line class="hand" x1="404" y1="288" x2="420.4" y2="288.0"/><circle class="hub" cx="404" cy="288" r="2.5"/>
+<text class="cell-c" x="432" y="285">2 点半 ~ 3 点半</text><text class="note" x="432" y="304">6 条线靠拢</text>
+<rect class="cell" x="552" y="66" width="170" height="268" rx="8"/>
+<text class="cell-t" x="637.0" y="92" text-anchor="middle">稳定下跌</text>
+<path class="l120" d="M566.0,122.0 L688.0,186.9"/><path class="l60" d="M566.0,144.0 L688.0,214.4"/>
+<text class="lbl l60-l" x="692" y="218.4">60</text><text class="lbl l120-l" x="692" y="190.9">120</text>
+<circle class="clock" cx="586" cy="288" r="20"/>
+<line class="clock-tk" x1="586.0" y1="272.4" x2="586.0" y2="268.0"/>
+<line class="clock-tk" x1="594.6" y1="273.1" x2="596.0" y2="270.7"/>
+<line class="clock-tk" x1="600.9" y1="279.4" x2="603.3" y2="278.0"/>
+<line class="clock-tk" x1="601.6" y1="288.0" x2="606.0" y2="288.0"/>
+<line class="clock-tk" x1="600.9" y1="296.6" x2="603.3" y2="298.0"/>
+<line class="clock-tk" x1="594.6" y1="302.9" x2="596.0" y2="305.3"/>
+<line class="clock-tk" x1="586.0" y1="303.6" x2="586.0" y2="308.0"/>
+<line class="clock-tk" x1="577.4" y1="302.9" x2="576.0" y2="305.3"/>
+<line class="clock-tk" x1="571.1" y1="296.6" x2="568.7" y2="298.0"/>
+<line class="clock-tk" x1="570.4" y1="288.0" x2="566.0" y2="288.0"/>
+<line class="clock-tk" x1="571.1" y1="279.4" x2="568.7" y2="278.0"/>
+<line class="clock-tk" x1="577.4" y1="273.1" x2="576.0" y2="270.7"/>
+<line class="hand" x1="586" y1="288" x2="600.2" y2="296.2"/><circle class="hub" cx="586" cy="288" r="2.5"/>
+<text class="cell-c" x="614" y="285">3 点半 ~ 5 点</text><text class="note" x="614" y="304">4 点钟左右</text>
+<rect class="cell" x="734" y="66" width="170" height="268" rx="8"/>
+<text class="cell-t" x="819.0" y="92" text-anchor="middle">加速下跌</text>
+<path class="l120" d="M748.0,114.0 L870.0,163.3"/><path class="l60" d="M748.0,126.0 Q823.6,140.0 870.0,228.0"/>
+<text class="lbl l60-l" x="874" y="232.0">60</text><text class="lbl l120-l" x="874" y="167.3">120</text>
+<circle class="clock" cx="768" cy="288" r="20"/>
+<line class="clock-tk" x1="768.0" y1="272.4" x2="768.0" y2="268.0"/>
+<line class="clock-tk" x1="776.6" y1="273.1" x2="778.0" y2="270.7"/>
+<line class="clock-tk" x1="782.9" y1="279.4" x2="785.3" y2="278.0"/>
+<line class="clock-tk" x1="783.6" y1="288.0" x2="788.0" y2="288.0"/>
+<line class="clock-tk" x1="782.9" y1="296.6" x2="785.3" y2="298.0"/>
+<line class="clock-tk" x1="776.6" y1="302.9" x2="778.0" y2="305.3"/>
+<line class="clock-tk" x1="768.0" y1="303.6" x2="768.0" y2="308.0"/>
+<line class="clock-tk" x1="759.4" y1="302.9" x2="758.0" y2="305.3"/>
+<line class="clock-tk" x1="753.1" y1="296.6" x2="750.7" y2="298.0"/>
+<line class="clock-tk" x1="752.4" y1="288.0" x2="748.0" y2="288.0"/>
+<line class="clock-tk" x1="753.1" y1="279.4" x2="750.7" y2="278.0"/>
+<line class="clock-tk" x1="759.4" y1="273.1" x2="758.0" y2="270.7"/>
+<line class="hand" x1="768" y1="288" x2="774.1" y2="303.2"/><circle class="hub" cx="768" cy="288" r="2.5"/>
+<text class="cell-c" x="796" y="285">5 点 ~ 6 点</text><text class="note" x="796" y="304">60 线 ≤ −60°</text>
+      </svg>
+    </div>
+    <div class="legend">
+      <span><i style="border-color:var(--l60)"></i>60 线组（实线）</span>
+      <span><i style="border-color:var(--l120);border-top-style:dashed"></i>120 线组（虚线）</span>
+      <span>钟表指针：60 线的方向，3 点钟是走平</span>
+    </div>
+  </section>
+
+  <section class="cases five" aria-label="五种类型和打法">
+    <article class="case">
+      <h3>加速上涨 <span class="verdict no">12~1 点</span></h3>
+      <p>60 线 1 点钟以上，或 20 线的乖离到了自身历史最高 5%。视频 B 00:36「第一类是 一点钟到十二点钟方向」。<b>没仓位不追；有仓位，等 20 线组拐头再走。</b></p>
+    </article>
+    <article class="case">
+      <h3>稳定上涨 <span class="verdict no">1~2 点半</span></h3>
+      <p>60 在 120 上方，两条线平行向上，2 点钟最典型。<b>持有不追高；回撤到 60 线组、四个条件齐了再加仓。</b></p>
+    </article>
+    <article class="case">
+      <h3>横盘 <span class="verdict no">2 点半~3 点半</span></h3>
+      <p>60 线走平，6 条线挤在一起。视频 B 00:47「第三类是两点半到三点半方向的」。<b>中段不做；横得够久、均线够密、开始张嘴，才小仓位埋伏。</b></p>
+    </article>
+    <article class="case">
+      <h3>稳定下跌 <span class="verdict no">3 点半~5 点</span></h3>
+      <p>60 在 120 下方，两条线平行向下，4 点钟左右最典型。<b>不抄底；反弹到 60 线组附近、四个条件齐了减仓或离场。</b></p>
+    </article>
+    <article class="case">
+      <h3>加速下跌 <span class="verdict no">5~6 点</span></h3>
+      <p>60 线 5 点钟以下，或 20 线的乖离到了自身历史最低 5%。<b>不随恐慌杀跌，也不在下跌途中抢；等底部构造和 20 线组拐头向上再进。</b></p>
+    </article>
+  </section>
+
+  <section class="panel">
+    <h2>定不出类型时：过渡状态</h2>
+    <p>60/120 的次序和方向对不上（比如 60 还在 120 上面，60 线组却已经往下走），就不给五种类型，按 20/60 的结构起名。这几个名字是脚本自定的分法，视频里没有。</p>
+    <div class="tbl-wrap">
+      <table class="tt-tbl">
+        <thead><tr><th>名字</th><th>什么样</th><th>打法一句</th></tr></thead>
+        <tbody>
+          <tr><td>空头结构反弹中</td><td>60 还在 120 上方，60 线组已经向下；20/60 已经双死叉，价格在往上走</td><td>不买，反弹是离场机会</td></tr>
+          <tr><td>多头结构回撤中</td><td>镜像：60 还在 120 下方，60 线组已经向上；20/60 已经双金叉，价格在往下走</td><td>持有观察，20/60 双死叉才算结构坏；空仓等 EMA20、MA20 重新拐头向上</td></tr>
+          <tr><td>顶部转折中</td><td>60 在 120 上方、60 线组向下，又不是上面那种反弹；或者 60 在 120 下方且向下，120 还在向上</td><td rowspan="2">条件不满足就不做；有仓位，MA、EMA 不协同时减仓</td></tr>
+          <tr><td>底部转折中</td><td>镜像：60 在 120 下方、60 线组向上，又不是上面那种回撤；或者 60 在 120 上方且向上，120 还在向下</td></tr>
+          <tr><td>失序</td><td>60/120 线组自己也乱了，定不出方向</td><td>不做</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>"类型·阶段"怎么读</h2>
+    <div class="read"><span class="t">加速下跌</span><span class="dot-sep">·</span><span class="s">延伸</span><small>QQQ 2026-11-20 顶上「趋势类型」小格</small></div>
+    <ul>
+      <li><b>点前面是类型</b>，由 60/120 定。QQQ 的 MA60 是 −9°，约 3 点半，没到 5 点钟，但离 20 线 −10.3%，乖离在自身历史的 0% 分位（最低），所以算加速下跌。</li>
+      <li><b>点后面是阶段</b>，看 20/60 走到哪：还在类型那一边、没走出反向的一步，是<b>延伸</b>；走了破线或拐头，是<b>回撤中</b>（下跌里叫<b>反弹中</b>），并写出穿到了哪一组线。QQQ 的 20/60 进度是 0/5，所以是延伸。</li>
+      <li>20/60 已经交叉或到了另一边：稳定上涨（下跌）里还叫回撤中（反弹中），是一次深回撤；加速里叫<b>转折中</b>，上涨里是顶部转折中，下跌里是底部转折中。</li>
+      <li>"延伸"不等于趋势刚开始。加速出现在整段趋势的哪一头，另写成"加速出现在趋势刚开始 / 即将结束"，两件事可以同时成立。</li>
+    </ul>
+  </section>
+
+  <p class="mirror"><b>为什么看中间那组</b>：视频 A 16:19「我们找中间这一组均线」。（解读）20 线组太快，一次回撤就会拐头，拿它定类型会来回变。类型用 60/120，阶段用 20/60，各管各的。次序和平行的判法是推断，钟表的刻度是拿视频里标注过的 GOOGL、AAPL、TSLA 校准的。</p>
+
+  <footer class="src">
+    <div><b>规则</b>：<span class="tag">J1</span> 60/120 次序、方向一致才有类型 · <span class="tag">J3</span> 加速 · <span class="tag">J4</span> 稳定 · <span class="tag">J5</span> 横盘 · <span class="tag">J6</span> 过渡状态（脚本自定） · <span class="tag">J7</span> 阶段 · <span class="tag">J8</span> 加速出现在哪一头。</div>
+    <div><b>工作台</b>：顶上四个小格里的「趋势类型」；① 看大局的前四问（60/120 排好了吗、60 线几点钟、是不是加速、20 线组走到哪一步）；结论卡片和 ② 找打法按这个类型给打法。</div>
+    <div><b>相关</b>：<a href="clock-direction.html">几点钟方向</a> · <a href="arrangement.html">排列</a> · <a href="deviation.html">乖离</a> · <a href="five-steps.html">五个进度点</a> · <a href="big-direction.html">大方向</a></div>
+  </footer>
+</div>
+</body>
+</html>

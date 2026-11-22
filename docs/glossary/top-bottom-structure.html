@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>顶部构造 / 底部构造</title>
+<link rel="stylesheet" href="glossary.css">
+<style>
+.ref{stroke:var(--muted);stroke-width:1.4;stroke-dasharray:5 4;fill:none}
+.ref.done{stroke:var(--up)} .ref.void{stroke:var(--down)}
+.rl{fill:var(--muted);font:13px var(--font)} .rl.b{font-weight:600;fill:var(--ink)}
+.rl.done{fill:var(--up)} .rl.void{fill:var(--down)}
+.lead{stroke:var(--muted);stroke-width:1}
+.ded{fill:var(--panel);stroke:var(--ink);stroke-width:2}
+.gapband{fill:var(--down);fill-opacity:.14}
+.filled{fill:none;stroke:var(--muted);stroke-width:1;stroke-dasharray:3 3}
+.rew{fill:var(--up);fill-opacity:.28} .risk{fill:var(--down);fill-opacity:.32}
+.calc{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.steps{margin:0;padding-left:20px;color:var(--muted);font-size:14px;display:grid;gap:6px}
+.steps b{color:var(--ink)}
+.panel p{margin:0 0 8px;font-size:14px;color:var(--muted)} .panel p b{color:var(--ink)} .panel p:last-child{margin-bottom:0}
+.kv{width:100%;border-collapse:collapse;font-size:14px}
+.kv th,.kv td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+.kv th{color:var(--muted);font-weight:600;white-space:nowrap}
+.kv td.num{font-family:var(--mono);font-variant-numeric:tabular-nums;white-space:nowrap}
+.tblwrap{overflow-x:auto}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <nav class="crumb" aria-label="导航"><a href="index.html">← 概念图解目录</a><span>转折 · 高点和低点怎么排</span></nav>
+  <header style="display:grid;gap:8px">
+    <h1>顶部构造 / 底部构造</h1>
+    <p class="lede">构造<b>只看每根 K 线的最高价和最低价</b>，不看收盘，也不看均线。底部构造是：<b>新低之后，先出现更高的低点，再出现更高的高点</b>。顶部构造反过来。它是路牌，不是路：构造完成不等于见底，动手还要等均线。</p>
+  </header>
+
+  <section class="panel">
+    <h2>一个底部构造怎么一步步成形（示意，不是真实行情）</h2>
+    <div class="chart">
+      <svg viewBox="0 30 960 300" role="img" aria-label="下跌到新低（1）之后，一根被包住的 K 线忽略；第 2 根最高价越过新低那根的最高价、最低价没创新低，是更高的低点；中间一根没越过它的最高价；第 3 根最高价越过第 2 根，底部构造完成">
+<line class="grid" x1="40" x2="740" y1="288" y2="288"/><text class="tick" x="6" y="292">84</text>
+<line class="grid" x1="40" x2="740" y1="244" y2="244"/><text class="tick" x="6" y="248">86</text>
+<line class="grid" x1="40" x2="740" y1="200" y2="200"/><text class="tick" x="6" y="204">88</text>
+<line class="grid" x1="40" x2="740" y1="156" y2="156"/><text class="tick" x="6" y="160">90</text>
+<line class="grid" x1="40" x2="740" y1="112" y2="112"/><text class="tick" x="6" y="116">92</text>
+<line class="grid" x1="40" x2="740" y1="68" y2="68"/><text class="tick" x="6" y="72">94</text>
+<g class="k down"><line class="wick" x1="70" x2="70" y1="54.8" y2="116.4"/><rect x="59" y="68.0" width="22" height="39.6" rx="1.5"/></g>
+<g class="k down"><line class="wick" x1="140" x2="140" y1="94.4" y2="156.0"/><rect x="129" y="107.6" width="22" height="39.6" rx="1.5"/></g>
+<g class="k down"><line class="wick" x1="210" x2="210" y1="134.0" y2="195.6"/><rect x="199" y="145.0" width="22" height="41.8" rx="1.5"/></g>
+<g class="k down"><line class="wick" x1="280" x2="280" y1="171.4" y2="235.2"/><rect x="269" y="186.8" width="22" height="39.6" rx="1.5"/></g>
+<g class="k down focus"><line class="wick" x1="350" x2="350" y1="208.8" y2="288.0"/><rect x="339" y="226.4" width="22" height="48.4" rx="1.5"/></g>
+<g class="k up"><line class="wick" x1="420" x2="420" y1="217.6" y2="277.0"/><rect x="409" y="244.0" width="22" height="26.4" rx="1.5"/></g>
+<g class="k up focus"><line class="wick" x1="490" x2="490" y1="186.8" y2="266.0"/><rect x="479" y="195.6" width="22" height="48.4" rx="1.5"/></g>
+<g class="k down"><line class="wick" x1="560" x2="560" y1="191.2" y2="239.6"/><rect x="549" y="200.0" width="22" height="26.4" rx="1.5"/></g>
+<g class="k up focus"><line class="wick" x1="630" x2="630" y1="164.8" y2="230.8"/><rect x="619" y="171.4" width="22" height="50.6" rx="1.5"/></g>
+<line class="ref" x1="350" x2="740" y1="208.8" y2="208.8"/><text class="rl" x="748" y="212.8">① 之后：最高价越过 87.60</text>
+<line class="ref done" x1="490" x2="740" y1="186.8" y2="186.8"/><text class="rl done" x="748" y="190.8">② 之后：越过 88.60 就完成</text>
+<line class="ref void" x1="350" x2="740" y1="288.0" y2="288.0"/><text class="rl void" x="748" y="292.0">跌破 84.00：新低，重新找</text>
+<g class="badge"><circle cx="350" cy="186.8" r="12"/><text x="350" y="191.3">1</text></g>
+<g class="badge"><circle cx="490" cy="164.8" r="12"/><text x="490" y="169.3">2</text></g>
+<g class="badge"><circle cx="630" cy="142.8" r="12"/><text x="630" y="147.3">3</text></g>
+<text class="note" x="350" y="306.0" text-anchor="middle">新低</text>
+<text class="note" x="420" y="315.0" text-anchor="middle">被包住，忽略</text>
+<text class="note" x="490" y="284.0" text-anchor="middle">更高的低点</text>
+<text class="note" x="560" y="257.6" text-anchor="middle">没越过，接着等</text>
+<text class="note" x="648" y="147.3">更高的高点，完成</text>
+      </svg>
+    </div>
+    <div class="legend">
+      <span><i style="border-color:var(--up);border-top-width:8px;width:10px"></i>阳线</span>
+      <span><i style="border-color:var(--down);border-top-width:8px;width:10px"></i>阴线</span>
+      <span><i style="border-color:var(--muted);border-top-style:dashed;border-top-width:2px"></i>越过它往前走一步</span>
+      <span><i style="border-color:var(--up);border-top-style:dashed;border-top-width:2px"></i>越过它就完成</span>
+      <span><i style="border-color:var(--down);border-top-style:dashed;border-top-width:2px"></i>跌破它就作废</span>
+    </div>
+  </section>
+
+  <section class="cases" aria-label="图上 1、2、3 三个时刻，工作台的进度怎么写">
+    <article class="case">
+      <h3><span class="n">1</span>只有新低 <span class="verdict no">还差 2 根</span></h3>
+      <p>新低那根最高 <span class="calc">87.60</span>。下一根要<b>最高价越过 87.60、最低价不再创新低</b>，才是更高的低点；之后还得再来一根越过它。工作台写：<b>下一根最高价高于 87.60，再来一根越过那根才完成（最少还差 2 根）</b>。紧跟着那根高低都在新低那根范围里，叫包含结构，当它不存在。</p>
+    </article>
+    <article class="case">
+      <h3><span class="n">2</span>有了更高的低点 <span class="verdict no">还差 1 根</span></h3>
+      <p>这根最高 <span class="calc">88.60</span> 越过了 87.60，最低 <span class="calc">85.00</span> 没破 84.00。现在只差一根：<b>下一根最高价高于 88.60 就完成</b>。它后面那根最高只到 88.40，没越过，接着等。</p>
+    </article>
+    <article class="case">
+      <h3><span class="n">3</span>更高的高点 <span class="verdict yes" style="color:var(--up);border-color:var(--up)">完成</span></h3>
+      <p>最高 <span class="calc">89.60</span> 越过 88.60，底部构造完成，最少三根 K 线。完成以后，只要最低价<b>跌破 84.00</b>（新低那根的最低价），构造就作废，从新的低点重新找（J22）。</p>
+    </article>
+  </section>
+
+  <section class="panel">
+    <h2>为什么能提前算出"再来一根怎样的 K 线"</h2>
+    <p>每一步要越过的都是一根已经走完的 K 线的最高价，所以进度可以提前写成价位。视频 D 19:46「我们可以预见到再出现一根怎样的K线」：只差一根时，先把计划做好（J27）。</p>
+    <p>例子：QQQ 2026-11-20 收在 608.45，当天创了新低 606.23，底部构造刚开始。工作台写的是<b>下一根最高价高于 643.28，再来一根越过那根才完成（最少还差 2 根）</b>。643.28 就是 11-20 那根的最高价。再往前一个例子，QQQ 2014-03-28 回放：03-27 新低 86.40，03-28 是更高的低点，进度是<b>下一根最高价高于 88.01 就完成</b>。</p>
+  </section>
+
+  <p class="mirror"><b>顶部构造反过来读</b>：新高之后，先出现更低的高点（最高价没超过新高那根、最低价跌破它的最低价），再出现更低的低点（最低价跌破那根的最低价）。进度写成"下一根最低价低于 X"，最高价超过新高那根就作废（J20、J22）。<b>极端构造</b>：第二根又创新高、同时跌破前一根的最低价，它自己就算新高，仍要第三根跌破它的最低价才完成（底部镜像）。</p>
+
+  <section class="panel">
+    <h2>和加速行情的打法有什么关系</h2>
+    <p>视频 B 14:05「没有见到顶底构造就不会见到顶底」：构造没完成，不可能是顶或底；构造完成了，也只是提醒（J23）。所以构造决定的是<b>什么时候开始盯</b>，动手要等 20 线组拐头，也就是关键性波动（J19）。</p>
+    <div class="tblwrap">
+      <table class="kv">
+        <tr><th></th><th>加速上涨（看顶部构造）</th><th>加速下跌（看底部构造）</th></tr>
+        <tr><th>空仓</th><td>不追，坐轿子不抬轿子（P7）</td><td>不随恐慌杀跌，也不在下跌途中抢。等底部构造完成，再等 20 线组拐头向上才进（P7 镜像、J21、J19）</td></tr>
+        <tr><th>持仓，没见构造</th><td>拿着，不下车（P8）</td><td>反弹到 EMA20 附近是减仓位置；构造和 20 线组拐头向上之前不加仓</td></tr>
+        <tr><th>持仓，见了构造</th><td>只是提醒，还不动手；等 20 线组拐头向下再走（P9）</td><td>还不加仓，等 20 线组也拐头向上</td></tr>
+      </table>
+    </div>
+    <p style="margin-top:10px">交易计划里，加速下跌的空仓进场条件写成"先等底部构造完成（最高价越过 X）"，再加上收盘站上 EMA20 和 MA20 抵扣价里较高的那个。</p>
+  </section>
+
+  <footer class="src">
+    <div><b>规则</b>：<span class="tag">J20</span> 顶部构造 · <span class="tag">J21</span> 底部构造 · <span class="tag">J22</span> 构造作废 · <span class="tag">J23</span> 没构造不是顶底 · <span class="tag">J27</span> 只差一根能提前算 · <span class="tag">P7</span><span class="tag">P8</span><span class="tag">P9</span> 加速里的打法。定义出自视频 D 00:58「我们只研究一根k线的最低价和最高价」。</div>
+    <div><b>工作台</b>：K 线图「图层 ▾ → 结构」画出「顶·已完成」「底·形成中」标记，形成中的旁边有一条短虚线写着下一根怎样就完成；② 找打法「等什么信号」那格的条件清单写还差什么（持仓是「盯什么信号」里的「构造」）。</div>
+    <div><b>相关</b>：<a href="key-move.html">关键性波动</a> · <a href="trend-types.html">五种趋势类型</a> · <a href="clock-direction.html">几点钟方向</a> · <a href="turning.html">拐头</a></div>
+  </footer>
+</div>
+</body>
+</html>

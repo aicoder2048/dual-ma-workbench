@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>缺口</title>
+<link rel="stylesheet" href="glossary.css">
+<style>
+.ref{stroke:var(--muted);stroke-width:1.4;stroke-dasharray:5 4;fill:none}
+.ref.done{stroke:var(--up)} .ref.void{stroke:var(--down)}
+.rl{fill:var(--muted);font:13px var(--font)} .rl.b{font-weight:600;fill:var(--ink)}
+.rl.done{fill:var(--up)} .rl.void{fill:var(--down)}
+.lead{stroke:var(--muted);stroke-width:1}
+.ded{fill:var(--panel);stroke:var(--ink);stroke-width:2}
+.gapband{fill:var(--down);fill-opacity:.14}
+.filled{fill:none;stroke:var(--muted);stroke-width:1;stroke-dasharray:3 3}
+.rew{fill:var(--up);fill-opacity:.28} .risk{fill:var(--down);fill-opacity:.32}
+.calc{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.steps{margin:0;padding-left:20px;color:var(--muted);font-size:14px;display:grid;gap:6px}
+.steps b{color:var(--ink)}
+.panel p{margin:0 0 8px;font-size:14px;color:var(--muted)} .panel p b{color:var(--ink)} .panel p:last-child{margin-bottom:0}
+.kv{width:100%;border-collapse:collapse;font-size:14px}
+.kv th,.kv td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+.kv th{color:var(--muted);font-weight:600;white-space:nowrap}
+.kv td.num{font-family:var(--mono);font-variant-numeric:tabular-nums;white-space:nowrap}
+.tblwrap{overflow-x:auto}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <nav class="crumb" aria-label="导航"><a href="index.html">← 概念图解目录</a><span>计划 · 上方的阻力位</span></nav>
+  <header style="display:grid;gap:8px">
+    <h1>缺口</h1>
+    <p class="lede">缺口是跳空留下的价格空白：<b>某根 K 线的最高价比前一根的最低价还低</b>，中间那段一笔成交都没有。只看最高价、最低价，不看收盘。工作台画的是<b>还没补上的向下缺口</b>，交易计划拿上方最近的那个当阻力位。</p>
+  </header>
+
+  <section class="panel">
+    <h2>一个向下缺口，后来补了一部分（示意，不是真实行情）</h2>
+    <div class="chart">
+      <svg viewBox="0 50 820 260" role="img" aria-label="第 1 根最低价 102；第 2 根跳空低开，最高价 99，留下 99 到 102 的缺口；第 3 根反弹最高到 100.4，补上了 99 到 100.4 这段；还没补的是 100.4 到 102，画成从跳空那天到现在的色带">
+<line class="grid" x1="40" x2="650" y1="274" y2="274"/><text class="tick" x="6" y="278">92</text>
+<line class="grid" x1="40" x2="650" y1="218" y2="218"/><text class="tick" x="6" y="222">96</text>
+<line class="grid" x1="40" x2="650" y1="162" y2="162"/><text class="tick" x="6" y="166">100</text>
+<line class="grid" x1="40" x2="650" y1="106" y2="106"/><text class="tick" x="6" y="110">104</text>
+<rect class="gapband" x="220" y="134.0" width="430" height="22.4"/>
+<rect class="filled" x="220" y="156.4" width="200" height="19.6"/>
+<g class="k down"><line class="wick" x1="70" x2="70" y1="66.8" y2="100.4"/><rect x="59" y="78.0" width="22" height="15.4" rx="1.5"/></g>
+<g class="k down"><line class="wick" x1="120" x2="120" y1="83.6" y2="114.4"/><rect x="109" y="93.4" width="22" height="15.4" rx="1.5"/></g>
+<g class="k down focus"><line class="wick" x1="170" x2="170" y1="99.0" y2="134.0"/><rect x="159" y="108.8" width="22" height="16.8" rx="1.5"/></g>
+<g class="k down focus"><line class="wick" x1="220" x2="220" y1="176.0" y2="206.8"/><rect x="209" y="181.6" width="22" height="18.2" rx="1.5"/></g>
+<g class="k down"><line class="wick" x1="270" x2="270" y1="190.0" y2="223.6"/><rect x="259" y="199.8" width="22" height="18.2" rx="1.5"/></g>
+<g class="k down"><line class="wick" x1="320" x2="320" y1="209.6" y2="243.2"/><rect x="309" y="218.0" width="22" height="18.2" rx="1.5"/></g>
+<g class="k up"><line class="wick" x1="370" x2="370" y1="201.2" y2="241.8"/><rect x="359" y="205.4" width="22" height="30.8" rx="1.5"/></g>
+<g class="k up focus"><line class="wick" x1="420" x2="420" y1="156.4" y2="211.0"/><rect x="409" y="163.4" width="22" height="42.0" rx="1.5"/></g>
+<g class="k down"><line class="wick" x1="470" x2="470" y1="160.6" y2="204.0"/><rect x="459" y="163.4" width="22" height="35.0" rx="1.5"/></g>
+<g class="k down"><line class="wick" x1="520" x2="520" y1="187.2" y2="232.0"/><rect x="509" y="198.4" width="22" height="26.6" rx="1.5"/></g>
+<g class="k down"><line class="wick" x1="570" x2="570" y1="212.4" y2="251.6"/><rect x="559" y="225.0" width="22" height="21.0" rx="1.5"/></g>
+<g class="k up"><line class="wick" x1="620" x2="620" y1="227.8" y2="257.2"/><rect x="609" y="233.4" width="22" height="12.6" rx="1.5"/></g>
+<line class="ref" x1="156" x2="184" y1="134.0" y2="134.0"/>
+<line class="ref" x1="406" x2="434" y1="156.4" y2="156.4"/>
+<text class="rl b" x="660" y="138.0">上沿 102.00</text>
+<text class="note" x="660" y="154.0">跳空前一天的最低价</text>
+<text class="rl b" x="660" y="186.4">下沿 100.40</text>
+<text class="note" x="660" y="202.4">还没补的那段的底</text>
+<text class="note" x="660" y="218.4">上方最近的就当阻力位</text>
+<text class="note" x="320" y="171" text-anchor="middle">已补的部分</text>
+<g class="badge"><circle cx="170" cy="77.0" r="12"/><text x="170" y="81.5">1</text></g>
+<g class="badge"><circle cx="220" cy="230.8" r="12"/><text x="220" y="235.3">2</text></g>
+<g class="badge"><circle cx="420" cy="235.0" r="12"/><text x="420" y="239.5">3</text></g>
+      </svg>
+    </div>
+    <div class="legend">
+      <span><i style="border-color:var(--down);opacity:.35;border-top-width:8px;width:14px"></i>还没补的那段（工作台画的色带）</span>
+      <span><i style="border-color:var(--muted);border-top-style:dashed;border-top-width:2px"></i>已补的部分</span>
+      <span><i style="border-color:var(--up);border-top-width:8px;width:10px"></i>阳线</span>
+      <span><i style="border-color:var(--down);border-top-width:8px;width:10px"></i>阴线</span>
+    </div>
+  </section>
+
+  <section class="cases" aria-label="图上 1、2、3 三根 K 线">
+    <article class="case">
+      <h3><span class="n">1</span>跳空前一天 <span class="verdict no">定上沿</span></h3>
+      <p>它的<b>最低价 102.00</b> 就是缺口的上沿。以后最高价哪天回到 102.00，缺口就补满了。</p>
+    </article>
+    <article class="case">
+      <h3><span class="n">2</span>跳空那天 <span class="verdict yes">缺口</span></h3>
+      <p>最高价只有 99.00，比前一天的最低价 102.00 还低，中间留下一段空白。要是最高价碰到了 102.00，哪怕只是影线，也不算缺口。</p>
+    </article>
+    <article class="case">
+      <h3><span class="n">3</span>补了一部分 <span class="verdict no">下沿上移</span></h3>
+      <p>反弹最高到 100.40，99.00 到 100.40 这段算补上了。色带的<b>下沿是跳空以来最高价到过的最高处</b>，现在是 100.40；色带从跳空那天一直画到今天。补满了就不再画，也不再当阻力。</p>
+    </article>
+  </section>
+
+  <section class="panel">
+    <h2>交易计划怎么用缺口</h2>
+    <p>第一阻力从<b>进场价往上</b>找最近的缺口或均线密集（P25）。缺口取<b>下沿</b>，也就是还没补那段的底，价格先碰到的是它。LEI 讲反弹会走到哪时就拿缺口说事：视频 I 20:55「我说他至少会反弹到这个缺口位置」。</p>
+    <p>例子：QQQ 2026-11-20 收 608.45，有 5 个没补的向下缺口，都在现价上方：</p>
+    <div class="tblwrap">
+      <table class="kv">
+        <tr><th>跳空那天</th><th>下沿 – 上沿</th><th></th></tr>
+        <tr><th>11-20</th><td class="num">643.28 – 644.34</td><td>在触发价下方，不当阻力</td></tr>
+        <tr><th>10-30</th><td class="num">701.45 – 711.62</td><td>在触发价下方，不当阻力</td></tr>
+        <tr><th>10-29</th><td class="num">718.07 – 720.30</td><td><b>触发价 712.20 上方最近的：第一阻力 718.07</b></td></tr>
+        <tr><th>10-13</th><td class="num">744.20 – 744.85</td><td></td></tr>
+        <tr><th>10-07</th><td class="num">758.30 – 759.10</td><td></td></tr>
+      </table>
+    </div>
+    <p style="margin-top:10px">缺口和大量、假动作一起，是 LEI 说必须会认的三种标志性动作：视频 I 09:49「大量、缺口、假动作这三样东西是我们必须要有识别的」。</p>
+  </section>
+
+  <p class="mirror"><b>缺口和止损</b>：跳空就是开盘直接越过一段价格。止损单碰上跳空，按开盘价成交，可能比止损价差很多。下次财报在 10 个交易日内（这个 10 是脚本自定），结论卡片和找打法的「止损」格会提醒"跳空可能越过止损价"。只是提醒，不改打法。</p>
+
+  <footer class="src">
+    <div><b>规则</b>：<span class="tag">P25</span> 第一阻力看缺口或最近的均线密集 · 缺口的定义在交易计划脚本里（<code>tradeplan.unfilled_gaps</code>），图上的色带和找阻力位用同一个定义 · 财报提醒窗口 <code>EARNINGS_WARN_DAYS</code>，脚本自定，不进规则。</div>
+    <div><b>工作台</b>：K 线图「图层 ▾」里的「缺口」（默认不画，选「结构」预设也会打开）只画阻力位和离现价最近的上下各一个，被用作阻力位的那条颜色深一点、写着「阻力位」；勾上「缺口」下面的「全部」，离得远的也画。切到周线时变灰，回放时收起，练习里不画。</div>
+    <div><b>相关</b>：<a href="resistance-rr.html">第一阻力 / 目标位和盈亏比</a> · <a href="ma-cluster.html">均线密集</a> · <a href="volume-profile.html">筹码山</a></div>
+  </footer>
+</div>
+</body>
+</html>
