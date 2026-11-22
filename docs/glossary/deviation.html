@@ -18,6 +18,15 @@
 .axis span:nth-child(2){text-align:center}
 .panel p{margin:0 0 8px;font-size:14px;color:var(--muted)} .panel p b{color:var(--ink)}
 .num{font-family:var(--mono)}
+.cell{fill:none;stroke:var(--line);stroke-width:1}
+.cell-t{fill:var(--ink);font:700 15px var(--font)}
+.cell-c2{fill:var(--ink);font:600 12px var(--font)} .note2{fill:var(--muted);font-size:12px}
+.fl-q{fill:var(--panel);stroke:var(--muted);stroke-width:1.2}
+.fl-r{fill:var(--bg);stroke:var(--ma);stroke-width:1.6}
+.fl-qt{fill:var(--ink);font:600 14px var(--font)} .fl-qs{fill:var(--muted);font-size:13px}
+.fl-rt{fill:var(--ink);font:700 15px var(--font)} .fl-rs{fill:var(--muted);font-size:13px}
+.fl-arr{stroke:var(--muted);stroke-width:1.5;fill:none} .fl-headp{fill:var(--muted)}
+.px{fill:none;stroke:var(--close);stroke-width:2.2}
 </style>
 </head>
 <body>
@@ -130,7 +139,34 @@
     <p style="margin-top:10px">QQQ 2026-11-20：收盘 <span class="num">608.45</span>，离 20 线 <b class="num">-10.3%</b>，排 <b class="num">0%</b> 分位，判<b>加速下跌</b>。同一天离 EMA120 是 <span class="num">-12.9%</span>，周线离 EMA120 <span class="num">+1.7%</span>，J37 两档都没到。</p>
   </section>
 
-  <p class="mirror"><b>跑远了会回来</b>（J9）：价格快速回来找均线（图上第 2 根），或横着走、等均线追上来。<b>但这不是抄底的理由</b>：要等底部构造和 20 线组拐头向上（P7）。</p>
+  <section class="panel" data-section="跑远了会回来">
+    <h2>跑远了会回来：两条路（示意）</h2>
+    <div class="chart">
+      <svg viewBox="0 0 910 276" role="img" aria-label="分叉图：价格离 20 线很远以后有两条回归的路：价格快速涨回来找均线，或价格横着走、等均线追下来；两条路都不是抄底的理由，进场还要等底部构造完成、20 线组拐头向上">
+<defs><marker id="fl-head" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="fl-headp" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="fl-q" x="10" y="70" width="170" height="84" rx="8"/>
+<text class="fl-qt" x="95.0" y="97.0" text-anchor="middle">价格离 20 线很远</text>
+<text class="fl-qs" x="95.0" y="117.0" text-anchor="middle">（大幅乖离）</text>
+<text class="fl-qs" x="95.0" y="137.0" text-anchor="middle">跑远了会回来（J9）</text>
+<path class="fl-arr" d="M180,100 Q200,60 226,60" marker-end="url(#fl-head)"/>
+<path class="fl-arr" d="M180,124 Q200,164 226,164" marker-end="url(#fl-head)"/>
+<rect class="cell" x="230" y="10" width="670" height="96" rx="8"/>
+<text class="cell-t" x="580" y="50">价回线</text>
+<text class="note2" x="580" y="74">价格快速涨回来找均线（上面那张图的第 2 根）</text>
+<path class="ma" d="M262,36 L520,62"/><path class="px" d="M262,96 L330,100 L400,92 L450,74 L500,64"/>
+<rect class="cell" x="230" y="114" width="670" height="96" rx="8"/>
+<text class="cell-t" x="580" y="154">线追价</text>
+<text class="note2" x="580" y="178">价格横着走，等均线追下来</text>
+<path class="ma" d="M262,140 Q400,170 520,186"/><path class="px" d="M262,198 L520,196"/>
+<rect class="fl-r" x="10" y="222" width="890" height="48" rx="8"/>
+<text class="fl-rt" x="455.0" y="251.0" text-anchor="middle">两条路都不是抄底的理由：进场还要等底部构造完成、20 线组拐头向上（P7）</text>
+      </svg>
+    </div>
+    <div class="legend">
+      <span><i style="border-color:var(--ma)"></i>MA20</span>
+      <span><i style="border-color:var(--close);border-top-width:2px"></i>价格</span>
+    </div>
+  </section>
   <p class="mirror"><b>什么时候看乖离</b>：强趋势看乖离，弱趋势看成本的密集程度。视频 I 03:21「在强趋势的时候呢我们要关注它的乖离率」。工作台的"离 20 线"只指收盘对 MA20。</p>
   <footer class="src">
     <div><b>规则</b>：<span class="tag">J3</span> 加速：60 线 1 点钟以上，或离 20 线排在自身历史两端 5%（分位阈值脚本自定）。<span class="tag">J9</span> 加速后价格要回归均线。<span class="tag">J37</span> 收盘离 EMA120 ≥ 50%、周线离 120 线 ≥ 70%（两个数是视频的），只当旁证。</div>
