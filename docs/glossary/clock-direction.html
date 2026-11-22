@@ -36,7 +36,7 @@ table.deg td.src{color:var(--muted)}
   <nav class="crumb" aria-label="导航"><a href="index.html">← 概念图解目录</a><span>均线本身</span></nav>
   <header style="display:grid;gap:8px">
     <h1>几点钟方向</h1>
-    <p class="lede">把均线的斜率当成钟面上的指针来读：<b>3 点钟是水平</b>，往 12 点转是越涨越陡，往 6 点转是越跌越陡。量的是<b>最近一段固定时间里线走了多陡</b>，不是今天往上还是往下（那是方向，看<a href="turning.html">拐头</a>）。</p>
+    <p class="lede">把均线的斜率读成钟面指针。<b>3 点钟是水平</b>，往 12 点越涨越陡，往 6 点越跌越陡。它只量<b>固定一段时间里线有多陡</b>。方向看<a href="turning.html">拐头</a>。</p>
   </header>
 
   <section class="panel">
@@ -84,20 +84,20 @@ table.deg td.src{color:var(--muted)}
   <section class="cases" aria-label="三档斜率">
     <article class="case">
       <h3>走平 <span class="verdict no">2 点半 ~ 3 点半</span></h3>
-      <p>60 线角度在 ±15° 以内。再加上 6 条线靠在一起、60/120 定不出类型，才判横盘（规则 J5）。视频 B 00:47「第三类是两点半到三点半方向的」。</p>
+      <p>60 线在 ±15° 以内。6 条线也靠拢、60/120 定不出类型，才判横盘（规则 J5）。视频 B 00:47「第三类是两点半到三点半方向的」。</p>
     </article>
     <article class="case">
       <h3>有斜率 <span class="verdict no">1 点 ~ 2 点半</span></h3>
-      <p>稳定上涨，<b>2 点钟（30°）最典型</b>；镜像是稳定下跌，3 点半到 5 点，4 点钟左右。LEI 看 GOOGL：视频 A 17:22「很显然这是什么典型的叫什么两点钟方向的趋势」。</p>
+      <p>稳定上涨，<b>2 点钟（30°）最典型</b>。稳定下跌是 3 点半到 5 点，4 点钟左右。</p>
     </article>
     <article class="case">
       <h3>加速 <span class="verdict yes">1 点钟以上</span></h3>
-      <p>60 线 ≥ 60°，或者 20 线乖离到自身历史最高 5%，是加速上涨；5 点钟以下是加速下跌（规则 J3）。视频 B 00:36「第一类是 一点钟到十二点钟方向」。</p>
+      <p>60 线 ≥ 60°，或 20 线乖离到自身历史最高 5%，是加速上涨。5 点钟以下是加速下跌（规则 J3）。视频 B 00:36「第一类是 一点钟到十二点钟方向」。</p>
     </article>
   </section>
 
   <section class="panel txt">
-    <h2 style="color:var(--ink)">刻度从哪来：哪些是视频的，哪些是脚本定的</h2>
+    <h2 style="color:var(--ink)">刻度的出处</h2>
     <div class="scroll"><table class="deg">
       <thead><tr><th>刻度</th><th>值</th><th>出处</th></tr></thead>
       <tbody>
@@ -105,23 +105,23 @@ table.deg td.src{color:var(--muted)}
         <tr><td>走平：2 点半 ~ 3 点半</td><td class="n">±15°</td><td class="src">视频（FLAT_DEG）</td></tr>
         <tr><td>加速：1 点钟 / 5 点钟</td><td class="n">±60°</td><td class="src">视频（ACCEL_DEG）</td></tr>
         <tr><td>钟面每差 1 小时</td><td class="n">30°</td><td class="src">钟面本身的几何</td></tr>
-        <tr><td>量多长一段</td><td class="n">20 根</td><td class="src"><b>脚本自定</b>（CLOCK_WINDOW）。视频只要求所有品种用同一时长</td></tr>
-        <tr><td>多少涨幅画成多少度</td><td class="n">0.111</td><td class="src"><b>校准值</b>（CLOCK_SCALE）：按 GOOGL 2021-04-14 的 MA60 正好 2 点钟定的</td></tr>
+        <tr><td>量多长一段</td><td class="n">20 根</td><td class="src"><b>脚本自定</b>（CLOCK_WINDOW）。视频只要求同一时长</td></tr>
+        <tr><td>多少涨幅画成多少度</td><td class="n">0.111</td><td class="src"><b>校准值</b>（CLOCK_SCALE）：让 GOOGL 2021-04-14 的 MA60 落在 2 点钟</td></tr>
         <tr><td>加速的另一半：20 线乖离到历史两端</td><td class="n">5%</td><td class="src"><b>脚本自定</b>（EXTREME_PCTL）</td></tr>
       </tbody>
     </table></div>
-    <p>脚本的算法（规则 J2）：<span class="num">角度 = atan( ln(今天 ÷ 20 根前) ÷ 0.111 )</span>。换成 20 根里 MA 涨跌多少更好记：</p>
+    <p>脚本的算法（规则 J2）：<span class="num">角度 = atan( ln(今天 ÷ 20 根前) ÷ 0.111 )</span>。换算成 20 根里 MA 的涨跌：</p>
     <div class="scroll"><table class="deg">
       <thead><tr><th>20 根里涨跌</th><th>角度</th><th>钟点</th></tr></thead>
       <tbody>
         <tr><td class="n" style="text-align:left">+21.2%</td><td class="n" style="text-align:left">+60°</td><td>1 点钟，加速线</td></tr>
         <tr><td class="n" style="text-align:left">+6.6%</td><td class="n" style="text-align:left">+30°</td><td>2 点钟</td></tr>
         <tr><td class="n" style="text-align:left">+3.0%</td><td class="n" style="text-align:left">+15°</td><td>2 点半，走平的上沿</td></tr>
-        <tr><td class="n" style="text-align:left">−1.7%</td><td class="n" style="text-align:left">−9°</td><td>还在走平这一档，工作台写成 3 点半</td></tr>
+        <tr><td class="n" style="text-align:left">−1.7%</td><td class="n" style="text-align:left">−9°</td><td>走平，工作台写 3 点半</td></tr>
         <tr><td class="n" style="text-align:left">−17.5%</td><td class="n" style="text-align:left">−60°</td><td>5 点钟，加速线</td></tr>
       </tbody>
     </table></div>
-    <p>工作台写钟点时把角度<b>取到最近的半点</b>：大约 −8° 到 −22° 都写"3 点半"。判档位用的是角度本身，不是这几个字。所以 −9° 写成 3 点半，其实落在走平那一档里（|−9°| &lt; 15°）。</p>
+    <p>工作台把角度<b>取到最近的半点</b>，约 −8° 到 −22° 都写"3 点半"。判档位用角度本身，所以 −9° 仍算走平（|−9°| &lt; 15°）。</p>
   </section>
 
   <section class="panel">
@@ -149,15 +149,15 @@ table.deg td.src{color:var(--muted)}
       </svg>
     </div>
     <div class="txt" style="margin-top:8px">
-      <p>A、B 在同样 20 根里都翻了一倍，涨得一样快。普通坐标上 B 的线陡一倍，只是因为它价格高。<b>对数坐标</b>上一样的涨幅一样高，两条线才能比。脚本算角度用的是 ln（对数涨幅），就是这个道理。</p>
-      <p><b>同样时长</b>也一样：同一条线，图上看 1 年和看 3 个月，横轴被压缩或拉开，角度会变。所以所有品种都量最近 20 根。口诀是视频 B 02:01「时钟方向 固定时长 和 对数座标」。工作台 K 线图的固定范围（默认「1 年」）和图例里的对数开关，就是为了看图时也满足这两条。</p>
+      <p>A、B 在 20 根里都翻了一倍。普通坐标上 B 陡一倍，只因为价格高。<b>对数坐标</b>上同样涨幅同样陡。所以脚本用 ln 算角度。</p>
+      <p><b>同样时长</b>：同一条线看 1 年和看 3 个月，角度不同。所以都量最近 20 根。视频 B 02:01「时钟方向 固定时长 和 对数座标」。K 线图的固定范围（默认「1 年」）和对数开关管这两条。</p>
     </div>
   </section>
 
-  <p class="mirror"><b>看大局第 ② 问"60 线几点钟？"怎么读</b>：QQQ 2026-11-20 写的是"MA60 −9°，3 点半（2 点半到 3 点半算走平，1 点钟以上算加速）；6 条线相差 6.3% → 有斜率"。−9° 本身在走平那一档，但横盘还要 6 条线相差小于 5%（RANGE_SPREAD_PCT，脚本自定），QQQ 是 6.3%，不算横盘。它判成加速下跌，靠的是第 ③ 问：离 20 线 −10.3%，在自身历史 0% 分位，乖离到了最低一端，60 线组也在往下。钟面只是加速的一条路，乖离是另一条。</p>
+  <p class="mirror"><b>看大局第 ② 问"60 线几点钟？"怎么读</b>：QQQ 2026-11-20 写"3 点半：走平"，钟面的指针（MA60，−9°）落在走平那一档。下面"所以"写明：单看 60 线不算加速；6 条线拉开 6.3%，横盘要小于 5%（RANGE_SPREAD_PCT，脚本自定），所以不是横盘。加速下跌靠第 ③ 问判出：离 20 线 −10.3%，在自身历史 0% 分位，60 线组也往下。</p>
   <footer class="src">
     <div><b>规则</b>：<span class="tag">J2</span> 斜率用固定的最近 20 根、对数涨幅换成钟表角度，方向另看。<span class="tag">J3</span> 加速（1 点钟以上或乖离到两端）。<span class="tag">J4</span> 稳定上涨 / 下跌。<span class="tag">J5</span> 横盘（60 线 ±15° 以内且 6 条线靠拢）。</div>
-    <div><b>工作台</b>：① 看大局第 ② 问「60 线几点钟？」；第 ③ 问「是不是加速？」的乖离分位条；K 线图的固定范围按钮和对数开关。</div>
+    <div><b>工作台</b>：① 看大局第 ② 问；第 ③ 问的乖离分位条；K 线图的固定范围和对数开关。</div>
     <div><b>相关</b>：<a href="trend-types.html">五种趋势类型</a> · <a href="deviation.html">乖离</a> · <a href="turning.html">拐头</a> · <a href="ma-cluster.html">均线密集</a></div>
   </footer>
 </div>

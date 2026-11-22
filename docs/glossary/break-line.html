@@ -12,7 +12,7 @@
   <nav class="crumb" aria-label="导航"><a href="index.html">← 概念图解目录</a><span>转折 · 价格和线的关系</span></nav>
   <header style="display:grid;gap:8px">
     <h1>什么叫破线</h1>
-    <p class="lede">图上没有一条"收盘价的线"。说的是<b>某一天那根 K 线的收盘价</b>，和 MA20、EMA20 两条线比：收盘落在<b>两条线的另一边</b>，才叫破线。紫色横线就是每根 K 线的收盘价。</p>
+    <p class="lede">破线看<b>收盘价</b>：收盘价落在 MA20、EMA20 <b>两条线的另一边</b>，才叫破线。紫色短横线是那天的收盘价。</p>
   </header>
 
   <section class="panel">
@@ -63,15 +63,15 @@
   <section class="cases" aria-label="图上 1、2、3 三根 K 线">
     <article class="case">
       <h3><span class="n">1</span>影线刺穿 <span class="verdict no">不算</span></h3>
-      <p>盘中最低价扎到了两条线下面，但<b>收盘</b>又回到两条线上方。只看收盘，盘中刺穿不算。</p>
+      <p>盘中跌破两条线，<b>收盘价</b>回到上方。</p>
     </article>
     <article class="case">
       <h3><span class="n">2</span>只穿过一条 <span class="verdict no">不算</span></h3>
-      <p>收盘跌到了 EMA20 下面，但还在 MA20 上面。<b>两条都要穿过</b>才算，只穿一条不算。</p>
+      <p>收盘价在 EMA20 下方、MA20 上方。<b>两条都要穿过</b>。</p>
     </article>
     <article class="case">
       <h3><span class="n">3</span>收在两条线下面 <span class="verdict yes">破线</span></h3>
-      <p>收盘同时落在 EMA20 和 MA20 下方。这是 20 线组转向的<b>第一个进度点</b>，接下来看 EMA20、MA20 会不会拐头。</p>
+      <p>收盘价在两条线下方。这是 20 线组转向的<b>第一个进度点</b>。下一步看拐头。</p>
     </article>
   </section>
 
@@ -95,18 +95,18 @@
     <div style="display:grid;gap:10px;min-width:0">
       <h2>收盘价在 K 线的哪一头</h2>
       <ul>
-        <li>阳线（涨）：收盘在<b>实体上端</b>。</li>
-        <li>阴线（跌）：收盘在<b>实体下端</b>。</li>
-        <li>上下细线是影线，只是盘中到过的最高、最低价，判断破线时不看。</li>
-        <li>工作台里鼠标停在那根 K 线上，读数条会写当天的「收」和 MA20、EMA20 的数值，直接比数字最准。</li>
+        <li>阳线：收盘价在<b>实体上端</b>。</li>
+        <li>阴线：收盘价在<b>实体下端</b>。</li>
+        <li>上下细线是影线，判断破线时不看。</li>
+        <li>工作台读数条的「收」和 MA20、EMA20 直接比数字。</li>
       </ul>
     </div>
   </section>
 
-  <p class="mirror"><b>下跌趋势里反过来</b>：收盘同时站上 MA20 和 EMA20 两条线，才是破线。进度表里每一对线组看的是快的那一组：20/60 那行看 MA20、EMA20，60/120 那行看 MA60、EMA60（规则 J15）。</p>
+  <p class="mirror"><b>下跌趋势里反过来</b>：收盘价站上两条线，才是破线。进度表 60/120 那行看 MA60、EMA60（规则 J15）。</p>
   <footer class="src">
-    <div><b>规则</b>：<span class="tag">J15</span> 五个进度点的第一个是破线：收盘穿过这一对里快的那组的两条线。</div>
-    <div><b>工作台</b>：看大局第 ④ 问的进度表「破线」一列；K 线图「图层 → 着色」的破线拐头信号着色。</div>
+    <div><b>规则</b>：<span class="tag">J15</span> 五个进度点的第一个：收盘价穿过快的那组两条线。</div>
+    <div><b>工作台</b>：看大局第 ④ 问进度表「破线」列；K 线图「图层 → 着色」。</div>
     <div><b>相关</b>：<a href="turning.html">拐头</a> · <a href="five-steps.html">五个进度点</a> · <a href="deviation.html">乖离</a></div>
   </footer>
 </div>

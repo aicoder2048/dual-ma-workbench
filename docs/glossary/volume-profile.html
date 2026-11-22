@@ -28,7 +28,7 @@
   <nav class="crumb" aria-label="导航"><a href="index.html">← 概念图解目录</a><span>计划</span></nav>
   <header style="display:grid;gap:8px">
     <h1>筹码山</h1>
-    <p class="lede">把一段时间的成交量<b>按价格</b>堆起来，就是筹码分布。它贴着价格轴横着画，每一个鼓起来的包叫一座<b>筹码山</b>，是很多人在那个价位买卖过的地方。它只告诉你阻力在哪、有多大，<b>不是买卖信号</b>，方向还是看均线。</p>
+    <p class="lede">把一段时间的成交量<b>按价格</b>堆起来，每个鼓起的包是一座<b>筹码山</b>。它只标出阻力的位置和大小，<b>不是买卖信号</b>。方向看均线。</p>
   </header>
 
   <section class="panel">
@@ -138,7 +138,7 @@
       </svg>
     </div>
     <div class="legend">
-      <span><i style="border-color:var(--muted);border-top-width:8px;width:14px;opacity:.5"></i>每一档价位上的成交量</span>
+      <span><i style="border-color:var(--muted);border-top-width:8px;width:14px;opacity:.5"></i>每档价位的成交量</span>
       <span><i style="border-color:var(--muted);border-top-style:dashed;border-top-width:2px"></i>筹码山（山脚到山顶）</span>
       <span><i style="border-color:var(--close);border-top-width:2px"></i>参考带（上方最近那座山）</span>
       <span><i style="border-color:var(--close);border-top-style:dashed;border-top-width:2px"></i>现价</span>
@@ -150,21 +150,21 @@
   <section class="cases" aria-label="图上 1、2、3">
     <article class="case">
       <h3><span class="n">1</span>山在上方 <span class="verdict yes">阻力</span></h3>
-      <p>现价往上要穿过一整座山，是<b>爬山</b>，越接近山顶越难。视频 O 04:32「因为筹码山峯在股价的上方 爬山的动作是非常辛苦的」。</p>
+      <p>现价往上要穿过整座山，是<b>爬山</b>。越近山顶越难。</p>
     </article>
     <article class="case">
       <h3><span class="n">2</span>上方最近那座山 <span class="verdict no">只作参考</span></h3>
-      <p>超跌后的反弹，大概率先冲到<b>上方最近那座山的山脚到山顶</b>这一带，是一条带，不是一根线。LEI 讲 TSLA 时说，视频 O 01:47「如果反弹回到180元 到226元左右 这个区间 大概率就是这个反弹的目标位」。</p>
+      <p>超跌反弹多半先到<b>上方最近那座山的山脚到山顶</b>，是一条带。视频 O 01:47「如果反弹回到180元 到226元左右 这个区间 大概率就是这个反弹的目标位」。</p>
     </article>
     <article class="case">
       <h3><span class="n">3</span>山在下方 <span class="verdict no">山路轻松</span></h3>
-      <p>主要的山都在价格下面，往上走山路轻松。LEI 偏好这种接近新高的股票。这只是位置好，<b>不是买的理由</b>，买不买看均线。</p>
+      <p>主要的山在价格下面，山路轻松。LEI 偏好接近新高的股票。位置好<b>不是买的理由</b>。</p>
     </article>
   </section>
 
   <section class="panel">
     <h2>工作台为什么只把它当参考</h2>
-    <p>LEI 把筹码山叫作判断超跌反弹目标位的参考，没说它和缺口、均线密集谁先。工作台起初让它和缺口、均线密集一起按远近排，最近的当第一阻力，盈亏比也按它算。拿核心名单回测了一次：</p>
+    <p>LEI 只把它当反弹目标的参考。工作台起初把它和缺口、均线密集按远近排，最近的当第一阻力。回测核心名单：</p>
     <div class="tbl-wrap">
       <table class="vp-tbl">
         <thead><tr><th></th><th>笔数</th><th>平均 R</th><th>年化</th><th>MAR</th></tr></thead>
@@ -174,14 +174,14 @@
         </tbody>
       </table>
     </div>
-    <p style="margin-top:10px">筹码山把第一阻力拉近，盈亏比不够 3:1 的日子变多，少做了不少单。剩下的单子平均 R 更高，但账户的年化和 MAR 都变差。所以现在：<b>筹码山不排进第一阻力/目标位，不算盈亏比</b>，只在计划里单列一行"参考"，图上画成参考带。</p>
+    <p style="margin-top:10px">筹码山拉近第一阻力，盈亏比不够 3:1 的日子变多。平均 R 变高，年化和 MAR 变差。所以<b>筹码山不排进第一阻力/目标位，不算盈亏比</b>，只在计划里列作"参考"。</p>
   </section>
 
-  <p class="mirror"><b>怎么读一座山（解读）</b>：山脚是这座山在价格上的下沿，山顶是上沿，不是成交量最大的那一档。成交量降到多少算出了山，视频没给，工作台按"不低于平均量的连续几档"画框。统计的是图上看得见的那段 K 线，缩放、平移都会重算；交易计划用的是最近 1 年那一份。</p>
+  <p class="mirror"><b>怎么读一座山（解读）</b>：山脚是山的下沿，山顶是上沿，不是量最大的那一档。边界视频没给，工作台取"不低于平均量的连续几档"。统计图上可见的 K 线，缩放、平移会重算。交易计划用最近 1 年。</p>
 
   <footer class="src">
-    <div><b>规则</b>：<span class="tag">J47</span> 超跌反弹的目标区间是上方最近那座山的山脚到山顶。<span class="tag">J49</span> 山在上方是爬山，在下方山路轻松。<span class="tag">P38</span> 筹码山只作参考价位，不排进第一阻力、不算盈亏比（ADR 0018）。</div>
-    <div><b>工作台</b>：K 线图「图层 ▾」里勾「筹码」（默认不画，选「全部」也会画）；虚线框是筹码山，细实线框写着「参考带」。② 找打法的计划里那一行"参考"。周线上不画，回放时参考带收起。</div>
+    <div><b>规则</b>：<span class="tag">J47</span> 超跌反弹目标是上方最近那座山的山脚到山顶。<span class="tag">J49</span> 山在上方是爬山，在下方山路轻松。<span class="tag">P38</span> 筹码山只作参考，不排进第一阻力、不算盈亏比（ADR 0018）。</div>
+    <div><b>工作台</b>：K 线图「图层 ▾」里的「筹码」默认不画，勾「筹码」或选「全部」才画。虚线框是筹码山，细实线框是参考带。② 找打法的计划里有一行"参考"。周线不画，回放时收起参考带。</div>
     <div><b>相关</b>：<a href="resistance-rr.html">第一阻力 / 目标位和盈亏比</a> · <a href="ma-cluster.html">均线密集</a> · <a href="gap.html">缺口</a></div>
   </footer>
 </div>
