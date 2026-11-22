@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>五个进度点</title>
+<link rel="stylesheet" href="glossary.css">
+<style>
+:root{--g60:#475569}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--g60:#aab4c3}}
+:root[data-theme="dark"]{--g60:#aab4c3}
+.l60{stroke:var(--g60)} .l60-l{fill:var(--g60)}
+.xdot{fill:var(--ink)}
+.span-l{stroke:var(--muted);stroke-width:1.2;fill:none}
+.qt{width:100%;border-collapse:collapse;font-size:13px;margin-top:6px}
+.qt th,.qt td{border-bottom:1px solid var(--line);padding:6px 6px;text-align:left;white-space:nowrap}
+.qt thead th{color:var(--muted);font-weight:600}
+.qt td{font-family:var(--mono)}
+.qt .sub{display:block;font:12px var(--font);color:var(--muted)}
+.qt .done{color:var(--ink)} .qt .todo{color:var(--muted)}
+.tbl{overflow-x:auto}
+.panel p{margin:0 0 8px;font-size:14px;color:var(--muted)} .panel p b{color:var(--ink)}
+.panel ul{margin:0;padding-left:18px;color:var(--muted);font-size:14px;display:grid;gap:6px} .panel ul b{color:var(--ink)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <nav class="crumb" aria-label="导航"><a href="index.html">← 概念图解目录</a><span>转折</span></nav>
+  <header style="display:grid;gap:8px">
+    <h1>五个进度点</h1>
+    <p class="lede">一对线组从一边转到另一边，脚本按顺序记五个点：<b>破线 → EMA 拐头 → MA 拐头 → 第一个交叉 → 双交叉</b>，每个点记日期。这是脚本的记账办法，LEI 说的是"破线、拐头、交叉"三步，他另讲过的"五步"是另一回事（见页尾）。</p>
+  </header>
+
+  <section class="panel">
+    <h2>20/60 从多头转到空头（示意，不是真实行情）</h2>
+    <div class="chart">
+      <svg viewBox="0 62 910 360" role="img" aria-label="一段上涨转下跌：第 1 根收盘跌破 MA20 和 EMA20，同一天 EMA20 拐头向下；几天后 MA20 拐头；再过两周 MA20 下穿 MA60 是第一个交叉，两天后 EMA20 也下穿 EMA60，是双交叉">
+<line class="grid" x1="30" x2="870" y1="363.3" y2="363.3"/><text class="tick" x="876" y="367.3">95</text>
+<line class="grid" x1="30" x2="870" y1="296.7" y2="296.7"/><text class="tick" x="876" y="300.7">100</text>
+<line class="grid" x1="30" x2="870" y1="230.0" y2="230.0"/><text class="tick" x="876" y="234.0">105</text>
+<line class="grid" x1="30" x2="870" y1="163.3" y2="163.3"/><text class="tick" x="876" y="167.3">110</text>
+<line class="grid" x1="30" x2="870" y1="96.7" y2="96.7"/><text class="tick" x="876" y="100.7">115</text>
+<path class="ma l60" d="M50.0,309.4 L72.0,304.1 L94.0,298.8 L116.0,293.8 L138.0,289.0 L160.0,284.1 L182.0,279.1 L204.0,274.4 L226.0,270.0 L248.0,265.8 L270.0,261.8 L292.0,258.1 L314.0,254.6 L336.0,251.0 L358.0,247.6 L380.0,244.5 L402.0,241.8 L424.0,239.1 L446.0,236.7 L468.0,234.6 L490.0,232.4 L512.0,230.3 L534.0,228.5 L556.0,227.2 L578.0,225.9 L600.0,224.8 L622.0,224.0 L644.0,223.3 L666.0,222.5 L688.0,222.1 L710.0,222.1 L732.0,222.3 L754.0,222.5 L776.0,223.0 L798.0,223.6"/>
+<path class="ema l60" d="M50.0,297.1 L72.0,291.1 L94.0,285.3 L116.0,279.7 L138.0,274.5 L160.0,269.6 L182.0,264.6 L204.0,260.0 L226.0,256.2 L248.0,252.8 L270.0,249.6 L292.0,246.8 L314.0,244.6 L336.0,242.4 L358.0,240.4 L380.0,239.0 L402.0,238.2 L424.0,237.4 L446.0,236.9 L468.0,236.8 L490.0,236.9 L512.0,236.9 L534.0,237.4 L556.0,238.6 L578.0,239.8 L600.0,241.1 L622.0,242.6 L644.0,244.5 L666.0,246.3 L688.0,248.3 L710.0,250.9 L732.0,253.8 L754.0,256.5 L776.0,259.3 L798.0,262.5"/>
+<path class="ma" d="M50.0,203.2 L72.0,194.7 L94.0,186.1 L116.0,177.9 L138.0,171.2 L160.0,165.2 L182.0,158.8 L204.0,153.2 L226.0,149.3 L248.0,145.9 L270.0,142.9 L292.0,141.3 L314.0,141.1 L336.0,141.0 L358.0,141.3 L380.0,143.1 L402.0,146.0 L424.0,149.2 L446.0,153.3 L468.0,159.0 L490.0,165.3 L512.0,171.5 L534.0,178.4 L556.0,186.3 L578.0,194.1 L600.0,201.7 L622.0,210.2 L644.0,219.0 L666.0,226.9 L688.0,234.6 L710.0,243.2 L732.0,251.8 L754.0,259.8 L776.0,268.0 L798.0,276.8"/>
+<path class="ema" d="M50.0,195.6 L72.0,187.9 L94.0,180.9 L116.0,174.5 L138.0,169.5 L160.0,165.3 L182.0,160.7 L204.0,157.2 L226.0,155.8 L248.0,155.6 L270.0,155.6 L292.0,156.5 L314.0,158.5 L336.0,160.4 L358.0,162.3 L380.0,165.7 L402.0,170.3 L424.0,174.6 L446.0,179.0 L468.0,184.2 L490.0,189.5 L512.0,194.2 L534.0,199.8 L556.0,206.6 L578.0,213.3 L600.0,219.4 L622.0,226.0 L644.0,233.0 L666.0,239.4 L688.0,245.9 L710.0,253.6 L732.0,261.7 L754.0,268.8 L776.0,275.9 L798.0,283.6"/>
+<g class="k up"><line class="wick" x1="50.0" x2="50.0" y1="107.6" y2="127.8"/><rect x="44.9" y="114.4" width="10.1" height="7.3" rx="1.5"/></g>
+<g class="k up"><line class="wick" x1="72.0" x2="72.0" y1="107.8" y2="121.6"/><rect x="66.9" y="114.4" width="10.1" height="1.5" rx="1.5"/></g>
+<g class="k up"><line class="wick" x1="94.0" x2="94.0" y1="108.5" y2="126.8"/><rect x="88.9" y="114.2" width="10.1" height="5.3" rx="1.5"/></g>
+<g class="k down"><line class="wick" x1="116.0" x2="116.0" y1="98.9" y2="119.2"/><rect x="110.9" y="106.1" width="10.1" height="7.4" rx="1.5"/></g>
+<g class="k down"><line class="wick" x1="138.0" x2="138.0" y1="114.6" y2="128.8"/><rect x="132.9" y="119.2" width="10.1" height="3.3" rx="1.5"/></g>
+<g class="k down"><line class="wick" x1="160.0" x2="160.0" y1="115.9" y2="132.4"/><rect x="154.9" y="123.0" width="10.1" height="2.1" rx="1.5"/></g>
+<g class="k up"><line class="wick" x1="182.0" x2="182.0" y1="110.8" y2="123.9"/><rect x="176.9" y="116.9" width="10.1" height="1.8" rx="1.5"/></g>
+<g class="k up"><line class="wick" x1="204.0" x2="204.0" y1="117.7" y2="131.5"/><rect x="198.9" y="124.0" width="10.1" height="1.5" rx="1.5"/></g>
+<g class="k down"><line class="wick" x1="226.0" x2="226.0" y1="112.7" y2="150.2"/><rect x="220.9" y="119.8" width="10.1" height="23.3" rx="1.5"/></g>
+<g class="k down"><line class="wick" x1="248.0" x2="248.0" y1="135.9" y2="158.0"/><rect x="242.9" y="140.7" width="10.1" height="12.6" rx="1.5"/></g>
+<g class="k up"><line class="wick" x1="270.0" x2="270.0" y1="147.8" y2="167.5"/><rect x="264.9" y="155.1" width="10.1" height="5.5" rx="1.5"/></g>
+<g class="k down focus"><line class="wick" x1="292.0" x2="292.0" y1="142.1" y2="172.4"/><rect x="286.9" y="147.7" width="10.1" height="17.8" rx="1.5"/></g>
+<g class="k down"><line class="wick" x1="314.0" x2="314.0" y1="161.4" y2="182.5"/><rect x="308.9" y="168.1" width="10.1" height="9.8" rx="1.5"/></g>
+<g class="k up"><line class="wick" x1="336.0" x2="336.0" y1="171.6" y2="189.0"/><rect x="330.9" y="178.4" width="10.1" height="3.5" rx="1.5"/></g>
+<g class="k down"><line class="wick" x1="358.0" x2="358.0" y1="165.1" y2="187.1"/><rect x="352.9" y="170.5" width="10.1" height="10.0" rx="1.5"/></g>
+<g class="k down"><line class="wick" x1="380.0" x2="380.0" y1="179.7" y2="202.9"/><rect x="374.9" y="187.0" width="10.1" height="10.8" rx="1.5"/></g>
+<g class="k down"><line class="wick" x1="402.0" x2="402.0" y1="192.1" y2="220.8"/><rect x="396.9" y="197.1" width="10.1" height="16.5" rx="1.5"/></g>
+<g class="k down"><line class="wick" x1="424.0" x2="424.0" y1="201.1" y2="222.0"/><rect x="418.9" y="208.1" width="10.1" height="7.5" rx="1.5"/></g>
+<g class="k up"><line class="wick" x1="446.0" x2="446.0" y1="214.1" y2="229.2"/><rect x="440.9" y="220.5" width="10.1" height="3.2" rx="1.5"/></g>
+<g class="k down"><line class="wick" x1="468.0" x2="468.0" y1="209.2" y2="241.3"/><rect x="462.9" y="215.2" width="10.1" height="18.8" rx="1.5"/></g>
+<g class="k down"><line class="wick" x1="490.0" x2="490.0" y1="225.8" y2="245.6"/><rect x="484.9" y="233.0" width="10.1" height="6.7" rx="1.5"/></g>
+<g class="k up"><line class="wick" x1="512.0" x2="512.0" y1="234.9" y2="252.2"/><rect x="506.9" y="239.4" width="10.1" height="6.9" rx="1.5"/></g>
+<g class="k down"><line class="wick" x1="534.0" x2="534.0" y1="224.3" y2="259.6"/><rect x="528.9" y="231.6" width="10.1" height="20.7" rx="1.5"/></g>
+<g class="k down"><line class="wick" x1="556.0" x2="556.0" y1="250.2" y2="277.1"/><rect x="550.9" y="256.0" width="10.1" height="15.5" rx="1.5"/></g>
+<g class="k down"><line class="wick" x1="578.0" x2="578.0" y1="267.8" y2="283.5"/><rect x="572.9" y="274.3" width="10.1" height="2.9" rx="1.5"/></g>
+<g class="k down"><line class="wick" x1="600.0" x2="600.0" y1="262.7" y2="284.7"/><rect x="594.9" y="269.7" width="10.1" height="7.7" rx="1.5"/></g>
+<g class="k down"><line class="wick" x1="622.0" x2="622.0" y1="279.6" y2="293.5"/><rect x="616.9" y="284.7" width="10.1" height="3.8" rx="1.5"/></g>
+<g class="k down"><line class="wick" x1="644.0" x2="644.0" y1="279.0" y2="305.9"/><rect x="638.9" y="286.3" width="10.1" height="13.0" rx="1.5"/></g>
+<g class="k down"><line class="wick" x1="666.0" x2="666.0" y1="289.7" y2="307.4"/><rect x="660.9" y="295.0" width="10.1" height="5.3" rx="1.5"/></g>
+<g class="k up"><line class="wick" x1="688.0" x2="688.0" y1="300.8" y2="312.9"/><rect x="682.9" y="307.7" width="10.1" height="1.5" rx="1.5"/></g>
+<g class="k down"><line class="wick" x1="710.0" x2="710.0" y1="294.8" y2="334.1"/><rect x="704.9" y="301.4" width="10.1" height="25.8" rx="1.5"/></g>
+<g class="k down"><line class="wick" x1="732.0" x2="732.0" y1="321.9" y2="345.2"/><rect x="726.9" y="327.6" width="10.1" height="10.7" rx="1.5"/></g>
+<g class="k up"><line class="wick" x1="754.0" x2="754.0" y1="329.5" y2="348.6"/><rect x="748.9" y="336.8" width="10.1" height="7.3" rx="1.5"/></g>
+<g class="k down"><line class="wick" x1="776.0" x2="776.0" y1="324.1" y2="349.9"/><rect x="770.9" y="328.7" width="10.1" height="14.0" rx="1.5"/></g>
+<g class="k down"><line class="wick" x1="798.0" x2="798.0" y1="340.6" y2="363.3"/><rect x="792.9" y="347.7" width="10.1" height="8.9" rx="1.5"/></g>
+<line class="close-tick" x1="278.0" x2="306.0" y1="165.5" y2="165.5"/>
+<g class="badge"><circle cx="292.0" cy="192.4" r="12"/><text x="292.0" y="196.9">1</text></g>
+<g class="badge"><circle cx="292.0" cy="122.5" r="12"/><text x="292.0" y="127.0">2</text></g>
+<g class="badge"><circle cx="358.0" cy="119.3" r="12"/><text x="358.0" y="123.8">3</text></g>
+<circle class="xdot" cx="654.8" cy="222.9" r="4"/>
+<g class="badge"><circle cx="654.8" cy="198.9" r="12"/><text x="654.8" y="203.4">4</text></g>
+<circle class="xdot" cx="698.3" cy="249.5" r="4"/>
+<g class="badge"><circle cx="698.3" cy="275.5" r="12"/><text x="698.3" y="280.0">5</text></g>
+<path class="span-l" d="M284.0,386 L284.0,392 L366.0,392 L366.0,386"/><text class="note" x="325.0" y="409" text-anchor="middle">破线、拐头：回撤</text>
+<path class="span-l" d="M646.8,386 L646.8,392 L706.3,392 L706.3,386"/><text class="note" x="676.6" y="409" text-anchor="middle">交叉：转折</text>
+<text class="lbl l60-l" x="810" y="227.6">MA60</text>
+<text class="lbl l60-l" x="810" y="266.5">EMA60</text>
+<text class="lbl ma-l" x="810" y="281.5">MA20</text>
+<text class="lbl ema-l" x="810" y="296.5">EMA20</text>
+      </svg>
+    </div>
+    <div class="legend">
+      <span><i style="border-color:var(--ema);border-top-width:2px"></i>EMA20</span>
+      <span><i style="border-color:var(--ma)"></i>MA20</span>
+      <span><i style="border-color:var(--g60);border-top-width:2px"></i>EMA60（细）</span>
+      <span><i style="border-color:var(--g60)"></i>MA60（粗）</span>
+      <span><i style="border-color:var(--close)"></i>破线那天的收盘</span>
+    </div>
+  </section>
+
+  <section class="cases" aria-label="图上五个点分成三段">
+    <article class="case">
+      <h3><span class="n">1</span><span class="n">2</span><span class="n">3</span> 破线、拐头 <span class="verdict no">回撤</span></h3>
+      <p>① 收盘落到 MA20、EMA20 <b>两条线</b>下面。② EMA20 往下拐：收盘一到 EMA20 下面，它当天就往下走，所以常和破线同一天。③ MA20 往下拐：要等收盘低过<b>抵扣价</b>，往往晚几天。</p>
+    </article>
+    <article class="case">
+      <h3><span class="n">4</span>第一个交叉 <span class="verdict yes">转折</span></h3>
+      <p>MA20 穿过 MA60，或者 EMA20 穿过 EMA60，<b>先到的那一组</b>就是第一个交叉。谁先不一定：图里是 MA 先交叉。</p>
+    </article>
+    <article class="case">
+      <h3><span class="n">5</span>双交叉 <span class="verdict yes">确认</span></h3>
+      <p>另一组也交叉了：<b>同一对周期的 MA 和 EMA 都交叉</b>，才算交叉确认。走完这一步，接着站稳在另一边，这一轮就记完了。</p>
+    </article>
+  </section>
+
+  <section class="panel">
+    <h2>工作台的进度表怎么读</h2>
+    <p>看大局第 ④ 问「20 线组走到哪一步？」下面有一张进度表。<b>每行一对线组</b>：20/60 一行，60/120 一行。破线和拐头看这一对里<b>快的那组</b>：20/60 那行看 MA20、EMA20，60/120 那行看 MA60、EMA60。交叉看快线穿慢线。</p>
+    <p>QQQ 2026-11-20 的进度表：</p>
+    <div class="tbl">
+      <table class="qt">
+        <thead><tr><th>线组</th><th>破线</th><th>EMA 拐头</th><th>MA 拐头</th><th>第一个交叉</th><th>双交叉</th><th>进度</th></tr></thead>
+        <tbody>
+          <tr><th>20/60<span class="sub">空头 → 向上</span></th><td class="todo">—</td><td class="todo">—</td><td class="todo">—</td><td class="todo">—</td><td class="todo">—</td><td>0/5<span class="sub">上一轮 11-03</span></td></tr>
+          <tr><th>60/120<span class="sub">多头 → 向下</span></th><td class="done">✓ 10-29</td><td class="done">✓ 10-29</td><td class="done">✓ 10-29</td><td class="done">✓ 11-18</td><td class="todo">—</td><td>4/5<span class="sub">上一轮 2025-07-03</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <ul style="margin-top:10px">
+      <li><b>20/60 是 0/5</b>：上一轮往下转，11-03 双死叉，之后站到了空头一边。现在记的是往上转的新一轮，一个点都还没出现。类型由 60/120 定（加速下跌），20/60 还站在下跌这一边、没往回走出一步，所以阶段叫<b>延伸</b>，顶上小格写「加速下跌·延伸」。</li>
+      <li><b>60/120 是 4/5</b>：10-29 收盘跌破 MA60、EMA60，两条线同一天都拐头向下；11-18 MA60 下穿 MA120，是第一个交叉。EMA60 还在 EMA120 上面，所以差双交叉这一步。</li>
+      <li>进度数是<b>出现了几个点</b>。几个点可以落在同一天，EMA 拐头偶尔还比破线早一天（收盘只穿过 EMA 那一条时，EMA 已经往下了）。</li>
+    </ul>
+  </section>
+
+  <p class="mirror"><b>一轮从哪开始、到哪结束（脚本自定）</b>：先要"完整站在一边"：快线组的 MA、EMA 都在慢线组同一侧，收盘在两条快线外侧，两条快线都朝这边走。站稳以后，往反方向的五个点各记第一次出现的那天。中途又回到原来那边的完整状态，这一轮作废、重新记；走到另一边的完整状态，这一轮算走完，进度表写成"上一轮"。</p>
+  <p class="mirror"><b>回撤还是转折</b>：工作台写"破线、拐头算回撤，交叉了算转折"。细一点说（规则 J7）：稳定上涨（下跌）里，20/60 交叉了类型仍由 60/120 定，还叫回撤（反弹），是一次深回撤；加速里交叉了才叫转折中。<b>下跌转上涨反过来</b>：收盘站上两条快线是破线，往上拐、往上穿。</p>
+  <footer class="src">
+    <div><b>规则</b>：<span class="tag">J15</span> 趋势转折必经破线、拐头、交叉，视频 B 15:40「趋势转折必定会经过 破线拐头交叉 三个步骤」；破线、拐头要同一周期的 MA、EMA 两根一起，视频 E 10:47「我希望的是两根均线同时都被破缐，同时在拐头」。<span class="tag">J16</span> 双交叉。<span class="tag">J7</span> 阶段：延伸、回撤中、转折中。</div>
+    <div><b>别混</b>：LEI 讲的五步是 破线、拐头、交叉、多头 / 空头排列、乖离，就是趋势的一生（视频 H 01:31「趋势转折的五个重要步骤」）。进度表的五个点只拆了前三步，把拐头分成 EMA、MA 两个，交叉分成第一个和双交叉。</div>
+    <div><b>工作台</b>：看大局第 ④ 问的进度表（格子里打勾带日期，悬停看全日期）；顶上小格「趋势类型」后面的阶段。</div>
+    <div><b>相关</b>：<a href="break-line.html">破线</a> · <a href="turning.html">拐头</a> · <a href="cross.html">交叉 / 双交叉</a> · <a href="trend-types.html">五种趋势类型</a> · <a href="deviation.html">乖离</a></div>
+  </footer>
+</div>
+</body>
+</html>

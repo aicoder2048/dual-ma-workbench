@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>什么叫拐头</title>
+<link rel="stylesheet" href="glossary.css">
+<style>
+:root{--drop:#b88400}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--drop:#ffc531}}
+:root[data-theme="dark"]{--drop:#ffc531}
+.wrap>*{min-width:0}
+.hurdle{stroke:var(--drop);stroke-width:1.5;stroke-dasharray:5 4}
+.drop{fill:var(--drop)} .drop-l{fill:var(--drop)}
+.read{display:grid;gap:10px;font-size:14px;color:var(--muted)}
+.read p{margin:0} .read b{color:var(--ink)}
+.quote{font-size:15px;color:var(--ink);background:var(--bg);border-left:3px solid var(--ma);border-radius:6px;padding:10px 12px;margin:0}
+.quote .num{font-family:var(--mono)}
+.two{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.two>div{border:1px solid var(--line);border-radius:8px;padding:10px 12px;display:grid;gap:4px}
+.two h3{margin:0;font-size:15px;color:var(--ink)}
+.num{font-family:var(--mono);color:var(--ink)}
+@media (max-width:720px){.two{grid-template-columns:minmax(0,1fr)}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <nav class="crumb" aria-label="导航"><a href="index.html">← 概念图解目录</a><span>均线本身</span></nav>
+  <header style="display:grid;gap:8px">
+    <h1>什么叫拐头</h1>
+    <p class="lede">拐头是<b>均线自己换了方向</b>：原来往下走，今天开始往上（或者反过来）。两种线看的门槛不一样：<b>EMA 看线本身</b>，收盘站上昨天的 EMA 就往上；<b>MA 看抵扣价</b>，收盘高过明天要扣掉的那根就往上。价格站上 MA 线，不等于 MA 拐头。</p>
+  </header>
+
+  <section class="panel">
+    <h2>下跌后反弹（示意，不是真实行情）</h2>
+    <div class="chart">
+      <svg viewBox="0 50 940 320" role="img" aria-label="下跌后反弹：第 1 天收盘站上 EMA20，EMA20 拐头向上；第 2 天收盘站上 MA20 线，但 MA20 还在往下；第 3 天收盘高过 20 天前那根的收盘，MA20 才拐头向上">
+<!--SVG-->
+<line class="grid" x1="40" x2="890" y1="320.0" y2="320.0"/><text class="tick" x="896" y="324.0">98</text>
+<line class="grid" x1="40" x2="890" y1="260.0" y2="260.0"/><text class="tick" x="896" y="264.0">101</text>
+<line class="grid" x1="40" x2="890" y1="200.0" y2="200.0"/><text class="tick" x="896" y="204.0">104</text>
+<line class="grid" x1="40" x2="890" y1="140.0" y2="140.0"/><text class="tick" x="896" y="144.0">107</text>
+<line class="grid" x1="40" x2="890" y1="80.0" y2="80.0"/><text class="tick" x="896" y="84.0">110</text>
+<path class="ma" d="M60.0,158.2 L87.0,156.1 L114.0,154.9 L141.0,155.0 L168.0,157.4 L195.0,160.1 L222.0,163.8 L249.0,168.3 L276.0,173.3 L303.0,179.4 L330.0,185.9 L357.0,192.9 L384.0,200.5 L411.0,208.4 L438.0,216.3 L465.0,223.7 L492.0,230.4 L519.0,236.7 L546.0,242.3 L573.0,248.1 L600.0,252.4 L627.0,255.7 L654.0,256.1 L681.0,254.8 L708.0,252.6 L735.0,248.4 L762.0,242.7 L789.0,237.9 L816.0,230.9"/>
+<path class="ema" d="M60.0,156.8 L87.0,156.4 L114.0,159.0 L141.0,163.1 L168.0,169.3 L195.0,176.4 L222.0,184.5 L249.0,191.2 L276.0,199.2 L303.0,208.1 L330.0,215.1 L357.0,223.2 L384.0,231.3 L411.0,237.3 L438.0,243.6 L465.0,247.8 L492.0,249.4 L519.0,248.7 L546.0,247.8 L573.0,245.6 L600.0,242.0 L627.0,239.7 L654.0,235.2 L681.0,229.5 L708.0,225.2 L735.0,219.0 L762.0,212.2 L789.0,207.1 L816.0,200.3"/>
+<g class="k down"><line class="wick" x1="60.0" x2="60.0" y1="99.0" y2="129.5"/><rect x="53.5" y="108.0" width="13" height="14.0" rx="1.5"/></g>
+<g class="k down"><line class="wick" x1="87.0" x2="87.0" y1="117.5" y2="156.5"/><rect x="80.5" y="122.0" width="13" height="30.0" rx="1.5"/></g>
+<g class="k down"><line class="wick" x1="114.0" x2="114.0" y1="144.5" y2="193.0"/><rect x="107.5" y="152.0" width="13" height="32.0" rx="1.5"/></g>
+<g class="k down focus"><line class="wick" x1="141.0" x2="141.0" y1="173.5" y2="208.0"/><rect x="134.5" y="184.0" width="13" height="18.0" rx="1.5"/></g>
+<g class="k down"><line class="wick" x1="168.0" x2="168.0" y1="196.0" y2="238.5"/><rect x="161.5" y="202.0" width="13" height="26.0" rx="1.5"/></g>
+<g class="k down"><line class="wick" x1="195.0" x2="195.0" y1="219.0" y2="251.5"/><rect x="188.5" y="228.0" width="13" height="16.0" rx="1.5"/></g>
+<g class="k down"><line class="wick" x1="222.0" x2="222.0" y1="239.5" y2="266.5"/><rect x="215.5" y="244.0" width="13" height="18.0" rx="1.5"/></g>
+<g class="k up"><line class="wick" x1="249.0" x2="249.0" y1="246.5" y2="271.0"/><rect x="242.5" y="254.0" width="13" height="8.0" rx="1.5"/></g>
+<g class="k down"><line class="wick" x1="276.0" x2="276.0" y1="243.5" y2="282.0"/><rect x="269.5" y="254.0" width="13" height="22.0" rx="1.5"/></g>
+<g class="k down"><line class="wick" x1="303.0" x2="303.0" y1="270.0" y2="302.5"/><rect x="296.5" y="276.0" width="13" height="16.0" rx="1.5"/></g>
+<g class="k up"><line class="wick" x1="330.0" x2="330.0" y1="273.0" y2="299.5"/><rect x="323.5" y="282.0" width="13" height="10.0" rx="1.5"/></g>
+<g class="k down"><line class="wick" x1="357.0" x2="357.0" y1="277.5" y2="304.5"/><rect x="350.5" y="282.0" width="13" height="18.0" rx="1.5"/></g>
+<g class="k down"><line class="wick" x1="384.0" x2="384.0" y1="292.5" y2="317.0"/><rect x="377.5" y="300.0" width="13" height="8.0" rx="1.5"/></g>
+<g class="k up"><line class="wick" x1="411.0" x2="411.0" y1="283.5" y2="314.0"/><rect x="404.5" y="294.0" width="13" height="14.0" rx="1.5"/></g>
+<g class="k down"><line class="wick" x1="438.0" x2="438.0" y1="288.0" y2="314.5"/><rect x="431.5" y="294.0" width="13" height="10.0" rx="1.5"/></g>
+<g class="k up"><line class="wick" x1="465.0" x2="465.0" y1="279.0" y2="311.5"/><rect x="458.5" y="288.0" width="13" height="16.0" rx="1.5"/></g>
+<g class="k up"><line class="wick" x1="492.0" x2="492.0" y1="259.5" y2="292.5"/><rect x="485.5" y="264.0" width="13" height="24.0" rx="1.5"/></g>
+<g class="k up focus"><line class="wick" x1="519.0" x2="519.0" y1="234.5" y2="273.0"/><rect x="512.5" y="242.0" width="13" height="22.0" rx="1.5"/></g>
+<g class="k up focus"><line class="wick" x1="546.0" x2="546.0" y1="229.5" y2="248.0"/><rect x="539.5" y="240.0" width="13" height="2.0" rx="1.5"/></g>
+<g class="k up"><line class="wick" x1="573.0" x2="573.0" y1="218.0" y2="250.5"/><rect x="566.5" y="224.0" width="13" height="16.0" rx="1.5"/></g>
+<g class="k up"><line class="wick" x1="600.0" x2="600.0" y1="199.0" y2="231.5"/><rect x="593.5" y="208.0" width="13" height="16.0" rx="1.5"/></g>
+<g class="k down"><line class="wick" x1="627.0" x2="627.0" y1="203.5" y2="222.5"/><rect x="620.5" y="208.0" width="13" height="10.0" rx="1.5"/></g>
+<g class="k up"><line class="wick" x1="654.0" x2="654.0" y1="184.5" y2="227.0"/><rect x="647.5" y="192.0" width="13" height="26.0" rx="1.5"/></g>
+<g class="k up focus"><line class="wick" x1="681.0" x2="681.0" y1="165.5" y2="198.0"/><rect x="674.5" y="176.0" width="13" height="16.0" rx="1.5"/></g>
+<g class="k down"><line class="wick" x1="708.0" x2="708.0" y1="170.0" y2="194.5"/><rect x="701.5" y="176.0" width="13" height="8.0" rx="1.5"/></g>
+<g class="k up"><line class="wick" x1="735.0" x2="735.0" y1="151.0" y2="191.5"/><rect x="728.5" y="160.0" width="13" height="24.0" rx="1.5"/></g>
+<g class="k up"><line class="wick" x1="762.0" x2="762.0" y1="143.5" y2="164.5"/><rect x="755.5" y="148.0" width="13" height="12.0" rx="1.5"/></g>
+<g class="k down"><line class="wick" x1="789.0" x2="789.0" y1="140.5" y2="167.0"/><rect x="782.5" y="148.0" width="13" height="10.0" rx="1.5"/></g>
+<g class="k up"><line class="wick" x1="816.0" x2="816.0" y1="125.5" y2="164.0"/><rect x="809.5" y="136.0" width="13" height="22.0" rx="1.5"/></g>
+<line class="close-tick" x1="503.0" x2="535.0" y1="242.0" y2="242.0"/><circle class="dot" cx="535.0" cy="242.0" r="3.5"/>
+<line class="close-tick" x1="530.0" x2="562.0" y1="240.0" y2="240.0"/><circle class="dot" cx="562.0" cy="240.0" r="3.5"/>
+<line class="close-tick" x1="665.0" x2="697.0" y1="176.0" y2="176.0"/><circle class="dot" cx="697.0" cy="176.0" r="3.5"/>
+<line class="hurdle" x1="141.0" x2="697.0" y1="202.0" y2="202.0"/>
+<circle class="drop" cx="141.0" cy="224.0" r="5"/><text class="lbl drop-l" x="131.0" y="229.0" text-anchor="end">③ 扣的这根</text>
+<text class="lbl drop-l" x="701.0" y="218.0">抵扣价 103.9</text>
+<g class="badge"><circle cx="519.0" cy="286.0" r="12"/><text x="519.0" y="290.5">1</text></g>
+<g class="badge"><circle cx="550.0" cy="194.0" r="12"/><text x="550.0" y="198.5">2</text></g>
+<g class="badge"><circle cx="681.0" cy="136.0" r="12"/><text x="681.0" y="140.5">3</text></g>
+<text class="lbl ema-l" x="836.0" y="204.3">EMA20</text>
+<text class="lbl ma-l" x="836.0" y="236.9">MA20</text>
+<text class="note" x="330.0" y="334.0" text-anchor="middle">下跌时两条线都往下</text>
+<!--/SVG-->
+      </svg>
+    </div>
+    <div class="legend">
+      <span><i style="border-color:var(--ema);border-top-width:2px"></i>EMA20（细线）</span>
+      <span><i style="border-color:var(--ma)"></i>MA20（粗线）</span>
+      <span><i style="border-color:var(--close)"></i>那天的收盘价</span>
+      <span><i style="border-color:var(--drop);border-top-style:dashed;border-top-width:2px"></i>第 3 天的抵扣价（20 根前那根的收盘）</span>
+    </div>
+  </section>
+
+  <section class="cases" aria-label="图上 1、2、3 三天">
+    <article class="case">
+      <h3><span class="n">1</span>站上 EMA20 <span class="verdict yes">EMA 拐头</span></h3>
+      <p>收盘 101.9，昨天的 EMA20 是 101.53。<b>收盘在线上，EMA 就往上</b>，当天就拐（规则 A3）。EMA 只有这一道门槛，所以 LEI 说 EMA 破线即拐头。</p>
+    </article>
+    <article class="case">
+      <h3><span class="n">2</span>站上 MA20 线 <span class="verdict no">MA 还没拐</span></h3>
+      <p>收盘 102.0，已经在 MA20 线（101.89）上方，但 MA20 还在往下。这天要扣掉的是 107.6，<b>收盘比抵扣价低，MA 照样往下</b>。线本身不是 MA 的方向门槛。</p>
+    </article>
+    <article class="case">
+      <h3><span class="n">3</span>高过抵扣价 <span class="verdict yes">MA 拐头</span></h3>
+      <p>这天要扣掉的是 20 根前那根，收盘 103.9。今天收 105.2，<b>比它高，MA20 拐头向上</b>（规则 A1）。前一天收 104.4，抵扣价是 104.8，差一点没拐。</p>
+    </article>
+  </section>
+
+  <section class="panel read">
+    <h2 style="color:var(--ink)">为什么总是 EMA 先拐、MA 后拐</h2>
+    <p>LEI 的原话：视频 C 07:30「先拐头的一定是EMA」（规则 A4）。门槛不同，先后就定了：</p>
+    <div class="two">
+      <div><h3>EMA 的门槛：线本身</h3><p>价格一越过线，当天就拐。门槛跟着价格走，越近的收盘权重越大。视频 M 02:11「收盘价在EMA20均线上方,EMA20均线就往上走」。</p></div>
+      <div><h3>MA 的门槛：抵扣价</h3><p>要扣的是 20 天前的收盘。跌了一段之后，20 天前的价格往往还在高处（图上是 107、108），反弹得先涨过它们。<b>解读</b>：这就是 MA 慢半拍的原因。</p></div>
+    </div>
+    <p>两个拐头各有用处：MA 的抵扣价今天就在图上，能事先算出"收到多少 MA 就拐"，是预判；EMA 用来验证这个拐头是不是真的，视频 G 13:53「用EMA均线 来验证这个拐头是否有效」。单根线是 EMA 先拐，交叉谁先就不一定了（见 <a href="cross.html">交叉</a>）。</p>
+  </section>
+
+  <section class="panel read">
+    <h2 style="color:var(--ink)">工作台里的这句话怎么读</h2>
+    <p class="quote">"明天收盘站上 EMA20 <span class="num">674.24</span>，EMA20 就拐头向上；站上 MA20 抵扣价 <span class="num">712.20</span>，MA20 就拐头向上"</p>
+    <p>这是 QQQ 2026-11-20 的读数，收盘 <span class="num">608.45</span>，两条线都在往下。句子分两半，各说一条线的门槛：</p>
+    <ul style="margin:0;padding-left:18px;display:grid;gap:6px">
+      <li><b>前半句</b>：674.24 是今天的 EMA20。明天收在它上面，EMA20 明天就往上。离现价 +10.8%。</li>
+      <li><b>后半句</b>：712.20 不是 MA20 线（MA20 今天是 678.53），是 MA20 明天要扣掉的那根收盘。明天收在它上面，MA20 才往上。离现价 +17.1%。</li>
+      <li>两个价位都离现价很远，说明明天两条线都不会拐。门槛每天变：EMA 的跟着价格走，MA 的每天换一根。脚本按收盘持平推演，最早约 9 个交易日后，收盘站上 674.24 两条线就能一起拐头，那时要扣的老价格已经低下来了。这个数是推演求解，只当辅助。</li>
+      <li>20 线组两条线一起拐头，就是<a href="key-move.html">关键性波动</a>，加速下跌里等的就是它（还要先有底部构造）。</li>
+    </ul>
+  </section>
+
+  <p class="mirror"><b>往下拐反过来读</b>：收盘跌破昨天的 EMA，EMA 拐头向下；收盘低于抵扣价，MA 拐头向下。进度表里 EMA 拐头、MA 拐头是两个进度点，排在破线之后（规则 J15）。破线说的是价格穿过线，拐头说的是线换方向，两件事分开看。</p>
+  <footer class="src">
+    <div><b>规则</b>：<span class="tag">A3</span> 收盘高于 EMA(n)，EMA(n) 当天上行，低于则下行。视频 L 03:32「叫做：破缐即拐头」。<span class="tag">A1</span> 收盘高于 MA(n) 的抵扣价，MA(n) 当天上行。<span class="tag">A4</span> 单根线 EMA 先拐、MA 后拐。</div>
+    <div><b>工作台</b>：看大局第 ④ 问进度表的「EMA 拐头」「MA 拐头」两列；② 找打法「等什么」一格；③ 做推演「最近的关键变化」；K 线图「图层 → 着色」的破线拐头信号着色。</div>
+    <div><b>相关</b>：<a href="deduction-price.html">抵扣价</a> · <a href="break-line.html">破线</a> · <a href="five-steps.html">五个进度点</a> · <a href="key-move.html">关键性波动</a></div>
+  </footer>
+</div>
+</body>
+</html>

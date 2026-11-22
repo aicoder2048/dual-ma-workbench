@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>大方向</title>
+<link rel="stylesheet" href="glossary.css">
+<style>
+.wrap{grid-template-columns:minmax(0,1fr)} /* glossary.css 的 .wrap 没设列宽，图的 min-width 会把窄屏撑宽 */
+:root{--l60:#2f5fd0;--l120:#0f8a8a}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--l60:#7ea2ff;--l120:#4cc9c9}}
+:root[data-theme="dark"]{--l60:#7ea2ff;--l120:#4cc9c9}
+.px{fill:none;stroke:var(--ink);stroke-width:1.2;opacity:.55}
+.l60{fill:none;stroke:var(--l60);stroke-width:3}
+.l120{fill:none;stroke:var(--l120);stroke-width:3}
+.proj{stroke-dasharray:6 4}
+.l60-l{fill:var(--l60)} .l120-l{fill:var(--l120)}
+.win60{fill:var(--l60);opacity:.09} .win120{fill:var(--l120);opacity:.11}
+.future{fill:var(--muted);opacity:.08}
+.dd60{fill:var(--l60)} .dd120{fill:var(--l120)}
+.win-t{font:600 13px var(--font);text-anchor:middle}
+.win-t.w60{fill:var(--l60)} .win-t.w120{fill:var(--l120)} .win-t.wf{fill:var(--ink)}
+.z-down{fill:var(--down)} .z-up{fill:var(--up)} .z-mid{fill:var(--muted)}
+.z-t{font:600 13px var(--font);text-anchor:middle;fill:var(--ink)}
+.marker{fill:var(--ink)}
+.bd-tbl{width:100%;border-collapse:collapse;font-size:14px}
+.bd-tbl th,.bd-tbl td{padding:8px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+.bd-tbl th{color:var(--muted);font-weight:600;font-size:13px}
+.bd-tbl td{color:var(--muted)} .bd-tbl td:first-child{color:var(--ink);font-weight:600;white-space:nowrap}
+.bd-tbl .num{font-family:var(--mono);font-variant-numeric:tabular-nums;white-space:nowrap}
+.tbl-wrap{overflow-x:auto}
+.panel p{margin:0 0 8px;font-size:14px;color:var(--muted)}
+.panel p b{color:var(--ink)}
+.warn{border-color:var(--down)}
+.warn h2{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.pill{font:700 13px var(--font);padding:1px 10px;border-radius:99px;border:1px solid var(--down);color:var(--down)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <nav class="crumb" aria-label="导航"><a href="index.html">← 概念图解目录</a><span>总纲</span></nav>
+  <header style="display:grid;gap:8px">
+    <h1>大方向</h1>
+    <p class="lede">大方向只回答一个问题：<b>接下来约 6 周，MA60、MA120 往哪走，对多头还是空头有利</b>。它不猜明天涨还是跌。就是 LEI 说的视频 C 01:43「精确的错误不如模糊的正确」，"模糊"是不求数字精确，"正确"是方向要对。</p>
+  </header>
+
+  <section class="panel">
+    <h2>MA60、MA120 接下来 30 天要扣掉的收盘，今天都已经在图上（示意，不是真实行情）</h2>
+    <div class="chart">
+      <svg viewBox="0 44 910 320" role="img" aria-label="一段先高位横盘、再冲高、再下跌的收盘线。两块浅色区是 MA120 和 MA60 接下来 30 天要扣掉的收盘，都在现价上方。右边灰色区是接下来 30 个交易日，收盘不变时 MA60、MA120 两条虚线都往下走">
+<line class="grid" x1="40" x2="866" y1="343.9" y2="343.9"/><text class="tick" x="872" y="347.9">105</text>
+<line class="grid" x1="40" x2="866" y1="313.5" y2="313.5"/><text class="tick" x="872" y="317.5">110</text>
+<line class="grid" x1="40" x2="866" y1="283.0" y2="283.0"/><text class="tick" x="872" y="287.0">115</text>
+<line class="grid" x1="40" x2="866" y1="252.6" y2="252.6"/><text class="tick" x="872" y="256.6">120</text>
+<line class="grid" x1="40" x2="866" y1="222.2" y2="222.2"/><text class="tick" x="872" y="226.2">125</text>
+<line class="grid" x1="40" x2="866" y1="191.7" y2="191.7"/><text class="tick" x="872" y="195.7">130</text>
+<line class="grid" x1="40" x2="866" y1="161.3" y2="161.3"/><text class="tick" x="872" y="165.3">135</text>
+<line class="grid" x1="40" x2="866" y1="130.9" y2="130.9"/><text class="tick" x="872" y="134.9">140</text>
+<line class="grid" x1="40" x2="866" y1="100.4" y2="100.4"/><text class="tick" x="872" y="104.4">145</text>
+<line class="grid" x1="40" x2="866" y1="70.0" y2="70.0"/><text class="tick" x="872" y="74.0">150</text>
+<rect class="future" x="668.5" y="64" width="150.0" height="292"/>
+<rect class="win win120" x="68.5" y="64" width="150.0" height="292"/>
+<rect class="win win60" x="368.5" y="64" width="150.0" height="292"/>
+<path class="px" d="M46.0,189.2 L51.0,191.6 L56.0,187.6 L61.0,192.9 L66.0,186.5 L71.0,185.6 L76.0,197.4 L81.0,196.4 L86.0,185.6 L91.0,180.4 L96.0,192.2 L101.0,188.3 L106.0,185.6 L111.0,189.9 L116.0,188.8 L121.0,189.4 L126.0,188.1 L131.0,183.8 L136.0,188.5 L141.0,186.9 L146.0,179.8 L151.0,192.1 L156.0,182.6 L161.0,179.4 L166.0,186.3 L171.0,187.4 L176.0,177.2 L181.0,186.5 L186.0,187.0 L191.0,182.4 L196.0,177.6 L201.0,187.4 L206.0,183.3 L211.0,182.7 L216.0,173.9 L221.0,188.0 L226.0,183.3 L231.0,194.7 L236.0,193.7 L241.0,190.6 L246.0,188.6 L251.0,196.3 L256.0,201.0 L261.0,204.0 L266.0,199.4 L271.0,205.8 L276.0,198.2 L281.0,199.2 L286.0,210.2 L291.0,210.2 L296.0,203.9 L301.0,207.7 L306.0,206.7 L311.0,214.9 L316.0,219.5 L321.0,218.5 L326.0,212.6 L331.0,221.7 L336.0,222.0 L341.0,222.4 L346.0,223.8 L351.0,225.3 L356.0,219.3 L361.0,231.9 L366.0,235.5 L371.0,193.4 L376.0,192.1 L381.0,187.7 L386.0,195.4 L391.0,183.5 L396.0,181.5 L401.0,191.9 L406.0,180.0 L411.0,175.9 L416.0,176.6 L421.0,176.8 L426.0,178.5 L431.0,175.2 L436.0,174.8 L441.0,175.3 L446.0,163.3 L451.0,166.4 L456.0,154.4 L461.0,166.0 L466.0,147.8 L471.0,149.2 L476.0,142.6 L481.0,140.7 L486.0,138.2 L491.0,141.6 L496.0,149.5 L501.0,133.7 L506.0,141.7 L511.0,137.0 L516.0,127.9 L521.0,147.1 L526.0,153.2 L531.0,150.0 L536.0,159.3 L541.0,167.7 L546.0,173.4 L551.0,169.0 L556.0,179.1 L561.0,179.1 L566.0,189.8 L571.0,196.6 L576.0,196.1 L581.0,196.4 L586.0,210.3 L591.0,205.7 L596.0,208.3 L601.0,214.5 L606.0,218.7 L611.0,235.0 L616.0,230.4 L621.0,231.5 L626.0,247.8 L631.0,249.0 L636.0,253.6 L641.0,254.2 L646.0,260.2 L651.0,264.0 L656.0,264.0 L661.0,279.8 L666.0,283.5"/>
+<path class="l120" d="M46.0,241.6 L51.0,240.7 L56.0,239.7 L61.0,238.9 L66.0,238.0 L71.0,237.0 L76.0,236.2 L81.0,235.4 L86.0,234.5 L91.0,233.5 L96.0,232.8 L101.0,231.9 L106.0,231.1 L111.0,230.3 L116.0,229.5 L121.0,228.7 L126.0,227.9 L131.0,227.1 L136.0,226.3 L141.0,225.6 L146.0,224.7 L151.0,224.0 L156.0,223.2 L161.0,222.4 L166.0,221.6 L171.0,220.8 L176.0,220.1 L181.0,219.4 L186.0,218.7 L191.0,218.0 L196.0,217.2 L201.0,216.6 L206.0,215.9 L211.0,215.2 L216.0,214.5 L221.0,213.9 L226.0,213.3 L231.0,212.6 L236.0,212.0 L241.0,211.4 L246.0,210.9 L251.0,210.3 L256.0,209.9 L261.0,209.4 L266.0,209.0 L271.0,208.5 L276.0,208.1 L281.0,207.6 L286.0,207.3 L291.0,207.0 L296.0,206.6 L301.0,206.3 L306.0,206.1 L311.0,205.8 L316.0,205.7 L321.0,205.4 L326.0,205.2 L331.0,205.1 L336.0,205.0 L341.0,204.8 L346.0,204.7 L351.0,204.6 L356.0,204.4 L361.0,204.4 L366.0,204.4 L371.0,204.0 L376.0,203.7 L381.0,203.3 L386.0,203.0 L391.0,202.6 L396.0,202.2 L401.0,201.8 L406.0,201.4 L411.0,200.9 L416.0,200.6 L421.0,200.1 L426.0,199.7 L431.0,199.2 L436.0,198.8 L441.0,198.4 L446.0,197.9 L451.0,197.5 L456.0,197.0 L461.0,196.6 L466.0,196.0 L471.0,195.3 L476.0,194.7 L481.0,194.0 L486.0,193.3 L491.0,192.7 L496.0,192.1 L501.0,191.4 L506.0,190.8 L511.0,190.2 L516.0,189.5 L521.0,189.0 L526.0,188.6 L531.0,188.0 L536.0,187.6 L541.0,187.3 L546.0,187.0 L551.0,186.7 L556.0,186.5 L561.0,186.3 L566.0,186.3 L571.0,186.2 L576.0,186.1 L581.0,186.1 L586.0,186.2 L591.0,186.2 L596.0,186.3 L601.0,186.5 L606.0,186.7 L611.0,186.9 L616.0,187.2 L621.0,187.5 L626.0,187.9 L631.0,188.4 L636.0,188.9 L641.0,189.4 L646.0,190.0 L651.0,190.6 L656.0,191.2 L661.0,191.9 L666.0,192.7"/>
+<path class="l120 proj" d="M666.0,192.7 L671.0,193.5 L676.0,194.3 L681.0,195.0 L686.0,195.8 L691.0,196.7 L696.0,197.4 L701.0,198.2 L706.0,199.0 L711.0,199.8 L716.0,200.6 L721.0,201.4 L726.0,202.2 L731.0,203.0 L736.0,203.8 L741.0,204.6 L746.0,205.5 L751.0,206.2 L756.0,207.1 L761.0,207.9 L766.0,208.7 L771.0,209.5 L776.0,210.4 L781.0,211.2 L786.0,212.0 L791.0,212.9 L796.0,213.8 L801.0,214.6 L806.0,215.4 L811.0,216.2 L816.0,217.2"/>
+<path class="l60" d="M46.0,214.9 L51.0,214.1 L56.0,213.3 L61.0,212.6 L66.0,211.7 L71.0,210.8 L76.0,210.2 L81.0,209.7 L86.0,208.9 L91.0,208.1 L96.0,207.4 L101.0,206.6 L106.0,205.8 L111.0,205.2 L116.0,204.6 L121.0,203.9 L126.0,203.3 L131.0,202.5 L136.0,201.9 L141.0,201.3 L146.0,200.6 L151.0,200.2 L156.0,199.6 L161.0,199.0 L166.0,198.4 L171.0,197.8 L176.0,197.1 L181.0,196.5 L186.0,195.9 L191.0,195.3 L196.0,194.7 L201.0,194.2 L206.0,193.6 L211.0,193.1 L216.0,192.5 L221.0,192.2 L226.0,191.8 L231.0,191.6 L236.0,191.3 L241.0,191.0 L246.0,190.7 L251.0,190.6 L256.0,190.5 L261.0,190.5 L266.0,190.6 L271.0,190.6 L276.0,190.5 L281.0,190.6 L286.0,190.6 L291.0,190.8 L296.0,191.0 L301.0,191.1 L306.0,191.3 L311.0,191.5 L316.0,191.9 L321.0,192.3 L326.0,192.5 L331.0,193.0 L336.0,193.5 L341.0,193.9 L346.0,194.5 L351.0,195.0 L356.0,195.6 L361.0,196.2 L366.0,197.0 L371.0,197.1 L376.0,197.1 L381.0,196.9 L386.0,197.1 L391.0,197.1 L396.0,197.0 L401.0,197.0 L406.0,196.9 L411.0,196.7 L416.0,196.5 L421.0,196.3 L426.0,196.1 L431.0,196.0 L436.0,195.7 L441.0,195.5 L446.0,195.3 L451.0,194.8 L456.0,194.4 L461.0,194.1 L466.0,193.5 L471.0,192.9 L476.0,192.3 L481.0,191.5 L486.0,190.7 L491.0,190.0 L496.0,189.6 L501.0,188.7 L506.0,188.0 L511.0,187.2 L516.0,186.5 L521.0,185.8 L526.0,185.3 L531.0,184.5 L536.0,184.0 L541.0,183.6 L546.0,183.3 L551.0,182.9 L556.0,182.5 L561.0,182.1 L566.0,181.9 L571.0,181.8 L576.0,181.7 L581.0,181.7 L586.0,181.7 L591.0,181.6 L596.0,181.7 L601.0,181.8 L606.0,182.0 L611.0,182.3 L616.0,182.5 L621.0,182.7 L626.0,183.3 L631.0,183.8 L636.0,184.3 L641.0,184.8 L646.0,185.4 L651.0,186.1 L656.0,186.8 L661.0,187.6 L666.0,188.4"/>
+<path class="l60 proj" d="M666.0,188.4 L671.0,189.9 L676.0,191.5 L681.0,193.1 L686.0,194.5 L691.0,196.2 L696.0,197.9 L701.0,199.4 L706.0,201.1 L711.0,202.9 L716.0,204.7 L721.0,206.5 L726.0,208.2 L731.0,210.0 L736.0,211.9 L741.0,213.7 L746.0,215.7 L751.0,217.6 L756.0,219.8 L761.0,221.7 L766.0,224.0 L771.0,226.2 L776.0,228.6 L781.0,230.9 L786.0,233.4 L791.0,235.7 L796.0,238.0 L801.0,240.5 L806.0,242.8 L811.0,245.3 L816.0,247.9"/>
+<circle class="dd dd120" cx="71.0" cy="185.6" r="2"/>
+<circle class="dd dd120" cx="76.0" cy="197.4" r="2"/>
+<circle class="dd dd120" cx="81.0" cy="196.4" r="2"/>
+<circle class="dd dd120" cx="86.0" cy="185.6" r="2"/>
+<circle class="dd dd120" cx="91.0" cy="180.4" r="2"/>
+<circle class="dd dd120" cx="96.0" cy="192.2" r="2"/>
+<circle class="dd dd120" cx="101.0" cy="188.3" r="2"/>
+<circle class="dd dd120" cx="106.0" cy="185.6" r="2"/>
+<circle class="dd dd120" cx="111.0" cy="189.9" r="2"/>
+<circle class="dd dd120" cx="116.0" cy="188.8" r="2"/>
+<circle class="dd dd120" cx="121.0" cy="189.4" r="2"/>
+<circle class="dd dd120" cx="126.0" cy="188.1" r="2"/>
+<circle class="dd dd120" cx="131.0" cy="183.8" r="2"/>
+<circle class="dd dd120" cx="136.0" cy="188.5" r="2"/>
+<circle class="dd dd120" cx="141.0" cy="186.9" r="2"/>
+<circle class="dd dd120" cx="146.0" cy="179.8" r="2"/>
+<circle class="dd dd120" cx="151.0" cy="192.1" r="2"/>
+<circle class="dd dd120" cx="156.0" cy="182.6" r="2"/>
+<circle class="dd dd120" cx="161.0" cy="179.4" r="2"/>
+<circle class="dd dd120" cx="166.0" cy="186.3" r="2"/>
+<circle class="dd dd120" cx="171.0" cy="187.4" r="2"/>
+<circle class="dd dd120" cx="176.0" cy="177.2" r="2"/>
+<circle class="dd dd120" cx="181.0" cy="186.5" r="2"/>
+<circle class="dd dd120" cx="186.0" cy="187.0" r="2"/>
+<circle class="dd dd120" cx="191.0" cy="182.4" r="2"/>
+<circle class="dd dd120" cx="196.0" cy="177.6" r="2"/>
+<circle class="dd dd120" cx="201.0" cy="187.4" r="2"/>
+<circle class="dd dd120" cx="206.0" cy="183.3" r="2"/>
+<circle class="dd dd120" cx="211.0" cy="182.7" r="2"/>
+<circle class="dd dd120" cx="216.0" cy="173.9" r="2"/>
+<circle class="dd dd60" cx="371.0" cy="193.4" r="2"/>
+<circle class="dd dd60" cx="376.0" cy="192.1" r="2"/>
+<circle class="dd dd60" cx="381.0" cy="187.7" r="2"/>
+<circle class="dd dd60" cx="386.0" cy="195.4" r="2"/>
+<circle class="dd dd60" cx="391.0" cy="183.5" r="2"/>
+<circle class="dd dd60" cx="396.0" cy="181.5" r="2"/>
+<circle class="dd dd60" cx="401.0" cy="191.9" r="2"/>
+<circle class="dd dd60" cx="406.0" cy="180.0" r="2"/>
+<circle class="dd dd60" cx="411.0" cy="175.9" r="2"/>
+<circle class="dd dd60" cx="416.0" cy="176.6" r="2"/>
+<circle class="dd dd60" cx="421.0" cy="176.8" r="2"/>
+<circle class="dd dd60" cx="426.0" cy="178.5" r="2"/>
+<circle class="dd dd60" cx="431.0" cy="175.2" r="2"/>
+<circle class="dd dd60" cx="436.0" cy="174.8" r="2"/>
+<circle class="dd dd60" cx="441.0" cy="175.3" r="2"/>
+<circle class="dd dd60" cx="446.0" cy="163.3" r="2"/>
+<circle class="dd dd60" cx="451.0" cy="166.4" r="2"/>
+<circle class="dd dd60" cx="456.0" cy="154.4" r="2"/>
+<circle class="dd dd60" cx="461.0" cy="166.0" r="2"/>
+<circle class="dd dd60" cx="466.0" cy="147.8" r="2"/>
+<circle class="dd dd60" cx="471.0" cy="149.2" r="2"/>
+<circle class="dd dd60" cx="476.0" cy="142.6" r="2"/>
+<circle class="dd dd60" cx="481.0" cy="140.7" r="2"/>
+<circle class="dd dd60" cx="486.0" cy="138.2" r="2"/>
+<circle class="dd dd60" cx="491.0" cy="141.6" r="2"/>
+<circle class="dd dd60" cx="496.0" cy="149.5" r="2"/>
+<circle class="dd dd60" cx="501.0" cy="133.7" r="2"/>
+<circle class="dd dd60" cx="506.0" cy="141.7" r="2"/>
+<circle class="dd dd60" cx="511.0" cy="137.0" r="2"/>
+<circle class="dd dd60" cx="516.0" cy="127.9" r="2"/>
+<line class="close-tick" x1="662.0" x2="818.5" y1="283.5" y2="283.5" stroke-dasharray="6 4"/><circle class="dot" cx="666.0" cy="283.5" r="3.5"/>
+<text class="win-t w120" x="143.5" y="86">MA120 接下来 30 天</text><text class="win-t w120" x="143.5" y="102">要扣的收盘</text>
+<text class="win-t w60" x="443.5" y="86">MA60 接下来 30 天</text><text class="win-t w60" x="443.5" y="102">要扣的收盘</text>
+<text class="win-t wf" x="743.5" y="86">接下来 30 个交易日</text><text class="win-t wf" x="743.5" y="102">（约 6 周）</text>
+<text class="note" x="666" y="58" text-anchor="middle">今天</text>
+<text class="note" x="700" y="303">收盘不变</text>
+<text class="lbl l60-l" x="824" y="256">MA60</text>
+<text class="lbl l120-l" x="824" y="221">MA120</text>
+<g class="badge"><circle cx="143.5" cy="330" r="12"/><text x="143.5" y="334.5">1</text></g>
+<g class="badge"><circle cx="443.5" cy="330" r="12"/><text x="443.5" y="334.5">2</text></g>
+<g class="badge"><circle cx="743.5" cy="330" r="12"/><text x="743.5" y="334.5">3</text></g>
+      </svg>
+    </div>
+    <div class="legend">
+      <span><i style="border-color:var(--ink);border-top-width:1px;opacity:.6"></i>每天收盘</span>
+      <span><i style="border-color:var(--l60)"></i>MA60</span>
+      <span><i style="border-color:var(--l120)"></i>MA120</span>
+      <span><i style="border-color:var(--muted);border-top-style:dashed;border-top-width:2px"></i>收盘不变时均线的走法</span>
+      <span><i style="border-color:var(--close);border-top-style:dashed;border-top-width:2px"></i>今天的收盘</span>
+    </div>
+  </section>
+
+  <section class="cases" aria-label="图上 1、2、3">
+    <article class="case">
+      <h3><span class="n">1</span>MA120 那一段 <span class="verdict yes">30 天都往下</span></h3>
+      <p>接下来 30 天，MA120 每天扣掉一根老收盘，扣的是从 120 天前往后数的那 30 根，<b>全在现价上方</b>。收盘不变，扣掉的比加进来的高，MA120 连着 30 天往下。</p>
+    </article>
+    <article class="case">
+      <h3><span class="n">2</span>MA60 那一段 <span class="verdict yes">30 天都往下</span></h3>
+      <p>MA60 要扣的是从 60 天前往后数的那 30 根，也全在现价上方，MA60 也连着 30 天往下。两条线各记"往下 30 天 ÷ 30"，平均是 <b>−1</b>，落在<b>明显偏空</b>。</p>
+    </article>
+    <article class="case">
+      <h3><span class="n">3</span>收盘不变 <span class="verdict no">是假设</span></h3>
+      <p>"收盘不变"是拿来量安全边际的尺子，不是预测。工作台同时算出<b>收盘到哪个价位、多少天内</b>会推翻这个判断，写在做推演的推翻条件里。</p>
+    </article>
+  </section>
+
+  <section class="panel">
+    <h2>五档刻度和结论句</h2>
+    <div class="chart">
+      <svg viewBox="0 0 910 104" role="img" aria-label="从 −1 到 +1 的刻度，分成明显偏空、偏空、不明、偏多、明显偏多五档，本例的 −1 在最左边">
+        <rect class="z-down" x="60" y="30" width="158" height="30" opacity=".55"/>
+        <rect class="z-down" x="218" y="30" width="138.25" height="30" opacity=".25"/>
+        <rect class="z-mid" x="356.25" y="30" width="197.5" height="30" opacity=".15"/>
+        <rect class="z-up" x="553.75" y="30" width="138.25" height="30" opacity=".25"/>
+        <rect class="z-up" x="692" y="30" width="158" height="30" opacity=".55"/>
+        <text class="z-t" x="139" y="50">明显偏空</text>
+        <text class="z-t" x="287.1" y="50">偏空</text>
+        <text class="z-t" x="455" y="50">不明</text>
+        <text class="z-t" x="622.9" y="50">偏多</text>
+        <text class="z-t" x="771" y="50">明显偏多</text>
+        <text class="tick" x="60" y="80" text-anchor="middle">−1</text>
+        <text class="tick" x="218" y="80" text-anchor="middle">−0.6</text>
+        <text class="tick" x="356.25" y="80" text-anchor="middle">−0.25</text>
+        <text class="tick" x="455" y="80" text-anchor="middle">0</text>
+        <text class="tick" x="553.75" y="80" text-anchor="middle">+0.25</text>
+        <text class="tick" x="692" y="80" text-anchor="middle">+0.6</text>
+        <text class="tick" x="850" y="80" text-anchor="middle">+1</text>
+        <path class="marker" d="M60,26 L54,14 L66,14 Z"/>
+        <text class="note" x="74" y="20">本图的例子：−1</text>
+      </svg>
+    </div>
+    <div class="tbl-wrap">
+      <table class="bd-tbl">
+        <thead><tr><th>档位</th><th class="num">分数</th><th>做推演的结论句（接下来约 6 周…）</th></tr></thead>
+        <tbody>
+          <tr><td>明显偏多</td><td class="num">≥ +0.6</td><td>均线向上：回撤是加仓机会，不是离场信号</td></tr>
+          <tr><td>偏多</td><td class="num">≥ +0.25</td><td>均线偏向上：回撤多半是加仓机会，先别急着走</td></tr>
+          <tr><td>不明</td><td class="num">中间</td><td>均线方向不明：不押方向，按打法的价位做，等 MA60、MA120 走出方向</td></tr>
+          <tr><td>偏空</td><td class="num">≤ −0.25</td><td>均线偏向下：反弹多半是减仓机会，先别急着抄底</td></tr>
+          <tr><td>明显偏空</td><td class="num">≤ −0.6</td><td>均线向下：反弹是减仓机会，不是抄底机会</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p style="margin-top:10px">结论句的根据是视频 A 01:03「均线运行的方向就是价格运行的最小阻力方向」，和视频 A 01:17「如果说未来一段时间均线的运行方向是往上走的」，那么不破坏均线上行的下跌就是买入机会；反过来，均线往下时每一次上涨都是卖出的机会。0.6、0.25 两个分界是脚本自定的。</p>
+  </section>
+
+  <section class="panel warn">
+    <h2>历史评估没通过 <span class="pill">历史评估：没验证出效果</span></h2>
+    <p>2026-11-20 拿 86 只美股和 ETF、2013–2026 年的日线测过（主张 H1）：每 5 个交易日记一次大方向，看之后 20 个交易日的超额收益，另留一半品种做验证集。主张是偏多之后跑赢、偏空之后跑输。结果<b>偏多之后反而略跑输偏空，明显偏空之后 20 日超额反而最高</b>，方向和主张相反，或者没用。</p>
+    <p>所以工作台在大方向旁边一直挂着这个标签。大方向说的是均线接下来往哪走，不是涨跌预测，下单前当作风险提示。也因为这个，界面上没叫它"模糊正确"。</p>
+  </section>
+
+  <p class="mirror"><b>为什么是 30 个交易日</b>：LEI 只说"未来一段时间"，没给天数。30 是脚本自定的：60、120 线几天里几乎动不了，看太短看不出方向；30 天在 MA60 的窗口一半以内，这 30 天要扣的抵扣价<b>全是已经发生的收盘</b>，不用猜。</p>
+
+  <footer class="src">
+    <div><b>出处</b>：大方向不是规则，是结论的压缩（rules.md 文末）。天数 <span class="tag">HURDLE_DAYS_60</span> <span class="tag">HURDLE_DAYS_120</span> = 30、档位 <span class="tag">LEAN_CLEAR</span> 0.6 <span class="tag">LEAN_SOME</span> 0.25 都是脚本自定。评估 <span class="tag">H1</span>。界面名字见 ADR 0030、0032。</div>
+    <div><b>工作台</b>：结论卡片标题「大方向 · 接下来约 6 周」和档位；③ 做推演第一句大字的结论句，旁边挂着「历史评估：没验证出效果」，下面是推翻条件和最近的关键变化，刻度条和 30 天门槛路径在「依据」里折叠着。</div>
+    <div><b>相关</b>：<a href="deduction-price.html">抵扣价</a> · <a href="trend-types.html">五种趋势类型</a> · <a href="turning.html">拐头</a> · <a href="key-move.html">关键性波动</a></div>
+  </footer>
+</div>
+</body>
+</html>

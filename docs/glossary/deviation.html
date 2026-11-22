@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>乖离</title>
+<link rel="stylesheet" href="glossary.css">
+<style>
+.gapl{stroke:var(--ink);stroke-width:1.4}
+.gapt{fill:var(--ink);font:700 14px var(--font)}
+.meter{display:grid;gap:6px;margin-top:4px}
+.track{position:relative;height:18px;border-radius:9px;background:var(--line)}
+.track .zone{position:absolute;top:0;bottom:0;width:5%;background:var(--down);opacity:.35}
+.track .lo{left:0;border-radius:9px 0 0 9px} .track .hi{right:0;border-radius:0 9px 9px 0}
+.track .needle{position:absolute;top:-6px;bottom:-6px;width:3px;margin-left:-1.5px;background:var(--ink);border-radius:2px}
+.axis{display:flex;justify-content:space-between;gap:8px;font-size:12px;color:var(--muted)}
+.axis span:nth-child(2){text-align:center}
+.panel p{margin:0 0 8px;font-size:14px;color:var(--muted)} .panel p b{color:var(--ink)}
+.num{font-family:var(--mono)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <nav class="crumb" aria-label="导航"><a href="index.html">← 概念图解目录</a><span>价格和线的关系</span></nav>
+  <header style="display:grid;gap:8px">
+    <h1>乖离</h1>
+    <p class="lede">乖离就是<b>价格离均线有多远</b>，用百分比量：（收盘 − 均线）÷ 均线。均线是平均成本，离得越远，价格越偏离成本。乖离大只说明跑远了，<b>不说明马上回来</b>，也不是买卖信号。</p>
+  </header>
+
+  <section class="panel">
+    <h2>一段急跌，价格甩开 20 线（示意，不是真实行情）</h2>
+    <div class="chart">
+      <svg viewBox="0 66 910 352" role="img" aria-label="横走之后急跌，第 1 根收盘离 MA20 约负 9%，是这段里离得最远的；之后价格快速涨回来，第 2 根收盘回到 MA20 上方">
+<line class="grid" x1="30" x2="870" y1="350.5" y2="350.5"/><text class="tick" x="876" y="354.5">95</text>
+<line class="grid" x1="30" x2="870" y1="276.7" y2="276.7"/><text class="tick" x="876" y="280.7">100</text>
+<line class="grid" x1="30" x2="870" y1="202.9" y2="202.9"/><text class="tick" x="876" y="206.9">105</text>
+<line class="grid" x1="30" x2="870" y1="129.0" y2="129.0"/><text class="tick" x="876" y="133.0">110</text>
+<path class="ma" d="M60.0,137.4 L76.0,135.7 L92.0,134.4 L108.0,132.7 L124.0,130.8 L140.0,129.6 L156.0,128.5 L172.0,126.9 L188.0,125.7 L204.0,125.3 L220.0,124.7 L236.0,123.6 L252.0,123.0 L268.0,122.7 L284.0,121.9 L300.0,121.0 L316.0,120.8 L332.0,120.6 L348.0,119.8 L364.0,119.8 L380.0,121.3 L396.0,123.6 L412.0,126.3 L428.0,130.5 L444.0,135.9 L460.0,141.7 L476.0,148.0 L492.0,155.8 L508.0,164.8 L524.0,174.1 L540.0,184.4 L556.0,195.5 L572.0,206.4 L588.0,216.9 L604.0,227.2 L620.0,237.7 L636.0,247.5 L652.0,256.5 L668.0,265.7 L684.0,273.7 L700.0,279.7 L716.0,284.2 L732.0,288.2 L748.0,290.8 L764.0,291.6 L780.0,291.2 L796.0,290.1"/>
+<path class="ema" d="M60.0,139.7 L76.0,138.5 L92.0,137.7 L108.0,136.1 L124.0,134.2 L140.0,132.9 L156.0,132.0 L172.0,130.8 L188.0,129.8 L204.0,129.3 L220.0,128.5 L236.0,126.9 L252.0,125.7 L268.0,125.2 L284.0,124.5 L300.0,123.5 L316.0,123.1 L332.0,122.7 L348.0,121.4 L364.0,121.8 L380.0,124.7 L396.0,129.2 L412.0,134.5 L428.0,141.1 L444.0,149.1 L460.0,157.5 L476.0,166.3 L492.0,176.6 L508.0,188.2 L524.0,200.0 L540.0,212.0 L556.0,223.6 L572.0,234.1 L588.0,243.1 L604.0,250.9 L620.0,257.9 L636.0,263.2 L652.0,266.7 L668.0,269.1 L684.0,270.8 L700.0,270.9 L716.0,270.1 L732.0,269.5 L748.0,268.3 L764.0,265.7 L780.0,262.3 L796.0,258.9"/>
+<g class="k up"><line class="wick" x1="60.0" x2="60.0" y1="114.7" y2="135.1"/><rect x="55.5" y="121.7" width="9.0" height="7.4" rx="1.5"/></g>
+<g class="k down"><line class="wick" x1="76.0" x2="76.0" y1="116.3" y2="132.7"/><rect x="71.5" y="122.9" width="9.0" height="3.8" rx="1.5"/></g>
+<g class="k up"><line class="wick" x1="92.0" x2="92.0" y1="124.1" y2="139.3"/><rect x="87.5" y="129.9" width="9.0" height="2.0" rx="1.5"/></g>
+<g class="k up"><line class="wick" x1="108.0" x2="108.0" y1="114.1" y2="127.4"/><rect x="103.5" y="121.4" width="9.0" height="1.5" rx="1.5"/></g>
+<g class="k up"><line class="wick" x1="124.0" x2="124.0" y1="110.9" y2="133.4"/><rect x="119.5" y="115.6" width="9.0" height="11.5" rx="1.5"/></g>
+<g class="k down"><line class="wick" x1="140.0" x2="140.0" y1="109.0" y2="128.3"/><rect x="135.5" y="116.2" width="9.0" height="4.8" rx="1.5"/></g>
+<g class="k down"><line class="wick" x1="156.0" x2="156.0" y1="108.4" y2="128.9"/><rect x="151.5" y="114.6" width="9.0" height="9.1" rx="1.5"/></g>
+<g class="k up"><line class="wick" x1="172.0" x2="172.0" y1="112.8" y2="138.3"/><rect x="167.5" y="119.1" width="9.0" height="12.6" rx="1.5"/></g>
+<g class="k down"><line class="wick" x1="188.0" x2="188.0" y1="107.7" y2="127.3"/><rect x="183.5" y="114.8" width="9.0" height="5.3" rx="1.5"/></g>
+<g class="k down"><line class="wick" x1="204.0" x2="204.0" y1="112.9" y2="129.9"/><rect x="199.5" y="117.8" width="9.0" height="7.5" rx="1.5"/></g>
+<g class="k up"><line class="wick" x1="220.0" x2="220.0" y1="113.0" y2="139.5"/><rect x="215.5" y="120.3" width="9.0" height="12.3" rx="1.5"/></g>
+<g class="k up"><line class="wick" x1="236.0" x2="236.0" y1="105.9" y2="119.8"/><rect x="231.5" y="111.5" width="9.0" height="1.5" rx="1.5"/></g>
+<g class="k down"><line class="wick" x1="252.0" x2="252.0" y1="107.4" y2="118.8"/><rect x="247.5" y="114.1" width="9.0" height="1.5" rx="1.5"/></g>
+<g class="k down"><line class="wick" x1="268.0" x2="268.0" y1="111.4" y2="127.8"/><rect x="263.5" y="118.2" width="9.0" height="2.4" rx="1.5"/></g>
+<g class="k down"><line class="wick" x1="284.0" x2="284.0" y1="107.2" y2="124.5"/><rect x="279.5" y="112.7" width="9.0" height="5.1" rx="1.5"/></g>
+<g class="k up"><line class="wick" x1="300.0" x2="300.0" y1="107.2" y2="129.4"/><rect x="295.5" y="114.6" width="9.0" height="9.7" rx="1.5"/></g>
+<g class="k down"><line class="wick" x1="316.0" x2="316.0" y1="108.8" y2="126.3"/><rect x="311.5" y="113.8" width="9.0" height="5.2" rx="1.5"/></g>
+<g class="k down"><line class="wick" x1="332.0" x2="332.0" y1="106.4" y2="124.8"/><rect x="327.5" y="113.5" width="9.0" height="4.9" rx="1.5"/></g>
+<g class="k up"><line class="wick" x1="348.0" x2="348.0" y1="102.8" y2="132.0"/><rect x="343.5" y="109.2" width="9.0" height="17.3" rx="1.5"/></g>
+<g class="k down"><line class="wick" x1="364.0" x2="364.0" y1="97.9" y2="133.5"/><rect x="359.5" y="103.9" width="9.0" height="22.2" rx="1.5"/></g>
+<g class="k down"><line class="wick" x1="380.0" x2="380.0" y1="117.8" y2="158.4"/><rect x="375.5" y="125.1" width="9.0" height="27.4" rx="1.5"/></g>
+<g class="k down"><line class="wick" x1="396.0" x2="396.0" y1="154.6" y2="177.8"/><rect x="391.5" y="159.1" width="9.0" height="12.7" rx="1.5"/></g>
+<g class="k down"><line class="wick" x1="412.0" x2="412.0" y1="156.7" y2="192.0"/><rect x="407.5" y="164.0" width="9.0" height="20.6" rx="1.5"/></g>
+<g class="k down"><line class="wick" x1="428.0" x2="428.0" y1="182.5" y2="209.7"/><rect x="423.5" y="188.4" width="9.0" height="15.7" rx="1.5"/></g>
+<g class="k down"><line class="wick" x1="444.0" x2="444.0" y1="200.4" y2="231.5"/><rect x="439.5" y="206.9" width="9.0" height="18.3" rx="1.5"/></g>
+<g class="k down"><line class="wick" x1="460.0" x2="460.0" y1="210.7" y2="244.1"/><rect x="455.5" y="217.7" width="9.0" height="19.2" rx="1.5"/></g>
+<g class="k down"><line class="wick" x1="476.0" x2="476.0" y1="239.0" y2="255.0"/><rect x="471.5" y="244.1" width="9.0" height="5.7" rx="1.5"/></g>
+<g class="k down"><line class="wick" x1="492.0" x2="492.0" y1="240.3" y2="281.5"/><rect x="487.5" y="247.7" width="9.0" height="27.2" rx="1.5"/></g>
+<g class="k down"><line class="wick" x1="508.0" x2="508.0" y1="265.2" y2="305.7"/><rect x="503.5" y="270.5" width="9.0" height="28.1" rx="1.5"/></g>
+<g class="k down"><line class="wick" x1="524.0" x2="524.0" y1="299.7" y2="316.2"/><rect x="519.5" y="306.6" width="9.0" height="4.9" rx="1.5"/></g>
+<g class="k down focus"><line class="wick" x1="540.0" x2="540.0" y1="298.6" y2="333.5"/><rect x="535.5" y="305.2" width="9.0" height="21.4" rx="1.5"/></g>
+<g class="k down"><line class="wick" x1="556.0" x2="556.0" y1="321.2" y2="340.2"/><rect x="551.5" y="327.0" width="9.0" height="6.2" rx="1.5"/></g>
+<g class="k up"><line class="wick" x1="572.0" x2="572.0" y1="326.3" y2="343.7"/><rect x="567.5" y="333.6" width="9.0" height="5.4" rx="1.5"/></g>
+<g class="k down"><line class="wick" x1="588.0" x2="588.0" y1="320.8" y2="336.5"/><rect x="583.5" y="325.5" width="9.0" height="3.8" rx="1.5"/></g>
+<g class="k up"><line class="wick" x1="604.0" x2="604.0" y1="317.2" y2="341.0"/><rect x="599.5" y="324.4" width="9.0" height="9.9" rx="1.5"/></g>
+<g class="k up"><line class="wick" x1="620.0" x2="620.0" y1="318.4" y2="331.0"/><rect x="615.5" y="324.6" width="9.0" height="1.5" rx="1.5"/></g>
+<g class="k up"><line class="wick" x1="636.0" x2="636.0" y1="307.8" y2="325.0"/><rect x="631.5" y="314.0" width="9.0" height="3.6" rx="1.5"/></g>
+<g class="k up"><line class="wick" x1="652.0" x2="652.0" y1="292.0" y2="328.2"/><rect x="647.5" y="299.2" width="9.0" height="22.6" rx="1.5"/></g>
+<g class="k up"><line class="wick" x1="668.0" x2="668.0" y1="288.0" y2="301.3"/><rect x="663.5" y="292.8" width="9.0" height="2.9" rx="1.5"/></g>
+<g class="k up"><line class="wick" x1="684.0" x2="684.0" y1="279.0" y2="297.0"/><rect x="679.5" y="286.4" width="9.0" height="3.2" rx="1.5"/></g>
+<g class="k up focus"><line class="wick" x1="700.0" x2="700.0" y1="266.5" y2="300.0"/><rect x="695.5" y="272.1" width="9.0" height="22.0" rx="1.5"/></g>
+<g class="k up"><line class="wick" x1="716.0" x2="716.0" y1="256.1" y2="271.0"/><rect x="711.5" y="262.8" width="9.0" height="2.2" rx="1.5"/></g>
+<g class="k up"><line class="wick" x1="732.0" x2="732.0" y1="256.4" y2="271.9"/><rect x="727.5" y="263.2" width="9.0" height="1.5" rx="1.5"/></g>
+<g class="k up"><line class="wick" x1="748.0" x2="748.0" y1="251.5" y2="273.6"/><rect x="743.5" y="256.9" width="9.0" height="11.1" rx="1.5"/></g>
+<g class="k up"><line class="wick" x1="764.0" x2="764.0" y1="233.3" y2="255.2"/><rect x="759.5" y="240.7" width="9.0" height="8.1" rx="1.5"/></g>
+<g class="k up"><line class="wick" x1="780.0" x2="780.0" y1="225.4" y2="253.9"/><rect x="775.5" y="230.4" width="9.0" height="16.3" rx="1.5"/></g>
+<g class="k up"><line class="wick" x1="796.0" x2="796.0" y1="219.2" y2="235.6"/><rect x="791.5" y="226.3" width="9.0" height="4.2" rx="1.5"/></g>
+<line class="close-tick" x1="530.0" x2="550.0" y1="326.6" y2="326.6"/>
+<line class="gapl" x1="556.0" x2="556.0" y1="184.4" y2="326.6"/>
+<line class="gapl" x1="551.0" x2="561.0" y1="184.4" y2="184.4"/><line class="gapl" x1="551.0" x2="561.0" y1="326.6" y2="326.6"/>
+<text class="gapt" x="568.0" y="162.4">离 20 线 -9.1%</text>
+<text class="note" x="568.0" y="180.4">（收盘 ÷ MA20 − 1）</text>
+<g class="badge"><circle cx="540.0" cy="356.6" r="12"/><text x="540.0" y="361.1">1</text></g>
+<g class="badge"><circle cx="700.0" cy="326.0" r="12"/><text x="700.0" y="330.5">2</text></g>
+<text class="note" x="718.0" y="331.0">涨回来找均线</text>
+<text class="lbl ema-l" x="810" y="262.9">EMA20</text>
+<text class="lbl ma-l" x="810" y="294.1">MA20</text>
+      </svg>
+    </div>
+    <div class="legend">
+      <span><i style="border-color:var(--ema);border-top-width:2px"></i>EMA20（细线）</span>
+      <span><i style="border-color:var(--ma)"></i>MA20（粗线）</span>
+      <span><i style="border-color:var(--close)"></i>那天的收盘价</span>
+      <span><i style="border-color:var(--ink);border-top-width:1.5px"></i>收盘到 MA20 的距离</span>
+    </div>
+  </section>
+
+  <section class="cases" aria-label="工作台用到的三把尺子">
+    <article class="case">
+      <h3>离 20 线的分位 <span class="verdict yes">判加速</span></h3>
+      <p>收盘离 MA20 的百分比，放进这只票<b>自己的历史</b>里排位。排在最负或最正的 5% 里，算大幅乖离，是判"加速"的一条路（规则 J3）。5% 是脚本定的；拿乖离判加速，是从"强趋势看乖离"推出来的。</p>
+    </article>
+    <article class="case">
+      <h3>日线离 EMA120 <span class="verdict no">旁证</span></h3>
+      <p>LEI 的口径是对长期均线：视频 G 16:24「偏离长期均线50%以上 他也有可能要回来 什么时候回归不知道」。脚本拿 <b>50%</b> 做旁证（J37），只在加速的依据里写一句，不改判断。</p>
+    </article>
+    <article class="case">
+      <h3>周线离 120 线 <span class="verdict no">旁证</span></h3>
+      <p>周线上偏离 120 线超过 <b>70%</b>，视频 G 24:31 说的是这时反弹一触即发（J37）。视频没说是 MA 还是 EMA，脚本和日线一样用 EMA120，这是解读。</p>
+    </article>
+  </section>
+
+  <section class="panel">
+    <h2>工作台里的"离 20 线"</h2>
+    <p>顶上四个小格里有一格叫「离 20 线」，大字是百分比，小字是历史分位。看大局第 ③ 问「是不是加速？」画成一根条：</p>
+    <div class="meter" role="img" aria-label="分位条：QQQ 2026-11-20 离 20 线负 10.3%，在自身历史排 0% 分位，落在左端大幅乖离区">
+      <div class="track"><span class="zone lo"></span><span class="zone hi"></span><span class="needle" style="left:0.5%"></span></div>
+      <div class="axis"><span>0% 最负</span><span>两端各 5%：大幅乖离</span><span>100% 最正</span></div>
+    </div>
+    <p style="margin-top:10px">QQQ 2026-11-20：收盘 <span class="num">608.45</span>，离 20 线 <b class="num">-10.3%</b>，在自己历史里排 <b class="num">0%</b> 分位，落在左端，所以判<b>加速下跌</b>。同一天它离 EMA120 是 <span class="num">-12.9%</span>，周线离 EMA120 <span class="num">+1.7%</span>，J37 两档都没到。</p>
+  </section>
+
+  <p class="mirror"><b>跑远了会回来</b>（规则 J9）：加速时价格大幅偏离平均成本，要回归。回归有两种：价格快速回来找均线（图上第 2 根），或者价格横着走，等均线追上来。往下跑远时，视频 I 19:39「下降到6点钟方向的趋势，他随时都有可能往回反弹」。<b>但这不是抄底的理由</b>：加速下跌里不在下跌途中抢，要等底部构造和 20 线组拐头向上（P7）。LEI 讲均值回归时还说过，回到均值不会停下，会穿过去走向另一头。</p>
+  <p class="mirror"><b>什么时候看乖离</b>：强趋势看乖离，弱趋势看成本的密集程度，视频 I 03:21「在强趋势的时候呢我们要关注它的乖离率」。LEI 讲 MACD 时把两根均线之间的距离也叫乖离率，工作台的"离 20 线"只指收盘对 MA20。</p>
+  <footer class="src">
+    <div><b>规则</b>：<span class="tag">J3</span> 加速：60 线 1 点钟以上，或离 20 线排在自身历史两端 5%（分位阈值脚本自定）。<span class="tag">J9</span> 加速后价格要回归均线。<span class="tag">J37</span> 收盘离 EMA120 ≥ 50%、周线离 120 线 ≥ 70%（两个数是视频的），只当旁证。</div>
+    <div><b>工作台</b>：顶上小格「离 20 线」；看大局第 ③ 问「是不是加速？」的分位条；规则清单里的 J37 一行写着离 EMA120 多少。</div>
+    <div><b>相关</b>：<a href="trend-types.html">五种趋势类型</a> · <a href="clock-direction.html">几点钟方向</a> · <a href="break-line.html">破线</a> · <a href="ma-cluster.html">均线密集</a> · <a href="top-bottom-structure.html">顶部 / 底部构造</a></div>
+  </footer>
+</div>
+</body>
+</html>

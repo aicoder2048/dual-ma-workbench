@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>几点钟方向</title>
+<link rel="stylesheet" href="glossary.css">
+<style>
+.wrap>*{min-width:0}
+.w{stroke:var(--panel);stroke-width:2}
+.acc-up{fill:var(--up);fill-opacity:.55} .st-up{fill:var(--up);fill-opacity:.22}
+.flat{fill:var(--muted);fill-opacity:.18}
+.st-dn{fill:var(--down);fill-opacity:.22} .acc-dn{fill:var(--down);fill-opacity:.55}
+.rim{fill:none;stroke:var(--line);stroke-width:1.5}
+.hr{stroke:var(--ink);stroke-width:2} .hrl{fill:var(--ink);font:700 14px var(--mono)}
+.bl{fill:var(--ink);font-weight:700;font-size:14px}
+.nd60{stroke:var(--ma);stroke-width:4;stroke-linecap:round}
+.nd20{stroke:var(--ma);stroke-width:2;stroke-dasharray:6 4;stroke-linecap:round}
+.hub{fill:var(--ink)}
+.ema-l2{fill:var(--ma)}
+.la{fill:none;stroke:var(--ema);stroke-width:2.5} .lb{fill:none;stroke:var(--ma);stroke-width:2.5}
+.la-t{fill:var(--ema)} .lb-t{fill:var(--ma)}
+table.deg{border-collapse:collapse;font-size:14px;width:100%}
+table.deg th,table.deg td{text-align:left;padding:6px 10px;border-bottom:1px solid var(--line)}
+table.deg th{color:var(--muted);font-weight:600}
+table.deg td.n{font-family:var(--mono);text-align:right;white-space:nowrap}
+table.deg td.src{color:var(--muted)}
+.scroll{overflow-x:auto}
+.txt{display:grid;gap:8px;font-size:14px;color:var(--muted)} .txt p{margin:0} .txt b{color:var(--ink)}
+.num{font-family:var(--mono);color:var(--ink)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <nav class="crumb" aria-label="导航"><a href="index.html">← 概念图解目录</a><span>均线本身</span></nav>
+  <header style="display:grid;gap:8px">
+    <h1>几点钟方向</h1>
+    <p class="lede">把均线的斜率当成钟面上的指针来读：<b>3 点钟是水平</b>，往 12 点转是越涨越陡，往 6 点转是越跌越陡。量的是<b>最近一段固定时间里线走了多陡</b>，不是今天往上还是往下（那是方向，看<a href="turning.html">拐头</a>）。</p>
+  </header>
+
+  <section class="panel">
+    <h2>钟面和五档（示意）</h2>
+    <div class="chart">
+      <svg viewBox="0 18 720 412" role="img" aria-label="右半个钟面：12 点到 1 点加速上涨，1 点到 2 点半稳定上涨，2 点半到 3 点半走平，3 点半到 5 点稳定下跌，5 点到 6 点加速下跌。实线指针 MA60 负 9 度，虚线指针 MA20 负 36 度">
+<!--SVG-->
+<path class="w acc-up" d="M300,215 L382.5,72.1 A165,165 0 0 0 300.0,50.0 Z"/>
+<path class="w st-up" d="M300,215 L459.4,172.3 A165,165 0 0 0 382.5,72.1 Z"/>
+<path class="w flat" d="M300,215 L459.4,257.7 A165,165 0 0 0 459.4,172.3 Z"/>
+<path class="w st-dn" d="M300,215 L382.5,357.9 A165,165 0 0 0 459.4,257.7 Z"/>
+<path class="w acc-dn" d="M300,215 L300.0,380.0 A165,165 0 0 0 382.5,357.9 Z"/>
+<path class="rim" d="M300,50 A165,165 0 0 1 300,380"/><line class="rim" x1="300" x2="300" y1="50" y2="380"/>
+<line class="hr" x1="300.0" y1="50.0" x2="300.0" y2="62.0"/><text class="hrl" x="312.0" y="81.0" text-anchor="middle">12</text>
+<line class="hr" x1="382.5" y1="72.1" x2="376.5" y2="82.5"/><text class="hrl" x="369.5" y="99.6" text-anchor="middle">1</text>
+<line class="hr" x1="442.9" y1="132.5" x2="432.5" y2="138.5"/><text class="hrl" x="420.4" y="150.5" text-anchor="middle">2</text>
+<line class="hr" x1="465.0" y1="215.0" x2="453.0" y2="215.0"/><text class="hrl" x="439.0" y="220.0" text-anchor="middle">3</text>
+<line class="hr" x1="442.9" y1="297.5" x2="432.5" y2="291.5"/><text class="hrl" x="420.4" y="289.5" text-anchor="middle">4</text>
+<line class="hr" x1="382.5" y1="357.9" x2="376.5" y2="347.5"/><text class="hrl" x="369.5" y="340.4" text-anchor="middle">5</text>
+<line class="hr" x1="300.0" y1="380.0" x2="300.0" y2="368.0"/><text class="hrl" x="312.0" y="359.0" text-anchor="middle">6</text>
+<line class="hr" x1="459.4" y1="172.3" x2="452.6" y2="174.1"/>
+<line class="hr" x1="459.4" y1="257.7" x2="452.6" y2="255.9"/>
+<text class="bl" x="346.8" y="38.2">加速上涨</text><text class="note" x="346.8" y="55.2">12 点 ~ 1 点（≥ 60°）</text>
+<text class="bl" x="443.6" y="102.8">稳定上涨</text><text class="note" x="443.6" y="119.8">1 点 ~ 2 点半（15° ~ 60°）</text>
+<text class="bl" x="481.0" y="213.0">走平 · 横盘</text><text class="note" x="481.0" y="230.0">2 点半 ~ 3 点半（|角度| < 15°）</text>
+<text class="bl" x="443.6" y="323.2">稳定下跌</text><text class="note" x="443.6" y="340.2">3 点半 ~ 5 点</text>
+<text class="bl" x="346.8" y="387.8">加速下跌</text><text class="note" x="346.8" y="404.8">5 点 ~ 6 点（≤ −60°）</text>
+<line class="nd60" x1="300" y1="215" x2="459.0" y2="240.2"/>
+<line class="nd20" x1="300" y1="215" x2="430.3" y2="309.6"/>
+<circle class="hub" cx="300" cy="215" r="5"/>
+<text class="lbl ma-l" x="368.6" y="218.2" text-anchor="middle">MA60 −9°</text>
+<text class="lbl ema-l2" x="347.0" y="298.6" text-anchor="middle">MA20 −36°</text>
+<text class="note" x="288" y="54" text-anchor="end">越往 12 点越陡</text>
+<text class="note" x="288" y="380" text-anchor="end">越往 6 点跌得越陡</text>
+<text class="note" x="288" y="220" text-anchor="end">3 点钟 = 0°，水平</text>
+<!--/SVG-->
+      </svg>
+    </div>
+    <div class="legend">
+      <span><i style="border-color:var(--ma)"></i>QQQ 2026-11-20 的 MA60（−9°，工作台写 3 点半）</span>
+      <span><i style="border-color:var(--ma);border-top-style:dashed;border-top-width:2px"></i>同一天的 MA20（−36°，4 点钟）</span>
+    </div>
+  </section>
+
+  <section class="cases" aria-label="三档斜率">
+    <article class="case">
+      <h3>走平 <span class="verdict no">2 点半 ~ 3 点半</span></h3>
+      <p>60 线角度在 ±15° 以内。再加上 6 条线靠在一起、60/120 定不出类型，才判横盘（规则 J5）。视频 B 00:47「第三类是两点半到三点半方向的」。</p>
+    </article>
+    <article class="case">
+      <h3>有斜率 <span class="verdict no">1 点 ~ 2 点半</span></h3>
+      <p>稳定上涨，<b>2 点钟（30°）最典型</b>；镜像是稳定下跌，3 点半到 5 点，4 点钟左右。LEI 看 GOOGL：视频 A 17:22「很显然这是什么典型的叫什么两点钟方向的趋势」。</p>
+    </article>
+    <article class="case">
+      <h3>加速 <span class="verdict yes">1 点钟以上</span></h3>
+      <p>60 线 ≥ 60°，或者 20 线乖离到自身历史最高 5%，是加速上涨；5 点钟以下是加速下跌（规则 J3）。视频 B 00:36「第一类是 一点钟到十二点钟方向」。</p>
+    </article>
+  </section>
+
+  <section class="panel txt">
+    <h2 style="color:var(--ink)">刻度从哪来：哪些是视频的，哪些是脚本定的</h2>
+    <div class="scroll"><table class="deg">
+      <thead><tr><th>刻度</th><th>值</th><th>出处</th></tr></thead>
+      <tbody>
+        <tr><td>五档的钟点（12~1、1~2 点半、2 点半~3 点半、3 点半~5、5~6）</td><td class="n">—</td><td class="src">视频 B</td></tr>
+        <tr><td>走平：2 点半 ~ 3 点半</td><td class="n">±15°</td><td class="src">视频（FLAT_DEG）</td></tr>
+        <tr><td>加速：1 点钟 / 5 点钟</td><td class="n">±60°</td><td class="src">视频（ACCEL_DEG）</td></tr>
+        <tr><td>钟面每差 1 小时</td><td class="n">30°</td><td class="src">钟面本身的几何</td></tr>
+        <tr><td>量多长一段</td><td class="n">20 根</td><td class="src"><b>脚本自定</b>（CLOCK_WINDOW）。视频只要求所有品种用同一时长</td></tr>
+        <tr><td>多少涨幅画成多少度</td><td class="n">0.111</td><td class="src"><b>校准值</b>（CLOCK_SCALE）：按 GOOGL 2021-04-14 的 MA60 正好 2 点钟定的</td></tr>
+        <tr><td>加速的另一半：20 线乖离到历史两端</td><td class="n">5%</td><td class="src"><b>脚本自定</b>（EXTREME_PCTL）</td></tr>
+      </tbody>
+    </table></div>
+    <p>脚本的算法（规则 J2）：<span class="num">角度 = atan( ln(今天 ÷ 20 根前) ÷ 0.111 )</span>。换成 20 根里 MA 涨跌多少更好记：</p>
+    <div class="scroll"><table class="deg">
+      <thead><tr><th>20 根里涨跌</th><th>角度</th><th>钟点</th></tr></thead>
+      <tbody>
+        <tr><td class="n" style="text-align:left">+21.2%</td><td class="n" style="text-align:left">+60°</td><td>1 点钟，加速线</td></tr>
+        <tr><td class="n" style="text-align:left">+6.6%</td><td class="n" style="text-align:left">+30°</td><td>2 点钟</td></tr>
+        <tr><td class="n" style="text-align:left">+3.0%</td><td class="n" style="text-align:left">+15°</td><td>2 点半，走平的上沿</td></tr>
+        <tr><td class="n" style="text-align:left">−1.7%</td><td class="n" style="text-align:left">−9°</td><td>还在走平这一档，工作台写成 3 点半</td></tr>
+        <tr><td class="n" style="text-align:left">−17.5%</td><td class="n" style="text-align:left">−60°</td><td>5 点钟，加速线</td></tr>
+      </tbody>
+    </table></div>
+    <p>工作台写钟点时把角度<b>取到最近的半点</b>：大约 −8° 到 −22° 都写"3 点半"。判档位用的是角度本身，不是这几个字。所以 −9° 写成 3 点半，其实落在走平那一档里（|−9°| &lt; 15°）。</p>
+  </section>
+
+  <section class="panel">
+    <h2>为什么要同样时长、对数坐标</h2>
+    <div class="chart">
+      <svg viewBox="0 0 820 215" role="img" aria-label="A 从 50 涨到 100，B 从 100 涨到 200，都是翻一倍。普通坐标上 B 看着陡一倍，对数坐标上两条一样陡">
+<!--SVG2-->
+<line class="grid" x1="20" x2="350" y1="190.0" y2="190.0"/><text class="tick" x="356" y="194.0">50</text>
+<line class="grid" x1="20" x2="350" y1="140.0" y2="140.0"/><text class="tick" x="356" y="144.0">100</text>
+<line class="grid" x1="20" x2="350" y1="40.0" y2="40.0"/><text class="tick" x="356" y="44.0">200</text>
+<path class="la" d="M20.0,190.0 L36.5,188.2 L53.0,186.4 L69.5,184.5 L86.0,182.6 L102.5,180.5 L119.0,178.4 L135.5,176.3 L152.0,174.0 L168.5,171.7 L185.0,169.3 L201.5,166.8 L218.0,164.2 L234.5,161.5 L251.0,158.8 L267.5,155.9 L284.0,152.9 L300.5,149.9 L317.0,146.7 L333.5,143.4 L350.0,140.0"/>
+<text class="lbl la-t" x="344.0" y="132.0" text-anchor="end">A：50 → 100</text>
+<path class="lb" d="M20.0,140.0 L36.5,136.5 L53.0,132.8 L69.5,129.0 L86.0,125.1 L102.5,121.1 L119.0,116.9 L135.5,112.5 L152.0,108.0 L168.5,103.4 L185.0,98.6 L201.5,93.6 L218.0,88.4 L234.5,83.1 L251.0,77.5 L267.5,71.8 L284.0,65.9 L300.5,59.7 L317.0,53.4 L333.5,46.8 L350.0,40.0"/>
+<text class="lbl lb-t" x="344.0" y="32.0" text-anchor="end">B：100 → 200</text>
+<text class="bl" x="20" y="20">普通坐标：B 看着陡一倍</text>
+<line class="grid" x1="430" x2="760" y1="177.1" y2="177.1"/><text class="tick" x="766" y="181.1">50</text>
+<line class="grid" x1="430" x2="760" y1="106.1" y2="106.1"/><text class="tick" x="766" y="110.1">100</text>
+<line class="grid" x1="430" x2="760" y1="35.0" y2="35.0"/><text class="tick" x="766" y="39.0">200</text>
+<path class="la" d="M430.0,177.1 L446.5,173.6 L463.0,170.0 L479.5,166.5 L496.0,162.9 L512.5,159.4 L529.0,155.8 L545.5,152.3 L562.0,148.7 L578.5,145.1 L595.0,141.6 L611.5,138.0 L628.0,134.5 L644.5,130.9 L661.0,127.4 L677.5,123.8 L694.0,120.3 L710.5,116.7 L727.0,113.2 L743.5,109.6 L760.0,106.1"/>
+<text class="lbl la-t" x="754.0" y="98.1" text-anchor="end">A：50 → 100</text>
+<path class="lb" d="M430.0,106.1 L446.5,102.5 L463.0,99.0 L479.5,95.4 L496.0,91.9 L512.5,88.3 L529.0,84.7 L545.5,81.2 L562.0,77.6 L578.5,74.1 L595.0,70.5 L611.5,67.0 L628.0,63.4 L644.5,59.9 L661.0,56.3 L677.5,52.8 L694.0,49.2 L710.5,45.7 L727.0,42.1 L743.5,38.6 L760.0,35.0"/>
+<text class="lbl lb-t" x="754.0" y="27.0" text-anchor="end">B：100 → 200</text>
+<text class="bl" x="430" y="20">对数坐标：一样陡</text>
+<!--/SVG2-->
+      </svg>
+    </div>
+    <div class="txt" style="margin-top:8px">
+      <p>A、B 在同样 20 根里都翻了一倍，涨得一样快。普通坐标上 B 的线陡一倍，只是因为它价格高。<b>对数坐标</b>上一样的涨幅一样高，两条线才能比。脚本算角度用的是 ln（对数涨幅），就是这个道理。</p>
+      <p><b>同样时长</b>也一样：同一条线，图上看 1 年和看 3 个月，横轴被压缩或拉开，角度会变。所以所有品种都量最近 20 根。口诀是视频 B 02:01「时钟方向 固定时长 和 对数座标」。工作台 K 线图的固定范围（默认「1 年」）和图例里的对数开关，就是为了看图时也满足这两条。</p>
+    </div>
+  </section>
+
+  <p class="mirror"><b>看大局第 ② 问"60 线几点钟？"怎么读</b>：QQQ 2026-11-20 写的是"MA60 −9°，3 点半（2 点半到 3 点半算走平，1 点钟以上算加速）；6 条线相差 6.3% → 有斜率"。−9° 本身在走平那一档，但横盘还要 6 条线相差小于 5%（RANGE_SPREAD_PCT，脚本自定），QQQ 是 6.3%，不算横盘。它判成加速下跌，靠的是第 ③ 问：离 20 线 −10.3%，在自身历史 0% 分位，乖离到了最低一端，60 线组也在往下。钟面只是加速的一条路，乖离是另一条。</p>
+  <footer class="src">
+    <div><b>规则</b>：<span class="tag">J2</span> 斜率用固定的最近 20 根、对数涨幅换成钟表角度，方向另看。<span class="tag">J3</span> 加速（1 点钟以上或乖离到两端）。<span class="tag">J4</span> 稳定上涨 / 下跌。<span class="tag">J5</span> 横盘（60 线 ±15° 以内且 6 条线靠拢）。</div>
+    <div><b>工作台</b>：① 看大局第 ② 问「60 线几点钟？」；第 ③ 问「是不是加速？」的乖离分位条；K 线图的固定范围按钮和对数开关。</div>
+    <div><b>相关</b>：<a href="trend-types.html">五种趋势类型</a> · <a href="deviation.html">乖离</a> · <a href="turning.html">拐头</a> · <a href="ma-cluster.html">均线密集</a></div>
+  </footer>
+</div>
+</body>
+</html>

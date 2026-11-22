@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>什么叫排列</title>
+<link rel="stylesheet" href="glossary.css">
+<style>
+.wrap>*{min-width:0}
+.axis{stroke:var(--line);stroke-width:2}
+.mad{fill:var(--ma)} .emd{fill:var(--panel);stroke:var(--ema);stroke-width:2.2}
+.lead{fill:none;stroke:var(--muted);stroke-width:1;opacity:.6}
+.bl{fill:var(--ink);font-weight:700;font-size:15px}
+.cl{fill:var(--close);font:600 13px var(--font)}
+.vd{fill:var(--ink);font:700 14px var(--font)}
+.txt{display:grid;gap:8px;font-size:14px;color:var(--muted)} .txt p{margin:0} .txt b{color:var(--ink)}
+.txt ul{margin:0;padding-left:18px;display:grid;gap:6px}
+.num{font-family:var(--mono);color:var(--ink)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <nav class="crumb" aria-label="导航"><a href="index.html">← 概念图解目录</a><span>线和线的关系</span></nav>
+  <header style="display:grid;gap:8px">
+    <h1>什么叫排列</h1>
+    <p class="lede">排列说的是 <b>6 条线谁在上、谁在下</b>。20 在上、60 在中、120 在下是多头，反过来是空头，别的次序都叫混乱。<b>MA 三条和 EMA 三条分开判</b>，所以会出现"MA 空头 · EMA 混乱"这种一半一半的读数。</p>
+  </header>
+
+  <section class="panel">
+    <h2>价位梯子（前两列示意，第三列是真实读数）</h2>
+    <div class="chart">
+      <svg viewBox="0 0 930 400" role="img" aria-label="三根竖着的价格轴：多头时从上到下是 20、60、120；空头时反过来；QQQ 2026-11-20 的 MA 是 120 在最上、20 在最下，为空头，EMA 是 60 略高于 120，为混乱">
+<!--SVG-->
+<text class="bl" x="150" y="34" text-anchor="middle">多头排列</text>
+<line class="axis" x1="150" x2="150" y1="60" y2="340"/>
+<text class="note" x="150" y="54" text-anchor="middle">高</text><text class="note" x="150" y="356" text-anchor="middle">低</text>
+<line class="close-tick" x1="120" x2="180" y1="102.5" y2="102.5"/>
+<circle class="mad" cx="138" cy="156.7" r="6"/><path class="lead" d="M130,156.7 L116,156.7 H110"/><text class="lbl ma-l" x="106" y="160.7" text-anchor="end">MA20</text>
+<circle class="mad" cx="138" cy="221.7" r="6"/><path class="lead" d="M130,221.7 L116,221.7 H110"/><text class="lbl ma-l" x="106" y="225.7" text-anchor="end">MA60</text>
+<circle class="mad" cx="138" cy="286.7" r="6"/><path class="lead" d="M130,286.7 L116,286.7 H110"/><text class="lbl ma-l" x="106" y="290.7" text-anchor="end">MA120</text>
+<circle class="emd" cx="162" cy="143.7" r="5.5"/><path class="lead" d="M170,143.7 L184,143.7 H190"/><text class="lbl ema-l" x="194" y="147.7">EMA20</text>
+<circle class="emd" cx="162" cy="208.7" r="5.5"/><path class="lead" d="M170,208.7 L184,208.7 H190"/><text class="lbl ema-l" x="194" y="212.7">EMA60</text>
+<circle class="emd" cx="162" cy="273.7" r="5.5"/><path class="lead" d="M170,273.7 L184,273.7 H190"/><text class="lbl ema-l" x="194" y="277.7">EMA120</text>
+<text class="cl" x="184" y="106.5">收盘</text>
+<text class="vd" x="150" y="382" text-anchor="middle">MA 多头 · EMA 多头</text>
+<text class="bl" x="460" y="34" text-anchor="middle">空头排列</text>
+<line class="axis" x1="460" x2="460" y1="60" y2="340"/>
+<text class="note" x="460" y="54" text-anchor="middle">高</text><text class="note" x="460" y="356" text-anchor="middle">低</text>
+<line class="close-tick" x1="430" x2="490" y1="297.5" y2="297.5"/>
+<circle class="mad" cx="448" cy="113.3" r="6"/><path class="lead" d="M440,113.3 L426,113.3 H420"/><text class="lbl ma-l" x="416" y="117.3" text-anchor="end">MA120</text>
+<circle class="mad" cx="448" cy="178.3" r="6"/><path class="lead" d="M440,178.3 L426,178.3 H420"/><text class="lbl ma-l" x="416" y="182.3" text-anchor="end">MA60</text>
+<circle class="mad" cx="448" cy="243.3" r="6"/><path class="lead" d="M440,243.3 L426,243.3 H420"/><text class="lbl ma-l" x="416" y="247.3" text-anchor="end">MA20</text>
+<circle class="emd" cx="472" cy="126.3" r="5.5"/><path class="lead" d="M480,126.3 L494,126.3 H500"/><text class="lbl ema-l" x="504" y="130.3">EMA120</text>
+<circle class="emd" cx="472" cy="191.3" r="5.5"/><path class="lead" d="M480,191.3 L494,191.3 H500"/><text class="lbl ema-l" x="504" y="195.3">EMA60</text>
+<circle class="emd" cx="472" cy="256.3" r="5.5"/><path class="lead" d="M480,256.3 L494,256.3 H500"/><text class="lbl ema-l" x="504" y="260.3">EMA20</text>
+<text class="cl" x="494" y="301.5">收盘</text>
+<text class="vd" x="460" y="382" text-anchor="middle">MA 空头 · EMA 空头</text>
+<text class="bl" x="770" y="34" text-anchor="middle">QQQ 2026-11-20</text>
+<line class="axis" x1="770" x2="770" y1="60" y2="340"/>
+<text class="note" x="770" y="54" text-anchor="middle">高</text><text class="note" x="770" y="356" text-anchor="middle">低</text>
+<line class="close-tick" x1="740" x2="800" y1="311.7" y2="311.7"/>
+<circle class="mad" cx="758" cy="85.9" r="6"/><path class="lead" d="M750,85.9 L736,85.9 H730"/><text class="lbl ma-l" x="726" y="89.9" text-anchor="end">MA120 712.68</text>
+<circle class="mad" cx="758" cy="88.3" r="6"/><path class="lead" d="M750,88.3 L736,103.9 H730"/><text class="lbl ma-l" x="726" y="107.9" text-anchor="end">MA60 711.55</text>
+<circle class="mad" cx="758" cy="159.9" r="6"/><path class="lead" d="M750,159.9 L736,159.9 H730"/><text class="lbl ma-l" x="726" y="163.9" text-anchor="end">MA20 678.53</text>
+<circle class="emd" cx="782" cy="114.5" r="5.5"/><path class="lead" d="M790,114.5 L804,114.5 H810"/><text class="lbl ema-l" x="814" y="118.5">EMA60 699.45</text>
+<circle class="emd" cx="782" cy="116.5" r="5.5"/><path class="lead" d="M790,116.5 L804,132.5 H810"/><text class="lbl ema-l" x="814" y="136.5">EMA120 698.53</text>
+<circle class="emd" cx="782" cy="169.1" r="5.5"/><path class="lead" d="M790,169.1 L804,169.1 H810"/><text class="lbl ema-l" x="814" y="173.1">EMA20 674.24</text>
+<text class="cl" x="770" y="331.7" text-anchor="middle">收盘 608.45</text>
+<text class="vd" x="770" y="382" text-anchor="middle">MA 空头 · EMA 混乱</text>
+<!--/SVG-->
+      </svg>
+    </div>
+    <div class="legend">
+      <span><i style="border:0;width:10px;height:10px;border-radius:50%;background:var(--ma)"></i>MA（实心点）</span>
+      <span><i style="border:2px solid var(--ema);width:8px;height:8px;border-radius:50%"></i>EMA（空心圈）</span>
+      <span><i style="border-color:var(--close)"></i>收盘价</span>
+    </div>
+  </section>
+
+  <section class="cases" aria-label="三种排列">
+    <article class="case">
+      <h3>多头 <span class="verdict no">20 &gt; 60 &gt; 120</span></h3>
+      <p>短期成本最高，长期最低：最近买的人比早买的人成本高（解读：钱在往上追）。LEI 的定义里还要<b>三条都向上</b>。</p>
+    </article>
+    <article class="case">
+      <h3>空头 <span class="verdict no">20 &lt; 60 &lt; 120</span></h3>
+      <p>镜像，三条都向下。长期 MA 还拐不下来（价格仍高于 120 天前的收盘）时，空头排列没走完（规则 J35）。</p>
+    </article>
+    <article class="case">
+      <h3>混乱 <span class="verdict yes">其余次序</span></h3>
+      <p>比如 20 线组被压在 60 线组下面，LEI 说这叫排列不合理：视频 A 06:46「现在这个移动平均成本排列不合理」。这时的反弹多半是假动作（规则 J18，回测不支持）。</p>
+    </article>
+  </section>
+
+  <section class="panel txt">
+    <h2 style="color:var(--ink)">为什么 QQQ 是"MA 空头 · EMA 混乱"</h2>
+    <ul>
+      <li>MA：<span class="num">678.53 &lt; 711.55 &lt; 712.68</span>，20 在最下、120 在最上，<b>空头</b>。</li>
+      <li>EMA：EMA20 <span class="num">674.24</span> 最低没问题，但 EMA60 <span class="num">699.45</span> 比 EMA120 <span class="num">698.53</span> 还高出不到 1 块，次序不对，<b>混乱</b>。</li>
+      <li>两种算法算的是同一批收盘，只是 EMA 更偏重最近的价格。60、120 两条线贴得很近的时候，差一点就会一边判空头、一边判混乱。顶上「趋势类型」小格下面那行小字就是这两个读数。</li>
+      <li><b>脚本的写法</b>：小格里的多头、空头只比次序，差多少都算；LEI 说的多头排列还要求都向上，方向在别处看（第 ① 问的方向、③ 做推演）。「大方向」的证据里，两条线相差不到价格的 0.5% 会写成"≈"（ORDER_TIE_PCT，脚本自定），QQQ 的 MA60/MA120、EMA60/EMA120 都是"≈"。</li>
+    </ul>
+  </section>
+
+  <section class="panel txt">
+    <h2 style="color:var(--ink)">60/120 排好没有，决定能不能定类型</h2>
+    <p>看大局第 ① 问"60/120 线组排好了吗？"只看 60 和 120 这一对：<b>MA60 对 MA120、EMA60 对 EMA120 要在同一边</b>，60 线组的方向也要跟这个次序一致，才有类型（规则 J1）。20 线组不参与定类型，它决定阶段。</p>
+    <p>QQQ 这天 MA60 在 MA120 下面，EMA60 在 EMA120 上面，两对不一致，第 ① 问写"次序不一致"，单靠 J1 定不出类型。它最后还是有类型（第 ① 问的结论写"有类型"），走的是另一条路：60/120 还没排好，但离 20 线的乖离到了历史最低一端，60 线组已经在往下，这算加速出现在趋势刚开始（规则 J3）。见<a href="clock-direction.html">几点钟方向</a>最后一段。</p>
+    <p>第 ① 问下面那张<b>价位梯子</b>就是上图第三列的横版：一条价格轴，实心点 MA、空心圈 EMA、竖线收盘，左低右高。</p>
+  </section>
+
+  <section class="panel txt">
+    <h2 style="color:var(--ink)">周线、小时线的排列</h2>
+    <p>看大局第 ⑤ 问"周线、小时线怎么排？"，用同样的判法看大一级和小一级：</p>
+    <ul>
+      <li><b>周线</b>（规则 J11）：横盘结束后往哪走，跟周线走。周线 MA、EMA 都是多头，大概率向上；都是空头，大概率向下。视频 B 02:52「如果大周期趋势 比如说周线级别的趋势」。这条<b>回测不支持</b>（评估 2026-11-20，H5），照常显示，不单独据此下结论。</li>
+      <li><b>小时线</b>（规则 P13）：稳定上涨里吃回撤的第 ④ 个条件，是小时线 MA、EMA 都排成 20 &gt; 60 &gt; 120。视频 B 14:45「底部构造加小时级别的多头排列」。稳定下跌里镜像，看小时线空头排列。</li>
+      <li>QQQ 2026-11-20：周线 MA 多头、EMA 多头；小时线 MA 空头、EMA 空头。大一级还没坏，小一级跌得最整齐。</li>
+    </ul>
+  </section>
+
+  <p class="mirror"><b>排列和横盘</b>：横盘末端要走出大行情，必须有排列配合，MA、EMA 同为多头或同为空头（规则 J29）。视频 B 08:11「就必须要有均线多头排列的配合」。横盘末期第三个条件"均线张嘴"也是从排列看：MA、EMA 都排成多头，且 20–60、60–120 的间距都比 5 根前大（规则 J14，5 根是脚本自定）。</p>
+  <footer class="src">
+    <div><b>规则</b>：<span class="tag">J1</span> 类型看 60/120 两对次序和方向。<span class="tag">J18</span> 20 线组在 60 线组下方，排列不合理。<span class="tag">J11</span> 横盘后方向跟周线排列。<span class="tag">P13</span> 小时线多头排列是吃回撤条件④。<span class="tag">J29</span> 横盘末端要有排列配合。</div>
+    <div><b>工作台</b>：顶上「趋势类型」小格下面的"MA … · EMA …"；① 看大局第 ① 问的价位梯子、第 ⑤ 问的周线和小时线；③ 做推演「依据」里持平情景的「期末排列」。</div>
+    <div><b>相关</b>：<a href="cross.html">交叉 / 双交叉</a> · <a href="ma-cluster.html">均线密集</a> · <a href="trend-types.html">五种趋势类型</a> · <a href="clock-direction.html">几点钟方向</a></div>
+  </footer>
+</div>
+</body>
+</html>

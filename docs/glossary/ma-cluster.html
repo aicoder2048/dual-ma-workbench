@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>均线密集</title>
+<link rel="stylesheet" href="glossary.css">
+<style>
+:root{--g60:#475569}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--g60:#aab4c3}}
+:root[data-theme="dark"]{--g60:#aab4c3}
+.l60{stroke:var(--g60)} .l60-l{fill:var(--g60)}
+.dense{fill:var(--close);opacity:.22}
+.lvl{stroke:var(--close);stroke-width:1.6;stroke-dasharray:6 4}
+.lvlt{fill:var(--close)}
+.panel p{margin:0 0 8px;font-size:14px;color:var(--muted)} .panel p b{color:var(--ink)}
+.panel ul{margin:0;padding-left:18px;color:var(--muted);font-size:14px;display:grid;gap:6px} .panel ul b{color:var(--ink)}
+.read{font-size:12px;font-weight:700;color:var(--muted);border:1px solid var(--line);border-radius:4px;padding:0 5px;margin-right:4px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <nav class="crumb" aria-label="导航"><a href="index.html">← 概念图解目录</a><span>线和线的关系</span></nav>
+  <header style="display:grid;gap:8px">
+    <h1>均线密集</h1>
+    <p class="lede">20、60（有时连 120）几条均线挤到一起，就是均线密集。均线是各周期的平均成本，线挤在一起，说明<b>短、中、长期的成本差不多</b>。它说的是线和线的距离，和价格高低没关系。</p>
+  </header>
+
+  <section class="panel">
+    <h2>下跌途中歇了一阵，又接着跌，后来反弹（示意，不是真实行情）</h2>
+    <div class="chart">
+      <svg viewBox="0 52 910 332" role="img" aria-label="下跌途中价格横走一段，20、60 两组四条线挤在一起，同时 MA60 往下走，形成均线密集；之后继续下跌；反弹回到这片密集区的价位附近受阻">
+<line class="grid" x1="30" x2="870" y1="325.8" y2="325.8"/><text class="tick" x="876" y="329.8">95</text>
+<line class="grid" x1="30" x2="870" y1="248.2" y2="248.2"/><text class="tick" x="876" y="252.2">100</text>
+<line class="grid" x1="30" x2="870" y1="170.8" y2="170.8"/><text class="tick" x="876" y="174.8">105</text>
+<line class="grid" x1="30" x2="870" y1="93.2" y2="93.2"/><text class="tick" x="876" y="97.2">110</text>
+<polygon class="dense" points="172.4,101.2 179.2,102.1 186.0,103.3 192.8,104.6 199.6,105.7 206.4,106.8 213.2,108.0 220.0,109.0 226.8,109.8 233.6,110.7 240.4,111.9 247.2,113.0 254.0,113.8 260.8,114.8 267.6,115.8 274.4,116.5 281.2,117.2 288.0,118.2 294.8,119.3 301.6,120.0 308.4,120.8 315.2,121.7 322.0,122.3 328.8,122.9 335.6,123.8 342.4,124.8 349.2,125.5 356.0,126.1 362.8,127.1 369.6,128.2 376.4,129.3 383.2,130.8 390.0,132.8 396.8,134.8 403.6,136.6 410.4,138.7 417.2,141.1 424.0,143.5 424.0,173.7 417.2,169.4 410.4,164.9 403.6,161.1 396.8,158.1 390.0,154.4 383.2,150.5 376.4,147.9 369.6,146.4 362.8,144.8 356.0,143.7 349.2,143.8 342.4,143.5 335.6,142.4 328.8,141.8 322.0,142.1 315.2,142.0 308.4,141.0 301.6,140.8 294.8,140.7 288.0,139.9 281.2,139.1 274.4,139.2 267.6,139.3 260.8,138.5 254.0,137.8 247.2,137.6 240.4,137.4 233.6,136.6 226.8,136.3 220.0,136.5 213.2,136.0 206.4,135.0 199.6,134.6 192.8,134.7 186.0,134.1 179.2,133.5 172.4,133.6"/>
+<line class="lvl" x1="424.0" x2="804.0" y1="133.7" y2="133.7"/>
+<g class="k up"><line class="wick" x1="50.0" x2="50.0" y1="119.9" y2="139.1"/><rect x="48.2" y="126.4" width="3.6" height="7.0" rx="1.5"/></g>
+<g class="k down"><line class="wick" x1="56.8" x2="56.8" y1="121.4" y2="137.9"/><rect x="55.0" y="127.6" width="3.6" height="4.7" rx="1.5"/></g>
+<g class="k down"><line class="wick" x1="63.6" x2="63.6" y1="131.8" y2="146.3"/><rect x="61.8" y="137.2" width="3.6" height="2.2" rx="1.5"/></g>
+<g class="k up"><line class="wick" x1="70.4" x2="70.4" y1="124.7" y2="137.0"/><rect x="68.6" y="131.7" width="3.6" height="1.5" rx="1.5"/></g>
+<g class="k up"><line class="wick" x1="77.2" x2="77.2" y1="118.8" y2="143.0"/><rect x="75.4" y="123.3" width="3.6" height="13.8" rx="1.5"/></g>
+<g class="k down"><line class="wick" x1="84.0" x2="84.0" y1="117.0" y2="136.4"/><rect x="82.2" y="123.8" width="3.6" height="5.8" rx="1.5"/></g>
+<g class="k down"><line class="wick" x1="90.8" x2="90.8" y1="117.7" y2="140.8"/><rect x="89.0" y="123.5" width="3.6" height="12.4" rx="1.5"/></g>
+<g class="k up"><line class="wick" x1="97.6" x2="97.6" y1="125.8" y2="149.7"/><rect x="95.8" y="131.7" width="3.6" height="11.7" rx="1.5"/></g>
+<g class="k down"><line class="wick" x1="104.4" x2="104.4" y1="121.0" y2="138.9"/><rect x="102.6" y="127.7" width="3.6" height="4.4" rx="1.5"/></g>
+<g class="k down"><line class="wick" x1="111.2" x2="111.2" y1="125.4" y2="144.7"/><rect x="109.4" y="129.9" width="3.6" height="10.3" rx="1.5"/></g>
+<g class="k up"><line class="wick" x1="118.0" x2="118.0" y1="130.8" y2="153.7"/><rect x="116.2" y="137.7" width="3.6" height="9.5" rx="1.5"/></g>
+<g class="k up"><line class="wick" x1="124.8" x2="124.8" y1="121.5" y2="137.2"/><rect x="123.0" y="126.8" width="3.6" height="3.8" rx="1.5"/></g>
+<g class="k up"><line class="wick" x1="131.6" x2="131.6" y1="122.3" y2="133.6"/><rect x="129.8" y="128.6" width="3.6" height="1.5" rx="1.5"/></g>
+<g class="k down"><line class="wick" x1="138.4" x2="138.4" y1="125.9" y2="145.4"/><rect x="136.6" y="132.4" width="3.6" height="6.3" rx="1.5"/></g>
+<g class="k down"><line class="wick" x1="145.2" x2="145.2" y1="126.1" y2="144.4"/><rect x="143.4" y="131.2" width="3.6" height="6.9" rx="1.5"/></g>
+<g class="k up"><line class="wick" x1="152.0" x2="152.0" y1="127.0" y2="149.1"/><rect x="150.2" y="133.9" width="3.6" height="10.4" rx="1.5"/></g>
+<g class="k down"><line class="wick" x1="158.8" x2="158.8" y1="128.4" y2="146.4"/><rect x="157.0" y="133.1" width="3.6" height="6.4" rx="1.5"/></g>
+<g class="k down"><line class="wick" x1="165.6" x2="165.6" y1="127.7" y2="148.2"/><rect x="163.8" y="134.4" width="3.6" height="7.8" rx="1.5"/></g>
+<g class="k up"><line class="wick" x1="172.4" x2="172.4" y1="126.3" y2="155.1"/><rect x="170.6" y="132.4" width="3.6" height="17.5" rx="1.5"/></g>
+<g class="k down"><line class="wick" x1="179.2" x2="179.2" y1="121.7" y2="135.7"/><rect x="177.4" y="127.3" width="3.6" height="1.5" rx="1.5"/></g>
+<g class="k down"><line class="wick" x1="186.0" x2="186.0" y1="121.0" y2="144.9"/><rect x="184.2" y="127.8" width="3.6" height="11.4" rx="1.5"/></g>
+<g class="k up"><line class="wick" x1="192.8" x2="192.8" y1="139.8" y2="151.2"/><rect x="191.0" y="144.0" width="3.6" height="1.5" rx="1.5"/></g>
+<g class="k down"><line class="wick" x1="199.6" x2="199.6" y1="129.7" y2="145.0"/><rect x="197.8" y="136.6" width="3.6" height="1.5" rx="1.5"/></g>
+<g class="k up"><line class="wick" x1="206.4" x2="206.4" y1="133.2" y2="147.0"/><rect x="204.6" y="138.7" width="3.6" height="3.0" rx="1.5"/></g>
+<g class="k down"><line class="wick" x1="213.2" x2="213.2" y1="135.2" y2="150.3"/><rect x="211.4" y="141.3" width="3.6" height="3.0" rx="1.5"/></g>
+<g class="k down"><line class="wick" x1="220.0" x2="220.0" y1="130.6" y2="145.6"/><rect x="218.2" y="137.2" width="3.6" height="1.5" rx="1.5"/></g>
+<g class="k up"><line class="wick" x1="226.8" x2="226.8" y1="126.2" y2="150.5"/><rect x="225.0" y="131.1" width="3.6" height="14.5" rx="1.5"/></g>
+<g class="k down"><line class="wick" x1="233.6" x2="233.6" y1="122.1" y2="144.8"/><rect x="231.8" y="129.0" width="3.6" height="9.4" rx="1.5"/></g>
+<g class="k down"><line class="wick" x1="240.4" x2="240.4" y1="129.3" y2="154.9"/><rect x="238.6" y="134.3" width="3.6" height="13.8" rx="1.5"/></g>
+<g class="k up"><line class="wick" x1="247.2" x2="247.2" y1="137.5" y2="160.1"/><rect x="245.4" y="144.0" width="3.6" height="11.7" rx="1.5"/></g>
+<g class="k down"><line class="wick" x1="254.0" x2="254.0" y1="131.8" y2="145.8"/><rect x="252.2" y="138.0" width="3.6" height="1.5" rx="1.5"/></g>
+<g class="k down"><line class="wick" x1="260.8" x2="260.8" y1="134.1" y2="150.9"/><rect x="259.0" y="139.6" width="3.6" height="4.8" rx="1.5"/></g>
+<g class="k up"><line class="wick" x1="267.6" x2="267.6" y1="137.3" y2="154.2"/><rect x="265.8" y="144.2" width="3.6" height="5.6" rx="1.5"/></g>
+<g class="k up"><line class="wick" x1="274.4" x2="274.4" y1="131.3" y2="143.3"/><rect x="272.6" y="135.7" width="3.6" height="1.5" rx="1.5"/></g>
+<g class="k up"><line class="wick" x1="281.2" x2="281.2" y1="131.1" y2="146.7"/><rect x="279.4" y="137.9" width="3.6" height="2.5" rx="1.5"/></g>
+<g class="k down"><line class="wick" x1="288.0" x2="288.0" y1="133.5" y2="154.7"/><rect x="286.2" y="139.3" width="3.6" height="10.6" rx="1.5"/></g>
+<g class="k down"><line class="wick" x1="294.8" x2="294.8" y1="137.4" y2="157.2"/><rect x="293.0" y="143.3" width="3.6" height="7.0" rx="1.5"/></g>
+<g class="k up"><line class="wick" x1="301.6" x2="301.6" y1="135.3" y2="163.7"/><rect x="299.8" y="142.0" width="3.6" height="15.6" rx="1.5"/></g>
+<g class="k down"><line class="wick" x1="308.4" x2="308.4" y1="134.2" y2="148.6"/><rect x="306.6" y="138.8" width="3.6" height="4.6" rx="1.5"/></g>
+<g class="k down"><line class="wick" x1="315.2" x2="315.2" y1="133.4" y2="154.7"/><rect x="313.4" y="140.3" width="3.6" height="7.4" rx="1.5"/></g>
+<g class="k up"><line class="wick" x1="322.0" x2="322.0" y1="136.6" y2="160.7"/><rect x="320.2" y="141.8" width="3.6" height="13.2" rx="1.5"/></g>
+<g class="k down"><line class="wick" x1="328.8" x2="328.8" y1="128.8" y2="144.6"/><rect x="327.0" y="135.2" width="3.6" height="3.8" rx="1.5"/></g>
+<g class="k down"><line class="wick" x1="335.6" x2="335.6" y1="134.1" y2="156.6"/><rect x="333.8" y="140.6" width="3.6" height="9.1" rx="1.5"/></g>
+<g class="k down"><line class="wick" x1="342.4" x2="342.4" y1="149.0" y2="160.8"/><rect x="340.6" y="154.2" width="3.6" height="1.5" rx="1.5"/></g>
+<g class="k up"><line class="wick" x1="349.2" x2="349.2" y1="140.1" y2="153.9"/><rect x="347.4" y="147.0" width="3.6" height="1.5" rx="1.5"/></g>
+<g class="k up"><line class="wick" x1="356.0" x2="356.0" y1="138.2" y2="159.6"/><rect x="354.2" y="142.9" width="3.6" height="9.8" rx="1.5"/></g>
+<g class="k down"><line class="wick" x1="362.8" x2="362.8" y1="136.3" y2="160.3"/><rect x="361.0" y="143.0" width="3.6" height="12.4" rx="1.5"/></g>
+<g class="k down"><line class="wick" x1="369.6" x2="369.6" y1="143.6" y2="167.5"/><rect x="367.8" y="149.6" width="3.6" height="11.6" rx="1.5"/></g>
+<g class="k up"><line class="wick" x1="376.4" x2="376.4" y1="156.5" y2="175.6"/><rect x="374.6" y="162.2" width="3.6" height="6.7" rx="1.5"/></g>
+<g class="k down"><line class="wick" x1="383.2" x2="383.2" y1="151.0" y2="179.5"/><rect x="381.4" y="157.8" width="3.6" height="17.3" rx="1.5"/></g>
+<g class="k down"><line class="wick" x1="390.0" x2="390.0" y1="169.0" y2="198.0"/><rect x="388.2" y="173.3" width="3.6" height="18.1" rx="1.5"/></g>
+<g class="k up"><line class="wick" x1="396.8" x2="396.8" y1="185.9" y2="204.8"/><rect x="395.0" y="192.8" width="3.6" height="5.4" rx="1.5"/></g>
+<g class="k down"><line class="wick" x1="403.6" x2="403.6" y1="180.0" y2="194.9"/><rect x="401.8" y="185.6" width="3.6" height="4.9" rx="1.5"/></g>
+<g class="k down"><line class="wick" x1="410.4" x2="410.4" y1="187.2" y2="207.7"/><rect x="408.6" y="193.3" width="3.6" height="7.6" rx="1.5"/></g>
+<g class="k down"><line class="wick" x1="417.2" x2="417.2" y1="197.8" y2="218.4"/><rect x="415.4" y="204.4" width="3.6" height="7.7" rx="1.5"/></g>
+<g class="k down"><line class="wick" x1="424.0" x2="424.0" y1="199.9" y2="218.6"/><rect x="422.2" y="204.7" width="3.6" height="9.1" rx="1.5"/></g>
+<g class="k down"><line class="wick" x1="430.8" x2="430.8" y1="213.2" y2="228.2"/><rect x="429.0" y="220.2" width="3.6" height="1.5" rx="1.5"/></g>
+<g class="k down"><line class="wick" x1="437.6" x2="437.6" y1="215.1" y2="244.2"/><rect x="435.8" y="220.1" width="3.6" height="18.2" rx="1.5"/></g>
+<g class="k down"><line class="wick" x1="444.4" x2="444.4" y1="226.8" y2="250.1"/><rect x="442.6" y="233.4" width="3.6" height="11.5" rx="1.5"/></g>
+<g class="k up"><line class="wick" x1="451.2" x2="451.2" y1="234.2" y2="259.5"/><rect x="449.4" y="240.4" width="3.6" height="12.1" rx="1.5"/></g>
+<g class="k down"><line class="wick" x1="458.0" x2="458.0" y1="229.7" y2="251.8"/><rect x="456.2" y="235.1" width="3.6" height="11.1" rx="1.5"/></g>
+<g class="k down"><line class="wick" x1="464.8" x2="464.8" y1="238.7" y2="266.3"/><rect x="463.0" y="245.6" width="3.6" height="15.1" rx="1.5"/></g>
+<g class="k up"><line class="wick" x1="471.6" x2="471.6" y1="261.9" y2="273.7"/><rect x="469.8" y="266.3" width="3.6" height="1.5" rx="1.5"/></g>
+<g class="k down"><line class="wick" x1="478.4" x2="478.4" y1="252.0" y2="274.7"/><rect x="476.6" y="258.8" width="3.6" height="10.7" rx="1.5"/></g>
+<g class="k down"><line class="wick" x1="485.2" x2="485.2" y1="267.6" y2="289.6"/><rect x="483.4" y="273.4" width="3.6" height="10.2" rx="1.5"/></g>
+<g class="k down"><line class="wick" x1="492.0" x2="492.0" y1="279.9" y2="302.1"/><rect x="490.2" y="285.9" width="3.6" height="9.4" rx="1.5"/></g>
+<g class="k down"><line class="wick" x1="498.8" x2="498.8" y1="281.5" y2="297.1"/><rect x="497.0" y="288.2" width="3.6" height="4.0" rx="1.5"/></g>
+<g class="k up"><line class="wick" x1="505.6" x2="505.6" y1="288.0" y2="305.6"/><rect x="503.8" y="292.6" width="3.6" height="6.7" rx="1.5"/></g>
+<g class="k down"><line class="wick" x1="512.4" x2="512.4" y1="283.2" y2="313.8"/><rect x="510.6" y="290.2" width="3.6" height="16.9" rx="1.5"/></g>
+<g class="k down"><line class="wick" x1="519.2" x2="519.2" y1="298.0" y2="322.6"/><rect x="517.4" y="303.3" width="3.6" height="14.9" rx="1.5"/></g>
+<g class="k up"><line class="wick" x1="526.0" x2="526.0" y1="313.7" y2="332.3"/><rect x="524.2" y="320.0" width="3.6" height="5.7" rx="1.5"/></g>
+<g class="k down"><line class="wick" x1="532.8" x2="532.8" y1="307.4" y2="335.6"/><rect x="531.0" y="313.8" width="3.6" height="15.2" rx="1.5"/></g>
+<g class="k down"><line class="wick" x1="539.6" x2="539.6" y1="324.6" y2="347.6"/><rect x="537.8" y="329.8" width="3.6" height="13.4" rx="1.5"/></g>
+<g class="k up"><line class="wick" x1="546.4" x2="546.4" y1="337.7" y2="355.2"/><rect x="544.6" y="344.7" width="3.6" height="3.7" rx="1.5"/></g>
+<g class="k down"><line class="wick" x1="553.2" x2="553.2" y1="332.3" y2="347.6"/><rect x="551.4" y="337.0" width="3.6" height="4.3" rx="1.5"/></g>
+<g class="k down"><line class="wick" x1="560.0" x2="560.0" y1="339.6" y2="357.2"/><rect x="558.2" y="346.3" width="3.6" height="6.0" rx="1.5"/></g>
+<g class="k up"><line class="wick" x1="566.8" x2="566.8" y1="344.8" y2="360.2"/><rect x="565.0" y="350.8" width="3.6" height="2.5" rx="1.5"/></g>
+<g class="k up"><line class="wick" x1="573.6" x2="573.6" y1="332.0" y2="350.5"/><rect x="571.8" y="337.7" width="3.6" height="6.8" rx="1.5"/></g>
+<g class="k up"><line class="wick" x1="580.4" x2="580.4" y1="317.2" y2="350.4"/><rect x="578.6" y="324.1" width="3.6" height="21.0" rx="1.5"/></g>
+<g class="k up"><line class="wick" x1="587.2" x2="587.2" y1="315.7" y2="327.5"/><rect x="585.4" y="320.0" width="3.6" height="1.5" rx="1.5"/></g>
+<g class="k up"><line class="wick" x1="594.0" x2="594.0" y1="302.8" y2="322.9"/><rect x="592.2" y="309.7" width="3.6" height="7.7" rx="1.5"/></g>
+<g class="k up"><line class="wick" x1="600.8" x2="600.8" y1="283.0" y2="322.5"/><rect x="599.0" y="288.5" width="3.6" height="28.3" rx="1.5"/></g>
+<g class="k up"><line class="wick" x1="607.6" x2="607.6" y1="270.8" y2="288.6"/><rect x="605.8" y="277.0" width="3.6" height="4.7" rx="1.5"/></g>
+<g class="k up"><line class="wick" x1="614.4" x2="614.4" y1="270.8" y2="284.2"/><rect x="612.6" y="277.4" width="3.6" height="1.6" rx="1.5"/></g>
+<g class="k up"><line class="wick" x1="621.2" x2="621.2" y1="264.2" y2="287.7"/><rect x="619.4" y="269.1" width="3.6" height="12.5" rx="1.5"/></g>
+<g class="k up"><line class="wick" x1="628.0" x2="628.0" y1="245.4" y2="268.4"/><rect x="626.2" y="252.4" width="3.6" height="9.2" rx="1.5"/></g>
+<g class="k up"><line class="wick" x1="634.8" x2="634.8" y1="239.1" y2="263.1"/><rect x="633.0" y="244.1" width="3.6" height="14.1" rx="1.5"/></g>
+<g class="k up"><line class="wick" x1="641.6" x2="641.6" y1="231.4" y2="250.2"/><rect x="639.8" y="238.0" width="3.6" height="5.9" rx="1.5"/></g>
+<g class="k up"><line class="wick" x1="648.4" x2="648.4" y1="213.6" y2="239.2"/><rect x="646.6" y="219.8" width="3.6" height="12.6" rx="1.5"/></g>
+<g class="k up"><line class="wick" x1="655.2" x2="655.2" y1="198.0" y2="231.9"/><rect x="653.4" y="203.4" width="3.6" height="24.1" rx="1.5"/></g>
+<g class="k down"><line class="wick" x1="662.0" x2="662.0" y1="191.8" y2="208.8"/><rect x="660.2" y="198.8" width="3.6" height="3.4" rx="1.5"/></g>
+<g class="k up"><line class="wick" x1="668.8" x2="668.8" y1="194.8" y2="207.3"/><rect x="667.0" y="199.3" width="3.6" height="1.5" rx="1.5"/></g>
+<g class="k up"><line class="wick" x1="675.6" x2="675.6" y1="176.0" y2="210.3"/><rect x="673.8" y="182.8" width="3.6" height="23.1" rx="1.5"/></g>
+<g class="k up"><line class="wick" x1="682.4" x2="682.4" y1="163.2" y2="182.2"/><rect x="680.6" y="169.0" width="3.6" height="6.4" rx="1.5"/></g>
+<g class="k up"><line class="wick" x1="689.2" x2="689.2" y1="158.0" y2="178.5"/><rect x="687.4" y="163.9" width="3.6" height="8.3" rx="1.5"/></g>
+<g class="k up"><line class="wick" x1="696.0" x2="696.0" y1="144.3" y2="171.9"/><rect x="694.2" y="151.0" width="3.6" height="16.0" rx="1.5"/></g>
+<g class="k up"><line class="wick" x1="702.8" x2="702.8" y1="136.2" y2="150.7"/><rect x="701.0" y="140.8" width="3.6" height="2.9" rx="1.5"/></g>
+<g class="k up"><line class="wick" x1="709.6" x2="709.6" y1="136.7" y2="153.4"/><rect x="707.8" y="143.6" width="3.6" height="3.9" rx="1.5"/></g>
+<g class="k down"><line class="wick" x1="716.4" x2="716.4" y1="136.8" y2="158.1"/><rect x="714.6" y="142.0" width="3.6" height="10.8" rx="1.5"/></g>
+<g class="k down focus"><line class="wick" x1="723.2" x2="723.2" y1="141.9" y2="155.5"/><rect x="721.4" y="148.3" width="3.6" height="1.5" rx="1.5"/></g>
+<g class="k up focus"><line class="wick" x1="730.0" x2="730.0" y1="138.6" y2="161.7"/><rect x="728.2" y="145.1" width="3.6" height="11.1" rx="1.5"/></g>
+<g class="k down focus"><line class="wick" x1="736.8" x2="736.8" y1="134.3" y2="158.1"/><rect x="735.0" y="139.5" width="3.6" height="12.9" rx="1.5"/></g>
+<g class="k down focus"><line class="wick" x1="743.6" x2="743.6" y1="145.3" y2="166.5"/><rect x="741.8" y="152.2" width="3.6" height="7.3" rx="1.5"/></g>
+<g class="k up focus"><line class="wick" x1="750.4" x2="750.4" y1="152.1" y2="170.6"/><rect x="748.6" y="156.9" width="3.6" height="8.5" rx="1.5"/></g>
+<g class="k down"><line class="wick" x1="757.2" x2="757.2" y1="142.6" y2="166.6"/><rect x="755.4" y="149.2" width="3.6" height="11.3" rx="1.5"/></g>
+<g class="k down"><line class="wick" x1="764.0" x2="764.0" y1="158.8" y2="183.2"/><rect x="762.2" y="164.8" width="3.6" height="11.5" rx="1.5"/></g>
+<g class="k down"><line class="wick" x1="770.8" x2="770.8" y1="172.5" y2="188.5"/><rect x="769.0" y="178.2" width="3.6" height="5.5" rx="1.5"/></g>
+<g class="k down"><line class="wick" x1="777.6" x2="777.6" y1="170.0" y2="184.9"/><rect x="775.8" y="176.9" width="3.6" height="1.7" rx="1.5"/></g>
+<g class="k up"><line class="wick" x1="784.4" x2="784.4" y1="176.6" y2="192.5"/><rect x="782.6" y="180.9" width="3.6" height="4.9" rx="1.5"/></g>
+<g class="k down"><line class="wick" x1="791.2" x2="791.2" y1="171.2" y2="195.4"/><rect x="789.4" y="178.1" width="3.6" height="13.0" rx="1.5"/></g>
+<g class="k down"><line class="wick" x1="798.0" x2="798.0" y1="182.0" y2="199.2"/><rect x="796.2" y="187.6" width="3.6" height="5.0" rx="1.5"/></g>
+<path class="ma l60" d="M50.0,73.7 L56.8,76.2 L63.6,78.8 L70.4,81.0 L77.2,83.1 L84.0,85.3 L90.8,87.4 L97.6,89.4 L104.4,91.5 L111.2,93.8 L118.0,95.8 L124.8,97.5 L131.6,99.3 L138.4,101.2 L145.2,102.9 L152.0,104.7 L158.8,106.6 L165.6,108.3 L172.4,109.8 L179.2,111.2 L186.0,112.7 L192.8,114.2 L199.6,115.6 L206.4,117.2 L213.2,118.6 L220.0,119.8 L226.8,120.8 L233.6,122.0 L240.4,123.3 L247.2,124.4 L254.0,125.5 L260.8,126.7 L267.6,127.6 L274.4,128.3 L281.2,129.1 L288.0,130.1 L294.8,131.0 L301.6,131.7 L308.4,132.5 L315.2,133.2 L322.0,133.6 L328.8,134.0 L335.6,134.7 L342.4,135.3 L349.2,135.7 L356.0,136.1 L362.8,136.7 L369.6,137.2 L376.4,137.7 L383.2,138.6 L390.0,139.7 L396.8,140.8 L403.6,141.9 L410.4,143.2 L417.2,144.5 L424.0,145.8 L430.8,147.4 L437.6,149.3 L444.4,151.3 L451.2,153.1 L458.0,155.1 L464.8,157.2 L471.6,159.3 L478.4,161.6 L485.2,164.3 L492.0,167.1 L498.8,169.7 L505.6,172.4 L512.4,175.3 L519.2,178.2 L526.0,181.3 L532.8,184.6 L539.6,188.2 L546.4,191.7 L553.2,195.0 L560.0,198.7 L566.8,202.2 L573.6,205.5 L580.4,208.7 L587.2,211.8 L594.0,214.7 L600.8,217.1 L607.6,219.4 L614.4,221.7 L621.2,223.8 L628.0,225.7 L634.8,227.6 L641.6,229.2 L648.4,230.4 L655.2,231.4 L662.0,232.5 L668.8,233.4 L675.6,234.0 L682.4,234.6 L689.2,235.0 L696.0,235.0 L702.8,234.9 L709.6,234.9 L716.4,235.1 L723.2,235.1 L730.0,235.1 L736.8,235.3 L743.6,235.5 L750.4,235.5 L757.2,235.8 L764.0,236.3 L770.8,236.8 L777.6,237.1 L784.4,237.4 L791.2,237.7 L798.0,237.7"/>
+<path class="ema l60" d="M50.0,73.8 L56.8,75.7 L63.6,77.8 L70.4,79.6 L77.2,81.0 L84.0,82.6 L90.8,84.4 L97.6,85.9 L104.4,87.4 L111.2,89.2 L118.0,90.8 L124.8,91.9 L131.6,93.1 L138.4,94.6 L145.2,96.1 L152.0,97.3 L158.8,98.7 L165.6,100.1 L172.4,101.2 L179.2,102.1 L186.0,103.3 L192.8,104.6 L199.6,105.7 L206.4,106.8 L213.2,108.0 L220.0,109.0 L226.8,109.8 L233.6,110.7 L240.4,111.9 L247.2,113.0 L254.0,113.8 L260.8,114.8 L267.6,115.8 L274.4,116.5 L281.2,117.2 L288.0,118.2 L294.8,119.3 L301.6,120.0 L308.4,120.8 L315.2,121.7 L322.0,122.3 L328.8,122.9 L335.6,123.8 L342.4,124.8 L349.2,125.5 L356.0,126.1 L362.8,127.1 L369.6,128.2 L376.4,129.3 L383.2,130.8 L390.0,132.8 L396.8,134.8 L403.6,136.6 L410.4,138.7 L417.2,141.1 L424.0,143.5 L430.8,146.0 L437.6,149.1 L444.4,152.2 L451.2,155.1 L458.0,158.1 L464.8,161.4 L471.6,164.9 L478.4,168.3 L485.2,172.1 L492.0,176.1 L498.8,179.9 L505.6,183.6 L512.4,187.7 L519.2,192.0 L526.0,196.2 L532.8,200.5 L539.6,205.2 L546.4,209.8 L553.2,214.1 L560.0,218.6 L566.8,222.9 L573.6,226.7 L580.4,229.9 L587.2,232.8 L594.0,235.4 L600.8,237.1 L607.6,238.4 L614.4,239.7 L621.2,240.7 L628.0,241.0 L634.8,241.1 L641.6,241.0 L648.4,240.3 L655.2,239.1 L662.0,237.9 L668.8,236.7 L675.6,234.9 L682.4,232.7 L689.2,230.5 L696.0,227.9 L702.8,225.0 L709.6,222.3 L716.4,220.1 L723.2,217.7 L730.0,215.3 L736.8,213.3 L743.6,211.5 L750.4,209.7 L757.2,208.1 L764.0,207.1 L770.8,206.3 L777.6,205.4 L784.4,204.6 L791.2,204.1 L798.0,203.8"/>
+<path class="ma" d="M50.0,124.6 L56.8,125.6 L63.6,127.0 L70.4,127.7 L77.2,127.8 L84.0,128.3 L90.8,129.0 L97.6,128.9 L104.4,129.0 L111.2,130.0 L118.0,130.7 L124.8,130.6 L131.6,130.8 L138.4,131.6 L145.2,131.8 L152.0,131.7 L158.8,132.4 L165.6,133.4 L172.4,133.6 L179.2,133.5 L186.0,134.1 L192.8,134.7 L199.6,134.6 L206.4,135.0 L213.2,136.0 L220.0,136.5 L226.8,136.3 L233.6,136.6 L240.4,137.4 L247.2,137.6 L254.0,137.7 L260.8,138.5 L267.6,139.3 L274.4,139.2 L281.2,139.1 L288.0,139.9 L294.8,140.5 L301.6,140.5 L308.4,141.0 L315.2,142.0 L322.0,142.1 L328.8,141.8 L335.6,142.4 L342.4,143.3 L349.2,143.4 L356.0,143.6 L362.8,144.8 L369.6,146.0 L376.4,146.7 L383.2,148.2 L390.0,150.8 L396.8,153.3 L403.6,155.6 L410.4,158.8 L417.2,162.5 L424.0,165.7 L430.8,169.3 L437.6,174.1 L444.4,179.2 L451.2,183.8 L458.0,189.0 L464.8,195.1 L471.6,200.9 L478.4,206.6 L485.2,213.5 L492.0,221.1 L498.8,227.9 L505.6,234.5 L512.4,241.7 L519.2,248.9 L526.0,255.3 L532.8,262.1 L539.6,269.8 L546.4,277.0 L553.2,283.4 L560.0,290.3 L566.8,296.8 L573.6,301.8 L580.4,305.8 L587.2,309.7 L594.0,312.9 L600.8,314.3 L607.6,314.8 L614.4,315.2 L621.2,314.5 L628.0,312.4 L634.8,310.0 L641.6,307.2 L648.4,302.9 L655.2,297.1 L662.0,291.2 L668.8,284.7 L675.6,276.7 L682.4,267.9 L689.2,259.1 L696.0,249.0 L702.8,238.5 L709.6,228.8 L716.4,220.2 L723.2,211.7 L730.0,203.4 L736.8,196.6 L743.6,190.8 L750.4,184.7 L757.2,179.3 L764.0,175.5 L770.8,172.5 L777.6,169.5 L784.4,167.6 L791.2,166.9 L798.0,166.5"/>
+<path class="ema" d="M50.0,120.2 L56.8,121.4 L63.6,123.1 L70.4,123.9 L77.2,123.8 L84.0,124.4 L90.8,125.5 L97.6,126.1 L104.4,126.7 L111.2,128.0 L118.0,128.9 L124.8,128.7 L131.6,128.7 L138.4,129.6 L145.2,130.4 L152.0,130.8 L158.8,131.6 L165.6,132.6 L172.4,132.6 L179.2,132.2 L186.0,132.9 L192.8,134.0 L199.6,134.3 L206.4,134.8 L213.2,135.7 L220.0,136.0 L226.8,135.5 L233.6,135.8 L240.4,137.0 L247.2,137.6 L254.0,137.8 L260.8,138.4 L267.6,139.0 L274.4,138.6 L281.2,138.6 L288.0,139.7 L294.8,140.7 L301.6,140.8 L308.4,141.0 L315.2,141.7 L322.0,141.7 L328.8,141.4 L335.6,142.2 L342.4,143.5 L349.2,143.8 L356.0,143.7 L362.8,144.8 L369.6,146.4 L376.4,147.9 L383.2,150.5 L390.0,154.4 L396.8,158.1 L403.6,161.1 L410.4,164.9 L417.2,169.4 L424.0,173.7 L430.8,178.2 L437.6,183.9 L444.4,189.7 L451.2,194.5 L458.0,199.5 L464.8,205.3 L471.6,211.1 L478.4,216.7 L485.2,223.0 L492.0,229.9 L498.8,235.8 L505.6,241.3 L512.4,247.5 L519.2,254.3 L526.0,260.5 L532.8,267.0 L539.6,274.3 L546.4,281.0 L553.2,286.7 L560.0,293.0 L566.8,298.5 L573.6,302.2 L580.4,304.3 L587.2,305.8 L594.0,306.2 L600.8,304.5 L607.6,301.9 L614.4,299.5 L621.2,296.6 L628.0,292.4 L634.8,287.8 L641.6,283.1 L648.4,277.1 L655.2,270.0 L662.0,263.6 L668.8,257.5 L675.6,250.3 L682.4,242.6 L689.2,235.1 L696.0,227.1 L702.8,218.9 L709.6,211.7 L716.4,206.1 L723.2,200.6 L730.0,195.3 L736.8,191.2 L743.6,188.2 L750.4,185.2 L757.2,182.9 L764.0,182.3 L770.8,182.4 L777.6,182.0 L784.4,181.9 L791.2,182.8 L798.0,183.7"/>
+<g class="badge"><circle cx="294.8" cy="75.2" r="12"/><text x="294.8" y="79.7">1</text></g>
+<text class="note" x="312.8" y="79.2">四条线挤在一起，MA60 往下走</text>
+<g class="badge"><circle cx="736.8" cy="110.3" r="12"/><text x="736.8" y="114.8">2</text></g>
+<text class="note" x="718.8" y="114.3" text-anchor="end">反弹到这一带受阻</text>
+<text class="note" x="434.0" y="125.7">第一阻力/目标位</text>
+<text class="lbl lvlt" x="810" y="137.7">107.39</text>
+<text class="lbl ma-l" x="810" y="170.5">MA20</text>
+<text class="lbl ema-l" x="810" y="187.7">EMA20</text>
+<text class="lbl l60-l" x="810" y="207.8">EMA60</text>
+<text class="lbl l60-l" x="810" y="241.7">MA60</text>
+      </svg>
+    </div>
+    <div class="legend">
+      <span><i style="border-color:var(--ema);border-top-width:2px"></i>EMA20</span>
+      <span><i style="border-color:var(--ma)"></i>MA20</span>
+      <span><i style="border-color:var(--g60);border-top-width:2px"></i>EMA60（细）</span>
+      <span><i style="border-color:var(--g60)"></i>MA60（粗）</span>
+      <span><i style="background:var(--close);opacity:.35;border:0;height:10px;width:14px"></i>四条线挤在一起的那段</span>
+      <span><i style="border-color:var(--close);border-top-style:dashed;border-top-width:2px"></i>那几条线的平均价</span>
+    </div>
+  </section>
+
+  <section class="cases" aria-label="均线密集的三种读法">
+    <article class="case">
+      <h3><span class="n">1</span>成本趋于一致 <span class="verdict no">是什么</span></h3>
+      <p>LEI 的说法：视频 G 39:13「均线密集就是市场短中长期成本趋于一致的地方」，大家在这个价位上视频 G 39:23「对于市场价格形成了共识」。</p>
+    </article>
+    <article class="case">
+      <h3><span class="n">2</span>下跌途中形成的 <span class="verdict yes">上行阻力</span></h3>
+      <p>下跌趋势拐头向上以后，先找下跌途中留下的均线密集：最近的那片（或最近的缺口）就是<b>第一阻力/目标位</b>，20/60/120 全部汇聚的地方是下一个（P25）。到了是检查点，不一定卖。</p>
+    </article>
+    <article class="case">
+      <h3>收盘站上过的 <span class="verdict no">不再当阻力</span></h3>
+      <p>密集区形成以后，只要有一天<b>收盘</b>高过它，它就不再算阻力。QQQ 9 月的 20/60 密集在 713.52，之后收盘到过 759，所以 2026-11-20 的第一阻力是本轮下跌里没补的缺口 718.07（ADR 0025）。</p>
+    </article>
+  </section>
+
+  <section class="panel">
+    <h2>为什么挡价格，另一个讲法</h2>
+    <ul>
+      <li><span class="read">解读</span>那一带是很多人的持仓成本。价格跌下去，这些人被套；涨回来时，想解套的人会卖，所以容易被压住。已经被收盘站上过的密集区，这批卖压被吃掉了。这是常见说法，不是 LEI 原话。</li>
+      <li>LEI 讲的是"冲过去了就找下一个"：视频 G 40:03「那么如果说冲过去了」。用收盘、不用盘中最高价判断冲没冲过去，是脚本定的（盘中碰到又回落不算）。</li>
+    </ul>
+  </section>
+
+  <p class="mirror"><b>它也是大行情的起点</b>：视频 G 14:33「往往是一波大行情的开始」。横盘末期的条件之一就是最高最低两条均线相差不到 2%，市场成本统一了（J13）；看周线能不能拐头，也要先看日线有没有出现均线密集（J34）。所以要看密集出现在哪：<b>下跌途中留下的</b>，反弹上来是阻力；<b>横盘末端的</b>，是埋伏的前提（P1、P2）。</p>
+  <p class="mirror"><b>脚本怎么认（找阻力用）</b>：20、60 两组四条线相差不到价格的 2%，同时 MA60 比 20 根前低（往下走），连续这几根算一片密集区，价位取这几根线的平均；六条线都挤在一起叫"20/60/120 全部汇聚"。正在形成的那片不算。2% 是视频 J13 的数，借来用在这里、用 20 根看 MA60 方向，是脚本的选择。</p>
+  <footer class="src">
+    <div><b>规则</b>：<span class="tag">P25</span> 下降趋势拐头向上，下跌途中形成过的均线密集区是上行的阻力，也是目标位。<span class="tag">J13</span> 横盘末期：均线相差 &lt; 2%。<span class="tag">J34</span> 周线拐头先看日线均线密集。<span class="tag">ADR 0025</span> 收盘站上过的密集区不再当目标位。</div>
+    <div><b>工作台</b>：② 找打法「第一阻力/目标位和盈亏比」那一格，来源写"20、60 均线密集"或"20、60、120 全部汇聚"；① 看大局第 ② 问写 6 条线相差百分之几。</div>
+    <div><b>相关</b>：<a href="resistance-rr.html">第一阻力/目标位和盈亏比</a> · <a href="volume-profile.html">筹码山</a> · <a href="gap.html">缺口</a> · <a href="arrangement.html">排列</a> · <a href="trend-types.html">五种趋势类型</a></div>
+  </footer>
+</div>
+</body>
+</html>
