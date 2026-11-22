@@ -22,6 +22,13 @@
 .tbl{overflow-x:auto}
 .panel p{margin:0 0 8px;font-size:14px;color:var(--muted)} .panel p b{color:var(--ink)}
 .panel ul{margin:0;padding-left:18px;color:var(--muted);font-size:14px;display:grid;gap:6px} .panel ul b{color:var(--ink)}
+.fl-q{fill:var(--panel);stroke:var(--muted);stroke-width:1.2}
+.fl-r{fill:var(--bg);stroke:var(--ma);stroke-width:1.6}
+.tb-h{fill:none;stroke:none}
+.fl-qt{fill:var(--ink);font:600 14px var(--font)} .fl-qs{fill:var(--muted);font-size:13px}
+.fl-rt{fill:var(--ink);font:700 15px var(--font)} .fl-rt2{fill:var(--ink);font:700 14px var(--font)} .fl-rs{fill:var(--muted);font-size:13px}
+.fl-arr{stroke:var(--muted);stroke-width:1.5;fill:none} .fl-headp{fill:var(--muted)} .fl-back{stroke-dasharray:5 4}
+.fl-yes{fill:var(--ink);font:600 13px var(--font)} .note2{fill:var(--muted);font-size:12px}
 </style>
 </head>
 <body>
@@ -154,8 +161,66 @@
     <p>工作台看大局第 ④ 问先列「LEI 趋势五步」逐步打勾，再列这张转折进度。QQQ 2026-11-20 的下跌：前三步都走完（20/60 在 11-03 双死叉），MA 已排成空头、EMA 还差一点，乖离到 0% 分位。按 LEI 的讲法，这段下跌走到了第 5 步，接下来是回归。</p>
   </section>
 
-  <p class="mirror"><b>一轮从哪开始、到哪结束（脚本自定）</b>：先"完整站在一边"：快线组的 MA、EMA 都在慢线组同一侧，收盘在两条快线外侧，两条快线都朝这边走。站稳后，反方向的五个点各记首次出现的日期。中途退回原来的完整状态，这一轮作废重记。到了另一边的完整状态，这一轮算完，记为"上一轮"。</p>
-  <p class="mirror"><b>回撤还是转折</b>：破线、拐头算回撤，交叉了算转折。细分看 J7：稳定上涨（下跌）里，20/60 交叉了仍叫回撤（反弹）。加速里交叉了才叫转折中。<b>下跌转上涨反过来</b>：站上、往上拐、往上穿。</p>
+  <section class="panel">
+    <h2>一轮从哪开始、什么时候作废、什么时候算完（以多头转空头为例，脚本自定）</h2>
+    <div class="chart">
+      <svg viewBox="0 10 910 232" role="img" aria-label="状态图：完整站在多头一边，一轮从这里开始；出现反向一步后进入记点中，五个点各记第一次出现的日期；到了空头一边的完整状态，这一轮算完，记为上一轮；中途又回到多头的完整状态，这一轮作废、清零">
+<defs><marker id="fs-head" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="fl-headp" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="fl-r" x="10" y="30" width="230" height="84" rx="8"/>
+<text class="fl-rt" x="125.0" y="67.0" text-anchor="middle">完整站在多头一边</text>
+<text class="fl-rs" x="125.0" y="87.0" text-anchor="middle">一轮从这里开始</text>
+<rect class="fl-q" x="330" y="30" width="250" height="84" rx="8"/>
+<text class="fl-qt" x="455.0" y="57.0" text-anchor="middle">记点中</text>
+<text class="fl-qs" x="455.0" y="77.0" text-anchor="middle">反向五个点各记第一次出现的日期</text>
+<text class="fl-qs" x="455.0" y="97.0" text-anchor="middle">破线 · 两次拐头 · 两次交叉</text>
+<rect class="fl-r" x="670" y="30" width="230" height="84" rx="8"/>
+<text class="fl-rt" x="785.0" y="57.0" text-anchor="middle">完整站在空头一边</text>
+<text class="fl-rs" x="785.0" y="77.0" text-anchor="middle">这一轮算完，记为“上一轮”</text>
+<text class="fl-rs" x="785.0" y="97.0" text-anchor="middle">下一轮从这里开始记</text>
+<line class="fl-arr" x1="240" y1="72" x2="326" y2="72" marker-end="url(#fs-head)"/><text class="fl-yes" x="283" y="62" text-anchor="middle">出现反向一步</text>
+<line class="fl-arr" x1="580" y1="72" x2="666" y2="72" marker-end="url(#fs-head)"/><text class="fl-yes" x="623" y="62" text-anchor="middle">到另一边</text>
+<path class="fl-arr fl-back" d="M455,114 Q455,168 300,168 Q125,168 125,118" marker-end="url(#fs-head)"/>
+<text class="fl-yes" x="300" y="188" text-anchor="middle">又回到多头的完整状态：这一轮作废、清零</text>
+<text class="note2" x="455" y="228" text-anchor="middle">完整站在一边 ＝ MA、EMA 两对的快线都在慢线同一侧 ＋ 收盘在两条快线外侧 ＋ 两条快线都朝这边走</text>
+      </svg>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>走到哪一步叫回撤、叫转折（以 20/60 为例）</h2>
+    <div class="chart">
+      <svg viewBox="0 0 910 230" role="img" aria-label="对照表：稳定类型里，没破线是延伸，破线或拐头是回撤中，交叉了仍叫回撤中、是深回撤；加速类型里，前两格一样，交叉了叫顶部或底部转折中">
+<rect class="tb-h" x="210" y="10" width="220" height="40" rx="8"/>
+<text class="fl-qt" x="320.0" y="35.0" text-anchor="middle">还没破线、没拐头</text>
+<rect class="tb-h" x="440" y="10" width="220" height="40" rx="8"/>
+<text class="fl-qt" x="550.0" y="35.0" text-anchor="middle">破线或拐头</text>
+<rect class="tb-h" x="670" y="10" width="220" height="40" rx="8"/>
+<text class="fl-qt" x="780.0" y="35.0" text-anchor="middle">20/60 交叉了</text>
+<rect class="tb-h" x="10" y="64" width="190" height="60" rx="8"/>
+<text class="fl-qt" x="105.0" y="99.0" text-anchor="middle">稳定上涨 / 下跌</text>
+<rect class="fl-q" x="210" y="64" width="220" height="60" rx="8"/>
+<text class="fl-qt" x="320.0" y="99.0" text-anchor="middle">延伸</text>
+<rect class="fl-q" x="440" y="64" width="220" height="60" rx="8"/>
+<text class="fl-qt" x="550.0" y="99.0" text-anchor="middle">回撤中 / 反弹中</text>
+<rect class="fl-r" x="670" y="64" width="220" height="60" rx="8"/>
+<text class="fl-rt2" x="780.0" y="90.0" text-anchor="middle">仍叫回撤中 / 反弹中</text><text class="fl-rs" x="780.0" y="110.0" text-anchor="middle">深回撤</text>
+<rect class="tb-h" x="10" y="132" width="190" height="60" rx="8"/>
+<text class="fl-qt" x="105.0" y="167.0" text-anchor="middle">加速上涨 / 下跌</text>
+<rect class="fl-q" x="210" y="132" width="220" height="60" rx="8"/>
+<text class="fl-qt" x="320.0" y="167.0" text-anchor="middle">延伸</text>
+<rect class="fl-q" x="440" y="132" width="220" height="60" rx="8"/>
+<text class="fl-qt" x="550.0" y="167.0" text-anchor="middle">回撤中 / 反弹中</text>
+<rect class="fl-r" x="670" y="132" width="220" height="60" rx="8"/>
+<text class="fl-rt2" x="780.0" y="167.0" text-anchor="middle">顶部转折中 / 底部转折中</text>
+<text class="note2" x="455" y="218" text-anchor="middle">只有 20/60 交叉以后，稳定和加速的叫法才分开（J7）</text>
+      </svg>
+    </div>
+    <div class="legend">
+      <span>下跌转上涨反过来：站上、往上拐、往上穿</span>
+      <span>完整的三问决策树见「五种趋势类型」</span>
+    </div>
+  </section>
+
   <footer class="src">
     <div><b>规则</b>：<span class="tag">J15</span> 趋势转折必经破线、拐头、交叉：视频 B 15:40「趋势转折必定会经过 破线拐头交叉 三个步骤」。破线、拐头要 MA、EMA 两根一起：视频 E 10:47「我希望的是两根均线同时都被破缐，同时在拐头」。<span class="tag">J16</span> 双交叉。<span class="tag">J7</span> 阶段：延伸、回撤中、转折中。</div>
     <div><b>别混</b>：LEI 的五步是破线、拐头、交叉、排列、乖离。转折进度的五个点只拆了前三步。</div>

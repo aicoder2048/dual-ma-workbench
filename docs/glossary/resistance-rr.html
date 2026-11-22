@@ -25,6 +25,12 @@
 .kv th{color:var(--muted);font-weight:600;white-space:nowrap}
 .kv td.num{font-family:var(--mono);font-variant-numeric:tabular-nums;white-space:nowrap}
 .tblwrap{overflow-x:auto}
+.fl-q{fill:var(--panel);stroke:var(--muted);stroke-width:1.2}
+.fl-r{fill:var(--bg);stroke:var(--ma);stroke-width:1.6}
+.fl-qt{fill:var(--ink);font:600 14px var(--font)} .fl-qs{fill:var(--muted);font-size:13px}
+.fl-rt{fill:var(--ink);font:700 15px var(--font)} .fl-rs{fill:var(--muted);font-size:13px}
+.fl-arr{stroke:var(--muted);stroke-width:1.5} .fl-headp{fill:var(--muted)}
+.fl-yes{fill:var(--ink);font:600 13px var(--font)}
 </style>
 </head>
 <body>
@@ -98,7 +104,7 @@
   <section class="cases" aria-label="找第一阻力、算盈亏比、到了第一阻力怎么办">
     <article class="case">
       <h3><span class="n">1</span>找第一阻力 <span class="verdict no">从触发价往上</span></h3>
-      <p>先看<b>缺口或最近的均线密集</b>（20、60 两组也算），再看 <b>20/60/120 全部汇聚处</b>（P25）。缺口取没补那段的下沿，密集区取几根线的平均。收盘站上过的密集区不算。上方都没有时用前高，这是解读。</p>
+      <p>缺口或均线密集，谁近取谁；再往上的全部汇聚处是第二阻力（P25）。顺序见下面的流程图。</p>
     </article>
     <article class="case">
       <h3><span class="n">2</span>算盈亏比 <span class="verdict yes" style="color:var(--up);border-color:var(--up)">4:1 可做</span></h3>
@@ -108,6 +114,75 @@
       <h3><span class="n">3</span>到了第一阻力 <span class="verdict no">检查点</span></h3>
       <p>中长线（60/120）完好就<b>继续拿</b>，不完好就在这里走（P25）。完好指类型还是稳定上涨或加速上涨。视频 G 42:14「如果说中长线什么这些现在都完好的话 我还不见得走」。</p>
     </article>
+  </section>
+
+  <section class="panel">
+    <h2>第一阻力、第二阻力怎么找：从触发价往上，按顺序问</h2>
+    <div class="chart">
+      <svg viewBox="0 10 910 304" role="img" aria-label="流程图：① 触发价上方有缺口或均线密集吗？缺口取没补那段的下沿，密集取几根线的平均，形成后收盘站上过的密集不算。有：第一阻力取最近的那个，第二阻力是再往上最近的 20/60/120 全部汇聚处。没有：② 上方有更高的波峰吗？有：第一阻力是前高，是解读；没有：第一阻力算不出">
+<defs><marker id="rr-h1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="rr-h1p" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="fl-q" x="10" y="20" width="300" height="116" rx="8"/>
+<text class="fl-qt" x="160.0" y="53.0" text-anchor="middle">① 触发价上方有缺口或均线密集吗？</text>
+<text class="fl-qs" x="160.0" y="73.0" text-anchor="middle">缺口：取没补那段的下沿</text>
+<text class="fl-qs" x="160.0" y="93.0" text-anchor="middle">密集：取几根线的平均，20、60 两组也算</text>
+<text class="fl-qs" x="160.0" y="113.0" text-anchor="middle">形成后收盘站上过的密集不算</text>
+<rect class="fl-r" x="370" y="20" width="240" height="116" rx="8"/>
+<text class="fl-rt" x="490.0" y="73.0" text-anchor="middle">第一阻力 = 最近的那个</text>
+<text class="fl-rs" x="490.0" y="93.0" text-anchor="middle">缺口、密集谁近取谁</text>
+<rect class="fl-r" x="670" y="20" width="230" height="116" rx="8"/>
+<text class="fl-rt" x="785.0" y="53.0" text-anchor="middle">第二阻力</text>
+<text class="fl-rs" x="785.0" y="73.0" text-anchor="middle">再往上最近的</text>
+<text class="fl-rs" x="785.0" y="93.0" text-anchor="middle">20/60/120 全部汇聚处</text>
+<text class="fl-rs" x="785.0" y="113.0" text-anchor="middle">（没有就只写第一阻力）</text>
+<rect class="fl-q" x="10" y="190" width="300" height="80" rx="8"/>
+<text class="fl-qt" x="160.0" y="235.0" text-anchor="middle">② 上方有更高的波峰（前高）吗？</text>
+<rect class="fl-r" x="370" y="190" width="240" height="80" rx="8"/>
+<text class="fl-rt" x="490.0" y="225.0" text-anchor="middle">第一阻力 = 前高</text>
+<text class="fl-rs" x="490.0" y="245.0" text-anchor="middle">解读，视频没说</text>
+<rect class="fl-r" x="670" y="190" width="230" height="80" rx="8"/>
+<text class="fl-rt" x="785.0" y="225.0" text-anchor="middle">第一阻力算不出</text>
+<text class="fl-rs" x="785.0" y="245.0" text-anchor="middle">盈亏比也算不了</text>
+<line class="fl-arr" x1="310" y1="78" x2="366" y2="78" marker-end="url(#rr-h1)"/><text class="fl-yes" x="338" y="70" text-anchor="middle">有</text>
+<line class="fl-arr" x1="610" y1="78" x2="666" y2="78" marker-end="url(#rr-h1)"/>
+<line class="fl-arr" x1="160" y1="136" x2="160" y2="186" marker-end="url(#rr-h1)"/><text class="fl-yes" x="168" y="166" text-anchor="start">没有</text>
+<line class="fl-arr" x1="310" y1="230" x2="366" y2="230" marker-end="url(#rr-h1)"/><text class="fl-yes" x="338" y="222" text-anchor="middle">有</text>
+<path class="fl-arr" d="M160,270 L160,290 L785,290 L785,274" fill="none" marker-end="url(#rr-h1)"/><text class="fl-yes" x="472" y="307" text-anchor="middle">没有</text>
+      </svg>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>盈亏比写什么：不做、可做、理想，还是到时重算</h2>
+    <div class="chart">
+      <svg viewBox="0 10 910 266" role="img" aria-label="决策树：① 触发价离现价还远吗（明天的触发价比推演门槛高出 2% 以上，只在等 20 线组拐头进场时判）？远：写到时重算，按明天算的盈亏比放在悬停里，不改成不做。不远：② 按触发价算盈亏比，小于 3:1 不做并写出第一阻力或止损要挪到哪，3:1 到 5:1 可做，5:1 以上理想">
+<defs><marker id="rr-h2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="rr-h2p" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="fl-q" x="10" y="20" width="300" height="104" rx="8"/>
+<text class="fl-qt" x="160.0" y="47.0" text-anchor="middle">① 触发价离现价还远吗？</text>
+<text class="fl-qs" x="160.0" y="67.0" text-anchor="middle">明天的触发价比推演门槛</text>
+<text class="fl-qs" x="160.0" y="87.0" text-anchor="middle">高出 2% 以上</text>
+<text class="fl-qs" x="160.0" y="107.0" text-anchor="middle">（只在等 20 线组拐头进场时判）</text>
+<rect class="fl-r" x="10" y="176" width="300" height="90" rx="8"/>
+<text class="fl-rt" x="160.0" y="206.0" text-anchor="middle">写「到时重算」</text>
+<text class="fl-rs" x="160.0" y="226.0" text-anchor="middle">按明天算的盈亏比放在悬停里</text>
+<text class="fl-rs" x="160.0" y="246.0" text-anchor="middle">不改成「不做」</text>
+<rect class="fl-q" x="370" y="20" width="530" height="104" rx="8"/>
+<text class="fl-qt" x="635.0" y="67.0" text-anchor="middle">② 按触发价算盈亏比</text>
+<text class="fl-qs" x="635.0" y="87.0" text-anchor="middle">（第一阻力 − 触发）÷（触发 − 止损）</text>
+<rect class="fl-r" x="370" y="176" width="170" height="90" rx="8"/>
+<text class="fl-rt" x="455.0" y="206.0" text-anchor="middle">< 3:1　不做</text>
+<text class="fl-rs" x="455.0" y="226.0" text-anchor="middle">写出第一阻力或</text>
+<text class="fl-rs" x="455.0" y="246.0" text-anchor="middle">止损要挪到哪</text>
+<rect class="fl-r" x="550" y="176" width="170" height="90" rx="8"/>
+<text class="fl-rt" x="635.0" y="226.0" text-anchor="middle">3:1 ~ 5:1　可做</text>
+<rect class="fl-r" x="730" y="176" width="170" height="90" rx="8"/>
+<text class="fl-rt" x="815.0" y="226.0" text-anchor="middle">≥ 5:1　理想</text>
+<line class="fl-arr" x1="160" y1="124" x2="160" y2="172" marker-end="url(#rr-h2)"/><text class="fl-yes" x="168" y="152" text-anchor="start">远</text>
+<line class="fl-arr" x1="310" y1="72" x2="366" y2="72" marker-end="url(#rr-h2)"/><text class="fl-yes" x="338" y="64" text-anchor="middle">不远</text>
+<line class="fl-arr" x1="455" y1="124" x2="455" y2="172" marker-end="url(#rr-h2)"/>
+<line class="fl-arr" x1="635" y1="124" x2="635" y2="172" marker-end="url(#rr-h2)"/>
+<line class="fl-arr" x1="815" y1="124" x2="815" y2="172" marker-end="url(#rr-h2)"/>
+      </svg>
+    </div>
   </section>
 
   <section class="panel">
@@ -127,7 +202,7 @@
   <section class="panel">
     <h2>股数用止损倒算</h2>
     <p>股数 = 这一笔最多亏的钱 ÷ (触发 − 止损)，向下取整（A6）。账户 10 万、每笔最多亏 1%：<span class="calc">1000 ÷ 2.00 = 500</span> 股。买不起时，按账户能买的最多股数给，并写明原因。</p>
-    <p><b>触发价离现价还远时，卡片写「到时重算」</b>。QQQ 2026-11-20 收 608.45，明天的触发价 712.20，第一阻力是缺口 718.07，按明天算只有 0.15:1。抵扣价几天后会扣到低价，20 线组最早约 9 个交易日后就能拐头，所以不写"不做"。按明天算的数放在悬停里（<span class="tag">ADR 0026</span>）。</p>
+    <p><b>到时重算的例子</b>：QQQ 2026-11-20 明天的触发价 712.20，按明天算只有 0.15:1。抵扣价几天后会扣到低价，20 线组最早约 9 个交易日后就能拐头（逐日的价见<a href="key-move.html">关键性波动</a>页的图），所以盈亏比和股数都写「到时重算」（<span class="tag">ADR 0026</span>）。</p>
   </section>
 
   <p class="mirror"><b>卡片上为什么只写「阻力」</b>：结论卡片那排价位最挤。悬停和图上写全称，后面的叫第二阻力（<span class="tag">ADR 0031</span>）。筹码山只作参考带，不算第一阻力和盈亏比（P38）。</p>

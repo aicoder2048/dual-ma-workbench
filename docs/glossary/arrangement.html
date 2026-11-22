@@ -17,6 +17,15 @@
 .txt{display:grid;gap:8px;font-size:14px;color:var(--muted)} .txt p{margin:0} .txt b{color:var(--ink)}
 .txt ul{margin:0;padding-left:18px;display:grid;gap:6px}
 .num{font-family:var(--mono);color:var(--ink)}
+.fl-q{fill:var(--panel);stroke:var(--muted);stroke-width:1.2}
+.fl-r{fill:var(--bg);stroke:var(--ma);stroke-width:1.6}
+.fl-dim{fill:var(--panel);stroke:var(--line);stroke-width:1.2;stroke-dasharray:5 4}
+.fl-qt{fill:var(--ink);font:600 14px var(--font)} .fl-qs{fill:var(--muted);font-size:13px}
+.fl-rt{fill:var(--ink);font:700 15px var(--font)} .fl-rs{fill:var(--muted);font-size:13px}
+.fl-arr{stroke:var(--muted);stroke-width:1.5} .fl-headp{fill:var(--muted)}
+.fl-yes{fill:var(--ink);font:600 13px var(--font)}
+.fl-hot{stroke:var(--close);stroke-width:2.5} .fl-hotp{fill:var(--close)} .fl-ans{fill:var(--close);font:600 13px var(--font)}
+
 </style>
 </head>
 <body>
@@ -103,11 +112,53 @@
     </ul>
   </section>
 
+  <section class="panel">
+    <h2>60/120 排好没有，决定能不能定类型：脚本按 ① → ④ 的顺序问</h2>
+    <div class="chart">
+      <svg viewBox="0 6 910 412" role="img" aria-label="决策树：① MA60/MA120、EMA60/EMA120 在同一边吗？是则问 ② 60 线组方向跟着次序走、120 线组不反向吗？是：有类型，稳定或加速。① 或 ② 答否，问 ③ 加速起点：20 线乖离到两端 5%，且 20 线 ≥ 60° 或 60 线组已朝这边走？是：加速（起点）。否，问 ④ 60 线走平且 6 条线相差小于 5%？是：横盘；否：定不出类型，叫过渡状态">
+<defs><marker id="fl-head" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="fl-headp" d="M0,0 L10,5 L0,10 z"/></marker><marker id="fl-headh" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path class="fl-hotp" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="fl-q" x="10" y="16" width="280" height="68" rx="8"/>
+<text class="fl-qt" x="150.0" y="45.5" text-anchor="middle">① MA60/MA120、EMA60/EMA120</text>
+<text class="fl-qt" x="150.0" y="64.5" text-anchor="middle">在同一边？（次序）</text>
+<rect class="fl-q" x="330" y="16" width="280" height="68" rx="8"/>
+<text class="fl-qt" x="470.0" y="45.5" text-anchor="middle">② 60 线组方向跟着次序走，</text>
+<text class="fl-qt" x="470.0" y="64.5" text-anchor="middle">120 线组不反向？</text>
+<rect class="fl-r" x="650" y="16" width="250" height="68" rx="8"/>
+<text class="fl-rt" x="775.0" y="45.5" text-anchor="middle">有类型：稳定或加速</text>
+<text class="fl-rs" x="775.0" y="64.5" text-anchor="middle">60 线 ≥ 60° 或乖离到两端 5% 是加速</text>
+<line class="fl-arr" x1="290" y1="50" x2="326" y2="50" marker-end="url(#fl-head)"/><text class="fl-yes" x="308" y="42" text-anchor="middle">是</text>
+<line class="fl-arr" x1="610" y1="50" x2="646" y2="50" marker-end="url(#fl-head)"/><text class="fl-yes" x="628" y="42" text-anchor="middle">是</text>
+<rect class="fl-q" x="10" y="130" width="600" height="64" rx="8"/>
+<text class="fl-qt" x="310.0" y="157.5" text-anchor="middle">③ 加速起点：20 线乖离到自身历史两端 5%，</text>
+<text class="fl-qt" x="310.0" y="176.5" text-anchor="middle">且 20 线 ≥ 60° 或 60 线组已朝这边走？</text>
+<line class="fl-arr" x1="150" y1="84" x2="150" y2="126" marker-end="url(#fl-head)"/><text class="fl-yes" x="158" y="110" text-anchor="start">否</text>
+<line class="fl-arr" x1="470" y1="84" x2="470" y2="126" marker-end="url(#fl-head)"/><text class="fl-yes" x="478" y="110" text-anchor="start">否</text>
+<rect class="fl-r" x="650" y="130" width="250" height="64" rx="8"/>
+<text class="fl-rt" x="775.0" y="157.5" text-anchor="middle">加速（起点）</text>
+<text class="fl-rs" x="775.0" y="176.5" text-anchor="middle">60/120 还没排好也能定</text>
+<line class="fl-arr" x1="610" y1="162" x2="646" y2="162" marker-end="url(#fl-head)"/><text class="fl-yes" x="628" y="154" text-anchor="middle">是</text>
+<rect class="fl-q" x="10" y="240" width="600" height="64" rx="8"/>
+<text class="fl-qt" x="310.0" y="267.5" text-anchor="middle">④ 60 线在 ±15° 以内（走平），</text>
+<text class="fl-qt" x="310.0" y="286.5" text-anchor="middle">且 6 条线最高最低相差 < 价格 5%？</text>
+<line class="fl-arr" x1="310" y1="194" x2="310" y2="236" marker-end="url(#fl-head)"/><text class="fl-yes" x="318" y="220" text-anchor="start">否</text>
+<rect class="fl-r" x="650" y="240" width="250" height="64" rx="8"/>
+<text class="fl-rt" x="775.0" y="267.5" text-anchor="middle">横盘</text>
+<text class="fl-rs" x="775.0" y="286.5" text-anchor="middle">中段不做，末期再埋伏</text>
+<line class="fl-arr" x1="610" y1="272" x2="646" y2="272" marker-end="url(#fl-head)"/><text class="fl-yes" x="628" y="264" text-anchor="middle">是</text>
+<rect class="fl-r" x="10" y="350" width="600" height="58" rx="8"/>
+<text class="fl-rt" x="310.0" y="374.5" text-anchor="middle">定不出类型：过渡状态</text>
+<text class="fl-rs" x="310.0" y="393.5" text-anchor="middle">空头结构反弹中、多头结构回撤中、顶部 / 底部转折中、失序</text>
+<line class="fl-arr" x1="310" y1="304" x2="310" y2="346" marker-end="url(#fl-head)"/><text class="fl-yes" x="318" y="330" text-anchor="start">否</text>
+      </svg>
+    </div>
+    <div class="legend">
+      <span>① ② 就是看大局第 ① 问"60/120 线组排好了吗？"（规则 J1、J3、J5、J6）</span>
+      <span>20 线组不参与定类型，只定阶段</span>
+    </div>
+  </section>
+
   <section class="panel txt">
-    <h2 style="color:var(--ink)">60/120 排好没有，决定能不能定类型</h2>
-    <p>看大局第 ① 问"60/120 线组排好了吗？"：<b>MA60 对 MA120、EMA60 对 EMA120 要在同一边</b>，60 线组的方向也要和次序一致，才有类型（规则 J1）。20 线组只定阶段。</p>
-    <p>QQQ 这天 MA60 在 MA120 下面，EMA60 在 EMA120 上面。第 ① 问写"还没排好，但已经能定成加速下跌"：靠的是加速，乖离到历史最低一端，60 线组在往下（规则 J3）。见<a href="clock-direction.html">几点钟方向</a>。</p>
-    <p>第 ① 问下面的<b>价位梯子</b>是上图第三列的横版，左低右高。</p>
+    <p><b>QQQ 2026-11-20</b>：MA60 在 MA120 下面、EMA60 在 EMA120 上面，① 答"否"；乖离到历史最低一端、60 线组在往下，③ 答"是"，所以"还没排好，但已经能定成加速下跌"。见<a href="clock-direction.html">几点钟方向</a>。第 ① 问下面的<b>价位梯子</b>是上图第三列的横版，左低右高。</p>
   </section>
 
   <section class="panel txt">
