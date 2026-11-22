@@ -1,119 +1,135 @@
 /**
- * 概念图解的打印版：每页单独渲染成 PDF（各页自带的 <style> 互不干扰），再加封面、目录，合并后盖页码。
+ * 概念图解的打印版：用 techdoc-pdf 技能（pandoc → XeLaTeX）排版。
+ * 1. 浏览器打开每一页，把每张示意图（inline SVG）的样式算好、内联，单独存成矢量 PDF；
+ * 2. 按页面结构把文字转成 markdown（对照卡 → 小标题 + 一段，表格 → 管道表，图 → 图片）；
+ * 3. 交给 ~/.claude/skills/techdoc-pdf/techdoc.py 排成 US Letter，带封面和目录。
  * 用法（仓库根目录）：bun docs/glossary/tools/build-pdf.ts
- * 依赖：app/node_modules 里的 playwright（本机 Chrome），uv（合并和页码用 pypdf + reportlab）。
+ * 依赖：app/node_modules 里的 playwright（本机 Chrome）；pandoc、xelatex；techdoc-pdf 技能。
  */
 import { chromium } from "../../../app/node_modules/playwright/index.mjs";
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 
 const G = resolve(import.meta.dir, "..");
 const OUT = join(G, "双均线概念图解.pdf");
 const TMP = join(G, "tools", ".build");
-const DATE = new Date().toLocaleDateString("sv-SE"); // 本地日期 YYYY-MM-DD
+const TECHDOC = join(homedir(), ".claude/skills/techdoc-pdf/techdoc.py");
+const DATE = new Date().toLocaleDateString("sv-SE");
 
-// 目录顺序和分组照 index.html：读它的 <section><h2>分组</h2> 和每项的 href、标题、一句话
 const index = readFileSync(join(G, "index.html"), "utf8");
 const groups = [...index.matchAll(/<section><h2>(.*?)<\/h2><ul>([\s\S]*?)<\/ul><\/section>/g)].map(([, name, ul]) => ({
   name,
   items: [...ul.matchAll(/<a href="([\w-]+)\.html">(.*?)<span>(.*?)<\/span><\/a>/g)].map(([, slug, title, desc]) => ({ slug, title, desc })),
 }));
-const lede = index.match(/<p class="lede">(.*?)<\/p>/)![1];
-
-const PRINT_CSS = `
-:root { --bg: #ffffff; }
-html, body { background: #fff !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-body { font-size: 13px; }
-.wrap { max-width: none !important; padding: 0 !important; gap: 14px !important; }
-.crumb { display: none !important; }
-h1 { font-size: 26px; }
-.chart, .tbl-wrap, .tblwrap, [class*="wrap"] { overflow: visible !important; }
-.chart svg { min-width: 0 !important; }
-.panel, .case, figure, table, .src, svg, .mirror { break-inside: avoid; }
-h2, h3 { break-after: avoid; }
-a { color: inherit !important; text-decoration: none !important; }
-`;
-const PDF = { format: "Letter" as const, printBackground: true, scale: 0.88, margin: { top: "0.75in", bottom: "0.7in", left: "0.6in", right: "0.6in" } };
-const header = (t: string) => `<div style="width:100%;font:8px 'PingFang SC',sans-serif;color:#7a8494;padding:0 0.6in;display:flex;justify-content:space-between">
-  <span>双均线概念图解</span><span>${t}</span></div>`;
-const blank = `<div></div>`;
 
 rmSync(TMP, { recursive: true, force: true });
-mkdirSync(TMP, { recursive: true });
+mkdirSync(join(TMP, "fig"), { recursive: true });
 const browser = await chromium.launch({ channel: "chrome" });
-const page = await browser.newPage();
-await page.emulateMedia({ colorScheme: "light", media: "print" });
-const pages = (buf: Uint8Array) => (Buffer.from(buf).toString("latin1").match(/\/Type\s*\/Page[^s]/g) ?? []).length;
+const page = await browser.newPage({ viewport: { width: 1000, height: 900 } });
+await page.emulateMedia({ colorScheme: "light" });
+const figPage = await browser.newPage();
 
-// 1) 各概念页
-const parts: { file: string; title: string; slug: string; n: number }[] = [];
-let i = 0;
+const mdFiles: string[] = [];
+let chapter = 0;
 for (const g of groups) for (const it of g.items) {
   await page.goto(`file://${join(G, it.slug + ".html")}`);
-  await page.addStyleTag({ content: PRINT_CSS });
   await page.evaluate(() => document.fonts.ready);
-  const file = join(TMP, `${String(++i).padStart(2, "0")}-${it.slug}.pdf`);
-  const buf = await page.pdf({ ...PDF, path: file, displayHeaderFooter: true, headerTemplate: header(`${g.name} · ${it.title}`), footerTemplate: blank });
-  parts.push({ file, title: it.title, slug: it.slug, n: pages(buf) });
-}
-
-// 2) 封面和目录（目录写页码：封面 1 页、目录 1 页之后接正文）
-const css = readFileSync(join(G, "glossary.css"), "utf8");
-const shell = (body: string) => `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><style>${css}${PRINT_CSS}
-.cover { height: 9.2in; display: grid; align-content: space-between; }
-.cover .band { border-top: 6px solid var(--ma); padding-top: 28px; display: grid; gap: 14px; }
-.cover h1 { font-size: 44px; letter-spacing: .02em; margin: 0; }
-.cover .sub { font-size: 17px; color: var(--muted); margin: 0; }
-.cover .lede { font-size: 14px; max-width: 34em; }
-.cover .groups { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px 24px; font-size: 13px; }
-.cover .groups b { display: block; color: var(--ink); margin-bottom: 2px; }
-.cover .groups span { color: var(--muted); }
-.cover .foot { font-size: 12px; color: var(--muted); border-top: 1px solid var(--line); padding-top: 10px; }
-.toc2 h1 { margin: 0 0 18px; }
-.toc2 section { break-inside: avoid; margin-bottom: 14px; }
-.toc2 h2 { font-size: 12px; color: var(--muted); letter-spacing: .08em; margin: 0 0 6px; }
-.toc2 .row { display: flex; align-items: baseline; gap: 8px; font-size: 14px; padding: 5px 0; }
-.toc2 .row .t { font-weight: 600; } .toc2 .row .d { color: var(--muted); font-size: 12px; }
-.toc2 .row .dots { flex: 1; border-bottom: 1px dotted var(--line); transform: translateY(-3px); }
-.toc2 .row .p { font-family: var(--mono); font-variant-numeric: tabular-nums; }
-</style></head><body><div class="wrap">${body}</div></body></html>`;
-
-let p = 3;
-const pageOf = new Map(parts.map((x) => { const at = p; p += x.n; return [x.slug, at]; }));
-const tocHtml = shell(`<div class="toc2"><h1>目录</h1>${groups.map((g) => `<section><h2>${g.name}</h2>${g.items.map((it) =>
-  `<div class="row"><span class="t">${it.title}</span><span class="d">${it.desc}</span><span class="dots"></span><span class="p">${pageOf.get(it.slug)}</span></div>`).join("")}</section>`).join("")}</div>`);
-const coverHtml = shell(`<div class="cover"><div class="band"><p class="sub">归雁 · 双均线工作台</p><h1>双均线概念图解</h1>
-  <p class="lede">${lede}</p></div>
-  <div class="groups">${groups.map((g) => `<div><b>${g.name}</b><span>${g.items.map((it) => it.title).join("、")}</span></div>`).join("")}</div>
-  <div class="foot">${DATE} 版 · 概念和规则照 references/concepts.md、rules.md；引用的原话都和字幕核对过。图都是示意，不是真实行情。</div></div>`);
-for (const [name, html] of [["00-cover", coverHtml], ["00-toc", tocHtml]] as const) {
-  await page.setContent(html, { waitUntil: "load" });
-  await page.pdf({ ...PDF, path: join(TMP, `${name}.pdf`), displayHeaderFooter: name === "00-toc", headerTemplate: header("目录"), footerTemplate: blank });
+  // 页面里：每张图内联算好的样式后序列化；文字按结构转 markdown，图的位置留 ⟦FIG n⟧
+  const { md, svgs } = await page.evaluate(() => {
+    const PROPS = ["fill", "fill-opacity", "stroke", "stroke-width", "stroke-dasharray", "stroke-opacity", "stroke-linecap",
+      "stroke-linejoin", "opacity", "font-family", "font-size", "font-weight", "text-anchor", "dominant-baseline", "letter-spacing"];
+    const svgs: { svg: string; w: number; h: number }[] = [];
+    const exportSvg = (svg: SVGSVGElement) => {
+      const r = svg.getBoundingClientRect();
+      const clone = svg.cloneNode(true) as SVGSVGElement;
+      const src = [svg, ...svg.querySelectorAll("*")], dst = [clone, ...clone.querySelectorAll("*")];
+      src.forEach((el, i) => {
+        const cs = getComputedStyle(el), d = dst[i] as SVGElement;
+        d.setAttribute("style", PROPS.map((p) => `${p}:${cs.getPropertyValue(p)}`).join(";"));
+        d.removeAttribute("class");
+      });
+      clone.setAttribute("width", String(Math.round(r.width)));
+      clone.setAttribute("height", String(Math.round(r.height)));
+      clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+      svgs.push({ svg: clone.outerHTML, w: Math.round(r.width), h: Math.round(r.height) });
+      return `\n\n⟦FIG ${svgs.length - 1}⟧\n\n`;
+    };
+    const esc = (t: string) => t.replace(/\\/g, "\\\\").replace(/([*_`#|<>\[\]])/g, "\\$1").replace(/\$/g, "\\$");
+    const inline = (n: Node): string => {
+      if (n.nodeType === 3) return esc((n.textContent ?? "").replace(/\s+/g, " "));
+      if (!(n instanceof Element)) return "";
+      const kids = () => [...n.childNodes].map(inline).join("");
+      const tag = n.tagName.toLowerCase();
+      if (tag === "svg") return "";
+      if (tag === "br") return " ";
+      if (n.classList.contains("tag")) return `**${n.textContent!.trim()}**`;
+      if (n.classList.contains("verdict")) return `（${n.textContent!.trim()}）`;
+      if (n.classList.contains("n") || n.classList.contains("badge")) return `${"①②③④⑤⑥⑦⑧⑨"[Number(n.textContent) - 1] ?? n.textContent} `;
+      if (tag === "b" || tag === "strong") { const t = kids().trim(); return t ? `**${t}**` : ""; }
+      if (tag === "code") return `\`${n.textContent}\``;
+      return kids();
+    };
+    const table = (t: HTMLTableElement) => {
+      const rows = [...t.rows].map((r) => [...r.cells].map((c) => inline(c).trim().replace(/\|/g, "\\|") || " "));
+      if (!rows.length) return "";
+      const head = t.tHead?.rows.length ? rows.shift()! : rows[0].map(() => " ");
+      const n = Math.max(head.length, ...rows.map((r) => r.length));
+      const line = (r: string[]) => `| ${[...r, ...Array(n - r.length).fill(" ")].join(" | ")} |`;
+      return `\n\n${line(head)}\n|${Array(n).fill("---").join("|")}|\n${rows.map(line).join("\n")}\n\n`;
+    };
+    const block = (n: Element): string => {
+      const tag = n.tagName.toLowerCase();
+      if (n.matches("nav.crumb, script, style")) return "";
+      if (tag === "svg") return exportSvg(n as SVGSVGElement);
+      if (tag === "h1") return `# ${inline(n).trim()}\n\n`;
+      if (tag === "h2") return `\n## ${inline(n).trim()}\n\n`;
+      if (tag === "h3") return `\n### ${inline(n).trim()}\n\n`;
+      if (tag === "table") return table(n as HTMLTableElement);
+      if (tag === "ul" || tag === "ol") return "\n" + [...n.children].map((li, i) => `${tag === "ol" ? `${i + 1}.` : "-"} ${[...li.childNodes].map((c) => c instanceof Element && /^(ul|ol|table|svg)$/i.test(c.tagName) ? "" : inline(c)).join("").trim()}`).join("\n") + "\n\n";
+      if (n.classList.contains("legend")) return `图例：${[...n.children].map((c) => inline(c).trim()).filter(Boolean).join("；")}\n\n`;
+      if (tag === "footer") return `\n---\n\n${[...n.children].map((c) => inline(c).trim()).join("\n\n")}\n\n`;
+      const hasBlock = [...n.children].some((c) => /^(div|section|article|header|figure|p|h[1-6]|ul|ol|table|svg|footer|nav)$/i.test(c.tagName));
+      if (!hasBlock) { const t = inline(n).trim(); return t ? `${t}\n\n` : ""; }
+      // 混排：文字节点和块各自处理
+      let out = "", buf = "";
+      for (const c of n.childNodes) {
+        if (c instanceof Element && /^(div|section|article|header|figure|p|h[1-6]|ul|ol|table|svg|footer|nav)$/i.test(c.tagName)) {
+          if (buf.trim()) out += `${buf.trim()}\n\n`; buf = ""; out += block(c);
+        } else buf += inline(c);
+      }
+      if (buf.trim()) out += `${buf.trim()}\n\n`;
+      // 图在左、标题在右的面板：标题提到图前面
+      return out.replace(/^(\s*⟦FIG \d+⟧\s*)(\n#{2,3} [^\n]+\n)/, "$2$1");
+    };
+    return { md: block(document.querySelector(".wrap")!), svgs };
+  });
+  // 每张图存成矢量 PDF：空白页里只放这张 SVG，纸张尺寸等于图的尺寸
+  const ch = String(++chapter).padStart(2, "0");
+  let text = md;
+  for (const [i, f] of svgs.entries()) {
+    const file = join(TMP, "fig", `${ch}-${it.slug}-${i}.pdf`);
+    await figPage.setContent(`<!doctype html><html><head><style>@page{margin:0}html,body{margin:0}svg{display:block}</style></head><body>${f.svg}</body></html>`);
+    await figPage.pdf({ path: file, width: `${f.w}px`, height: `${f.h + 1}px`, printBackground: true, pageRanges: "1" });
+    text = text.replace(`⟦FIG ${i}⟧`, `![](${file})`);
+  }
+  // ▾ 是工作台菜单上的小三角，PingFang 没有这个字形，xelatex 会丢字
+  text = text.replace(/\s*▾/g, "").replace(/\n{3,}/g, "\n\n").trim() + "\n";
+  // 目录只列 16 个术语：二、三级标题标 unlisted（techdoc.py 把 toc-depth 写死成 3）
+  text = text.replace(/^(#{2,3} .*)$/gm, "$1 {.unlisted .unnumbered}");
+  // 第一章和目录之间分页（techdoc.py 只在章与章之间插分页）
+  if (chapter === 1) text = "```{=latex}\n\\newpage\n```\n\n" + text;
+  // 章首写分组名，方便翻到哪一类
+  text = text.replace(/^# (.*)\n/, (_, t) => `# ${t}\n\n*${g.name}*\n`);
+  const mdFile = join(TMP, `${ch}-${it.slug}.md`);
+  writeFileSync(mdFile, text);
+  mdFiles.push(mdFile);
 }
 await browser.close();
 
-// 3) 合并、盖页码（封面不盖）
-const files = [join(TMP, "00-cover.pdf"), join(TMP, "00-toc.pdf"), ...parts.map((x) => x.file)];
-const py = `
-import sys, io
-from pypdf import PdfReader, PdfWriter
-from reportlab.pdfgen import canvas
-out, files = sys.argv[1], sys.argv[2:]
-w = PdfWriter()
-for f in files:
-    for pg in PdfReader(f).pages: w.add_page(pg)
-for i, pg in enumerate(w.pages):
-    if i == 0: continue
-    W, H = float(pg.mediabox.width), float(pg.mediabox.height)
-    buf = io.BytesIO(); c = canvas.Canvas(buf, pagesize=(W, H))
-    c.setFont("Helvetica", 8); c.setFillGray(0.45); c.drawCentredString(W / 2, 0.4 * 72, str(i + 1)); c.save()
-    pg.merge_page(PdfReader(io.BytesIO(buf.getvalue())).pages[0])
-w.add_metadata({"/Title": "双均线概念图解", "/Subject": "归雁工作台术语图解"})
-with open(out, "wb") as fh: w.write(fh)
-print(len(w.pages))
-`;
-const r = spawnSync("uv", ["run", "--with", "pypdf", "--with", "reportlab", "python", "-c", py, OUT, ...files], { encoding: "utf8" });
-if (r.status !== 0) throw new Error(r.stderr);
-rmSync(TMP, { recursive: true, force: true });
-console.log(`${OUT}：${r.stdout.trim()} 页`);
+const r = spawnSync("python3", [TECHDOC, OUT, ...mdFiles, "--title", "双均线概念图解", "--subtitle", "归雁工作台 · 16 个术语的示意图、对照和出处",
+  "--meta", `${DATE} 版 · 图都是示意，不是真实行情`, "--toc", "--paper", "letter"], { encoding: "utf8", cwd: TMP });
+process.stdout.write(r.stdout); process.stderr.write(r.stderr);
+if (r.status !== 0) throw new Error("techdoc.py 失败");
+if (!process.env.KEEP_BUILD) rmSync(TMP, { recursive: true, force: true });
