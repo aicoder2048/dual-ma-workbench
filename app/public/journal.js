@@ -104,7 +104,7 @@ function planHtml(s) {
   return `<b class="j-action">${esc(s.action)}</b>
     <div class="chips-row">${levelChip(flat ? "触发 / 先看" : "盯住", s.trigger, "trigger")}${levelChip(flat ? "进场后止损" : "止损", s.stop, "stop")}${
       s.risk === null ? "" : `<span class="pchip risk"><span class="ck">到止损</span><b class="num">${s.risk.toFixed(1)}%</b></span>`}</div>
-    <details class="j-items-box"><summary>条件、目标、盈亏比和依据（${s.items.length} 条）</summary>
+    <details class="j-items-box"><summary>条件、阻力位、盈亏比和依据（${s.items.length} 条）</summary>
       <ul class="j-items">${s.items.map((i) => `<li><span class="pl">${esc(i.label)}</span>${esc(i.text)}</li>`).join("")}</ul></details>`;
 }
 

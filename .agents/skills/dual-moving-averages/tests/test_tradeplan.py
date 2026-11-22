@@ -329,7 +329,7 @@ def test_no_plan_lists_a_mountain_among_its_targets(plans):
 
 def test_text_report_names_the_mountain_as_a_reference_not_a_target(plans):
     lines = [x for x in dma.plan_lines(plans["GOOGL"]["trade_plan"]) if x.startswith("- 空仓")]
-    assert "目标：178.74（缺口，2025-02-25）" in lines[0]
+    assert "阻力位/目标位：178.74（缺口，2025-02-25）" in lines[0]
     assert "上方最近的筹码山 182.11–184.88，只作参考，不算盈亏比（P38）" in lines[0]
 
 
@@ -386,7 +386,7 @@ def test_steady_uptrend_plan_keeps_holding_past_the_first_target(plans):
 
 def test_bottom_turn_plan_leaves_at_the_first_target(plans):
     f = plans["GOOGL"]["trade_plan"]["flat"]
-    assert "178.74" in f["at_target"] and "到了就在目标位走" in f["at_target"]
+    assert "178.74" in f["at_target"] and "到了就在这里走" in f["at_target"]
 
 
 @pytest.fixture(scope="module")
@@ -400,7 +400,7 @@ def test_holding_in_a_downtrend_finds_no_target_before_the_20_line_turns_up(qqq_
     h = qqq_crash["trade_plan"]["holding"]
     assert qqq_crash["trade_plan"]["key"] == "加速下跌"
     assert h["targets"] == [] and h["at_target"] is None
-    assert any("目标" in n and "P25" in n for n in h["notes"])
+    assert any("阻力位" in n and "P25" in n for n in h["notes"])
     assert not any("算不出" in n for n in h["notes"])
 
 

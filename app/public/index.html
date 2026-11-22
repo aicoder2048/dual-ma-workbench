@@ -243,8 +243,8 @@
             <label class="bt-field"><span>结束</span><input type="date" id="bt-end" required></label>
           </fieldset>
           <fieldset class="bt-group"><legend>测什么</legend>
-            <label class="bt-check"><input type="radio" name="bt-mode" value="fullplan" checked> 完整计划：照结论卡片的进场、止损、第一目标、股数下单</label>
-            <label class="bt-check off"><input type="radio" name="bt-mode" disabled> 逐个关掉盈亏比 / 目标 / 仓位 <em>第二期</em></label>
+            <label class="bt-check"><input type="radio" name="bt-mode" value="fullplan" checked> 完整计划：照结论卡片的进场、止损、第一阻力、股数下单</label>
+            <label class="bt-check off"><input type="radio" name="bt-mode" disabled> 逐个关掉盈亏比 / 阻力位 / 仓位 <em>第二期</em></label>
             <label class="bt-check off"><input type="radio" name="bt-mode" disabled> 随机进场对照 <em>第二期</em></label>
             <label class="bt-check off"><input type="radio" name="bt-mode" disabled> 参数网格、敏感度 <em>第二期</em></label>
           </fieldset>
@@ -261,7 +261,7 @@
               <select id="bt-floor"><option value="0">不用</option><option value="0.5">0.5 个 ATR</option><option value="1">1 个 ATR</option></select></label>
             <label class="bt-field"><span>手续费 %（每边） <i class="bt-own" title="回测自己定的">脚本自定</i></span><input type="number" id="bt-cost" min="0" max="1" step="any"></label>
             <label class="bt-check"><input type="checkbox" id="bt-rr"> 盈亏比不到 3:1 不做</label>
-            <label class="bt-check"><input type="checkbox" id="bt-targets"> 看第一目标（P25：到了中长线完好就继续拿，不完好就走；关掉 = 拿到止损或失效）</label>
+            <label class="bt-check"><input type="checkbox" id="bt-targets"> 看第一阻力（P25：到了中长线完好就继续拿，不完好就走；关掉 = 拿到止损或失效）</label>
           </fieldset>
         </form>
         <section class="bt-history" aria-label="运行记录">
@@ -287,7 +287,7 @@
       </div>
     </aside>
     <main class="bt-main" id="bt-main" aria-label="回测结果">
-      <div class="bt-empty" id="bt-empty"><p>左边选好标的和时间段，点「运行回测」。</p><p>每天的计划有缓存的票几秒出结果；只改执行参数（止损、仓位、目标……）重跑也是几秒。</p></div>
+      <div class="bt-empty" id="bt-empty"><p>左边选好标的和时间段，点「运行回测」。</p><p>每天的计划有缓存的票几秒出结果；只改执行参数（止损、仓位、阻力位……）重跑也是几秒。</p></div>
       <div id="bt-result" hidden></div>
     </main>
   </div>

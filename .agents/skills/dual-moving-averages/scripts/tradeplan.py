@@ -275,9 +275,9 @@ def at_target_line(key: str, targets: list[Target]) -> str | None:
         return None
     t1 = _f(targets[0].price)
     if holds_past_target(key):
-        return (f"到第一目标 {t1} 不是自动离场：中长线完好（现在是{key}）就继续拿，按止损和失效离场；"
-                "到时 60/120 已不是稳定上涨或加速上涨，就在目标位走（P25）")
-    return (f"到第一目标 {t1}：现在是{key}，中长线不算完好，到了就在目标位走；"
+        return (f"到第一阻力 {t1} 不是自动离场：中长线完好（现在是{key}）就继续拿，按止损和失效离场；"
+                "到时 60/120 已不是稳定上涨或加速上涨，就在这里走（P25）")
+    return (f"到第一阻力 {t1}：现在是{key}，中长线不算完好，到了就在这里走；"
             "到时已经是稳定上涨或加速上涨，就继续拿，按止损和失效离场（P25）")
 
 
@@ -422,7 +422,7 @@ def _hold_double_death(c: rl.Ctx) -> Stop:
 
 DOWN_KEYS = ("稳定下跌", "加速下跌")
 DOWN_NO_STOP = "下跌趋势里下方没有均线托底，止损不靠均线：反弹到 EMA20 一带就是离场点"
-DOWN_NO_TARGET = "下跌趋势还没拐头向上，持仓不找目标位：上方的缺口、均线密集是拐头向上以后才当目标的（P25）"
+DOWN_NO_TARGET = "下跌趋势还没拐头向上，持仓不找阻力位：上方的缺口、均线密集是拐头向上以后才当阻力位看的（P25）"
 
 
 def plan_key(c: rl.Ctx) -> str:
@@ -466,9 +466,9 @@ def _plan(c: rl.Ctx, key: str, entry: Entry | None, stop: Stop | None, ref: floa
     targets = find_targets(c.df, c.structure, ref) if ref is not None and aim else []
     mountain = mountain_above(c.profile, ref) if ref is not None else None
     if ref is not None and targets and targets[0].kind == "前高":
-        notes.append("上方没有缺口和下跌途中形成的均线密集区，目标用最近的波峰（前高），是解读")
+        notes.append("上方没有缺口和下跌途中形成的均线密集区，第一阻力用最近的波峰（前高），是解读")
     elif ref is not None and aim and not targets:
-        notes.append("上方没有缺口、均线密集区，也没有更高的波峰：目标位算不出")
+        notes.append("上方没有缺口、均线密集区，也没有更高的波峰：第一阻力算不出")
     s = stop.price if stop else None
     risk_pct = None if ref is None or s is None or s >= ref else (ref - s) / ref * 100
     at_target = at_target_line(key, targets)
@@ -507,8 +507,8 @@ def verdict_line(p: PlanSet) -> str | None:
     if f.rr_verdict != "不做":
         return None
     t1 = f.targets[0]
-    return (f"盈亏比 {f.rr:.2f}:1，不到 3:1，不做（P24）。第一目标 {_f(t1.price)}（{t1.kind}）。"
-            f"要 3:1，目标得到 {_f(f.rr_gap['target_for_min'])}，或止损收紧到 {_f(f.rr_gap['stop_for_min'])}。")
+    return (f"盈亏比 {f.rr:.2f}:1，不到 3:1，不做（P24）。第一阻力 {_f(t1.price)}（{t1.kind}）。"
+            f"要 3:1，第一阻力得在 {_f(f.rr_gap['target_for_min'])} 以上，或止损收紧到 {_f(f.rr_gap['stop_for_min'])}。")
 
 
 def plan_json(p: PlanSet) -> dict:

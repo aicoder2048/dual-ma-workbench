@@ -87,7 +87,7 @@ function paintSummary(li, s) {
   chg.className = `chg ${s.change_pct >= 0 ? "bullish" : "bearish"}`;
   const trendEl = li.querySelector(".trend");
   trendEl.innerHTML = `<span class="badge ${stanceOf(s.lean)}">${leanName(s.lean)}</span>`;
-  trendEl.title = `模糊判断 ${leanName(s.lean)}；趋势类型 ${s.trend}`;
+  trendEl.title = `大方向 ${leanName(s.lean)}；趋势类型 ${s.trend}`;
 }
 
 $("watchlist").addEventListener("click", async (e) => {

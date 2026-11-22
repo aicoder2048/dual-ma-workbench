@@ -129,7 +129,7 @@ describe("能不能用", () => {
     expect(why(presetState("all"), { ...DAY, frame: "week" }).gapsAll).toBe("缺口按日线算：切回日线看");
     expect(why(presetState("all"), { ...DAY, moreGaps: 0 }).gapsAll).toContain("没有更多");
     const row = layerRows(presetState("structure"), DAY).find((r) => r.key === "gapsAll")!;
-    expect([row.sub, row.why, row.hint]).toEqual([true, null, "离得远、不是目标位的那 6 个也画"]);
+    expect([row.sub, row.why, row.hint]).toEqual([true, null, "离得远、不是阻力位的那 6 个也画"]);
   });
 
   test("「变色提示」是着色的子项：着色关着要先打开；练习里不标；没有颜色数据标不了", () => {

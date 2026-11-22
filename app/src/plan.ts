@@ -77,7 +77,7 @@ export const LEAN_CALL: Record<LeanLabel, string> = {
 /** 模糊判断的历史评估（evaluation.toml 的 H1）：页面上挨着那句话放一个小标签，悬停看结论和出处。 */
 export const LEAN_EVIDENCE = {
   tag: "历史评估：没验证出效果",
-  tip: `历史评估（${EVALUATION_DATE}，H1）：86 只美股和 ETF，2013–2026 年日线，每 5 个交易日记一次模糊判断，看之后 20 个交易日的超额收益，`
+  tip: `历史评估（${EVALUATION_DATE}，H1）：86 只美股和 ETF，2013–2026 年日线，每 5 个交易日记一次大方向，看之后 20 个交易日的超额收益，`
     + "另留一半品种做验证集。主张是偏多之后跑赢、偏空之后跑输；结果偏多之后反而略跑输偏空，明显偏空之后 20 日超额反而最高："
     + "方向和主张相反，或者没用。这句话说的是均线接下来往哪走，不是涨跌预测，下单前当作风险提示。"
     + "出处：skill 的 SKILL.md「评估结论」、references/evaluation.toml [H1]。",
@@ -191,7 +191,7 @@ const TANGLE_END = (l: L, up: string, down: string) =>
   `6 条线现在相差 ${l.spread.toFixed(1)}%（${f2(l.lo)} ~ ${f2(l.hi)}）；超过 ${l.rangeMax}%、或 MA60 不再走平，就不是横盘了：向上散开${up}，向下散开${down}。`;
 /** 过渡的失效：模糊判断到 ±LEAN_CLEAR，方向才算明显。 */
 const TRANSITION_END = (l: L, up: string, down: string) =>
-  `过渡说的是"还没理顺"。模糊判断现在 ${(Math.abs(l.score) < 0.005 ? 0 : l.score).toFixed(2)}，升到 ${l.clear} 以上${up}，降到 -${l.clear} 以下${down}；` +
+  `过渡说的是"还没理顺"。大方向现在 ${(Math.abs(l.score) < 0.005 ? 0 : l.score).toFixed(2)}，升到 ${l.clear} 以上${up}，降到 -${l.clear} 以下${down}；` +
   (l.flip ? `最近的变化门槛：${l.flip}。` : `价位上先看 EMA20 ${f2(l.ema20)} 和 MA20 抵扣价 ${f2(l.drop20)}：两条线最先拐。`);
 /**
  * 空仓计划进场之后的止损：重新跌回 EMA20 下方、EMA20 再拐头向下就走。下跌类的进场条件是站上 EMA20（反过来就是止损）；
@@ -313,7 +313,7 @@ const PLAYS: Record<string, Record<Position, (l: L) => Draft>> = {
   },
   过渡: {
     flat: (l) => ({ action: "条件不满足，不做。", trigger: alignUp(l), stop: null, items: [
-      { label: "等什么", text: l.gold ? `20 线组已经在 60 线组上方（MA60 ${f2(l.ma60)}）；还差多数线一起向上，模糊判断到明显偏多。`
+      { label: "等什么", text: l.gold ? `20 线组已经在 60 线组上方（MA60 ${f2(l.ma60)}）；还差多数线一起向上，大方向到明显偏多。`
         : `排列理顺：20 线组升到 60 线组上方（MA60 ${f2(l.ma60)}），多数线一起向上。`, rules: ["J6", "J15"] },
       { label: "小心", text: "中长期线压着的反弹，多半是假动作。", rules: ["J18"] },
       ENTRY_STOP(l),
@@ -423,13 +423,16 @@ export function playKey(a: Analysis): string {
 const ratio = (x: number) => `${x.toFixed(2)}:1`;
 
 /** 目标位一句：价位、是什么、离现价多远；解读的标出来。 */
+/** 阻力位的序号：第一阻力、第二阻力（LEI 叫目标位，P25）。 */
+const ORDINAL = ["第一", "第二", "第三"];
+
 function targetsText(t: TradePlan, close: number): string {
-  return t.targets.map((x, i) => `目标 ${i + 1}：${x.kind} ${at(x.price, close)}${x.source === "解读" ? "（解读）" : ""}`).join("；");
+  return t.targets.map((x, i) => `${i === 0 ? "第一阻力/目标位" : `${ORDINAL[i] ?? `第 ${i + 1} `}阻力`}：${x.kind} ${at(x.price, close)}${x.source === "解读" ? "（解读）" : ""}`).join("；");
 }
 
 /** 上方最近的筹码山一句（P38）：山脚到山顶这条带，只作参考（docs/adr/0018.md）。 */
 function mountainText(m: PlanMountain, close: number): string {
-  return `上方最近的筹码山：山脚 ${at(m.foot, close)}到山顶 ${f2(m.top)} 这条带。只作参考，不排进第一目标，不算进盈亏比。`;
+  return `上方最近的筹码山：山脚 ${at(m.foot, close)}到山顶 ${f2(m.top)} 这条带。只作参考，不排进第一阻力，不算进盈亏比。`;
 }
 
 /** 触发价离现价还远（docs/adr/0026.md）：明天的触发价只是按明天就拐头算的，盈亏比到价格走近时再算。 */
@@ -441,7 +444,7 @@ export function rrText(t: TradePlan): string | null {
   if (t.entry?.far) return `${RR_FAR}。`;
   if (t.rr_verdict === "不做") {
     const g = t.rr_gap!;
-    return `${ratio(t.rr)}，不到 3:1，不做：目标得到 ${f2(g.target_for_min)}，或止损收紧到 ${f2(g.stop_for_min)}，才够 3:1。`;
+    return `${ratio(t.rr)}，不到 3:1，不做：第一阻力得在 ${f2(g.target_for_min)} 以上，或止损收紧到 ${f2(g.stop_for_min)}，才够 3:1。`;
   }
   return `${ratio(t.rr)}，${t.rr_verdict}（不到 3:1 不做，5:1 以上理想）。`;
 }
@@ -469,8 +472,8 @@ function tradeItems(t: TradePlan, close: number, flat: boolean, dates: string[])
   const out: PlanItem[] = [];
   const e = t.entry;
   if (flat && e?.far) out.push({ label: "触发价", text: farText(e.far, e.price!, close, dates), rules: e.rule.split("、"), evidence: SOLVER_EVIDENCE });
-  if (t.targets.length) out.push({ label: "目标", text: targetsText(t, close), rules: ["P25"] });
-  if (t.at_target) out.push({ label: "到目标", text: t.at_target, rules: ["P25"] });
+  if (t.targets.length) out.push({ label: "阻力位/目标位", text: targetsText(t, close), rules: ["P25"] });
+  if (t.at_target) out.push({ label: "到第一阻力", text: t.at_target, rules: ["P25"] });
   const rr = flat ? rrText(t) : null;
   if (rr) out.push({ label: "盈亏比", text: rr, rules: ["P24"] });
   const size = flat ? sizeText(t) : null;
@@ -545,23 +548,23 @@ export function planFacts(tp: PlanSet, close: number): [string, string, string][
   const price = (x: number | null) => (x === null ? "没有日线价位" : at(x, close));
   const stopText = (s: TradePlan["stop"]) => s ? `${price(s.price)}，${s.reason}（${s.rule}${s.source === "解读" ? "，解读" : ""}）` : null;
   const why = f.notes.join("；");
-  const noTarget = h.notes.find((n) => n.includes("目标")) ?? "上方没有目标位";
+  const noTarget = h.notes.find((n) => /阻力|目标/.test(n)) ?? "上方没有阻力位";
   const out: [string, string, string][] = [
     ["计划.进场", "空仓的进场触发价和条件（交易计划）", f.entry ? `${price(f.entry.price)}，${f.entry.condition}（${f.entry.rule}）` : `空仓不进场：${why || "这套打法不买"}`],
   ];
   if (f.entry) {
     out.push(
       ["计划.止损", "空仓进场后的止损（什么原则进就什么原则出，P23）", stopText(f.stop) ?? "没有止损价"],
-      ["计划.目标", "空仓进场后的目标位（P25）", f.targets.length ? targetsText(f, close) : (f.notes.find((n) => n.includes("目标")) ?? "目标位算不出")],
-      ["计划.到目标", "空仓进场后到了第一目标怎么办（P25）", f.at_target ?? "没有目标位"],
-      ["计划.盈亏比", "盈亏比：(第一目标 − 进场) ÷ (进场 − 止损)，不到 3:1 不做（P24）；触发价离现价还远时到时重算", rrText(f) ?? `算不了：${why}`],
+      ["计划.目标", "空仓进场后的阻力位（P25，LEI 叫目标位）", f.targets.length ? targetsText(f, close) : (f.notes.find((n) => /阻力|目标/.test(n)) ?? "第一阻力算不出")],
+      ["计划.到目标", "空仓进场后到了第一阻力怎么办（P25）", f.at_target ?? "没有阻力位"],
+      ["计划.盈亏比", "盈亏比：(第一阻力 − 进场) ÷ (进场 − 止损)，不到 3:1 不做（P24）；触发价离现价还远时到时重算", rrText(f) ?? `算不了：${why}`],
       ["计划.股数", "建议股数：每笔可承受亏损 ÷ (进场 − 止损)，向下取整（A6）", sizeText(f) ?? `算不了：${why}`],
     );
   }
   out.push(
     ["计划.持仓止损", "持仓的止损（按进场的原则，不按成本）", stopText(h.stop) ?? h.notes.join("；")],
-    ["计划.持仓目标", "持仓的目标位（P25）", h.targets.length ? targetsText(h, close) : noTarget],
-    ["计划.持仓到目标", "持仓到了第一目标怎么办（P25）", h.at_target ?? noTarget],
+    ["计划.持仓目标", "持仓的阻力位（P25，LEI 叫目标位）", h.targets.length ? targetsText(h, close) : noTarget],
+    ["计划.持仓到目标", "持仓到了第一阻力怎么办（P25）", h.at_target ?? noTarget],
   );
   return out;
 }

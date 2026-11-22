@@ -127,7 +127,7 @@ export function gapBands(gaps, targets, candles) {
     const from = candles.findIndex((c) => c.time >= g.date);
     const target = isTarget(g, targets);
     return { from, to: last, top: g.top, bottom: g.bottom, target, date: g.date,
-      label: `缺口 ${f2(g.bottom)}–${f2(g.top)}${target ? " · 目标位" : ""}` };
+      label: `缺口 ${f2(g.bottom)}–${f2(g.top)}${target ? " · 阻力位" : ""}` };
   });
 }
 
