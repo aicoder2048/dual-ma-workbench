@@ -935,6 +935,8 @@ footer .j-close { font-size: 13px; }
 .dr-next { margin-left: auto; border: 1px solid var(--accent); background: var(--accent); color: var(--on-accent); border-radius: 8px; padding: 3px 12px; font: 600 13px var(--sans); cursor: pointer; }
 .dr-answers { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
 .dr-answers .ok { color: var(--up); } .dr-answers .no { color: var(--down); }
+.dr-answers .dr-alt { display: block; color: var(--muted); font-size: 12px; padding-left: 1.4em; }
+.dr-fill-note { margin: 0 0 6px; color: var(--muted); font-size: 13px; }
 .dr-answer, .dr-hint { margin: 0; }
 .dr-hint { color: var(--neutral); }
 .dr-evidence { margin: 0; padding-left: 18px; display: grid; gap: 3px; color: var(--fg); }

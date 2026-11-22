@@ -414,6 +414,9 @@ const PNL: Record<string, Record<"profit" | "loss", PnlTweak>> = {
   },
 };
 
+/** 九套打法的键（交易计划的 key）。练习的打法补全按它配平、查短语表。 */
+export const PLAY_KEYS = Object.keys(PLAYS);
+
 /** 这份分析该用哪套打法：脚本交易计划的打法键（横盘里埋伏的底线已经破了时是横盘破位）。 */
 export function playKey(a: Analysis): string {
   return a.trade_plan.key;
@@ -490,7 +493,7 @@ function withTrade(items: PlanItem[], extra: PlanItem[]): PlanItem[] {
 }
 
 /** 持仓的结论按打法定，和各打法持仓那句做法说同一件事。浮盈 / 浮亏不改。 */
-const HOLD_VERDICT: Record<string, Verdict> = {
+export const HOLD_VERDICT: Record<string, Verdict> = {
   横盘: "拿着", 横盘破位: "离场", 稳定上涨: "拿着", 加速上涨: "拿着", 多头结构回撤中: "拿着",
   稳定下跌: "减仓", 加速下跌: "减仓", 过渡: "减仓", 空头结构反弹中: "减仓",
 };
