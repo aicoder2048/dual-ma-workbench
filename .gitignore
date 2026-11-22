@@ -29,3 +29,7 @@ private/
 HANDOFF.md
 # 视频、字幕、转写稿、入库条目文件：都是转载内容
 videoes/
+
+# 概念图解的打印版：由 docs/glossary/tools/build-pdf.ts 生成，约 10MB，不进仓库
+docs/glossary/*.pdf
+docs/glossary/tools/.build/

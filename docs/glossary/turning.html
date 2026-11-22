@@ -29,7 +29,7 @@
   <nav class="crumb" aria-label="导航"><a href="index.html">← 概念图解目录</a><span>均线本身</span></nav>
   <header style="display:grid;gap:8px">
     <h1>什么叫拐头</h1>
-    <p class="lede">拐头是<b>均线自己换了方向</b>：原来往下走，今天开始往上（或者反过来）。两种线看的门槛不一样：<b>EMA 看线本身</b>，收盘站上昨天的 EMA 就往上；<b>MA 看抵扣价</b>，收盘高过明天要扣掉的那根就往上。价格站上 MA 线，不等于 MA 拐头。</p>
+    <p class="lede">拐头是<b>均线自己换方向</b>。<b>EMA 看线本身</b>：收盘价站上昨天的 EMA，EMA 就往上。<b>MA 看抵扣价</b>：收盘价高过抵扣价，MA 才往上。</p>
   </header>
 
   <section class="panel">
@@ -99,44 +99,44 @@
   <section class="cases" aria-label="图上 1、2、3 三天">
     <article class="case">
       <h3><span class="n">1</span>站上 EMA20 <span class="verdict yes">EMA 拐头</span></h3>
-      <p>收盘 101.9，昨天的 EMA20 是 101.53。<b>收盘在线上，EMA 就往上</b>，当天就拐（规则 A3）。EMA 只有这一道门槛，所以 LEI 说 EMA 破线即拐头。</p>
+      <p>收盘价 101.9，昨天的 EMA20 是 101.53。<b>收盘价在线上，EMA 当天就往上</b>（规则 A3）。</p>
     </article>
     <article class="case">
       <h3><span class="n">2</span>站上 MA20 线 <span class="verdict no">MA 还没拐</span></h3>
-      <p>收盘 102.0，已经在 MA20 线（101.89）上方，但 MA20 还在往下。这天要扣掉的是 107.6，<b>收盘比抵扣价低，MA 照样往下</b>。线本身不是 MA 的方向门槛。</p>
+      <p>收盘价 102.0，在 MA20 线（101.89）上方。抵扣价 107.6 更高，<b>MA20 照样往下</b>。</p>
     </article>
     <article class="case">
       <h3><span class="n">3</span>高过抵扣价 <span class="verdict yes">MA 拐头</span></h3>
-      <p>这天要扣掉的是 20 根前那根，收盘 103.9。今天收 105.2，<b>比它高，MA20 拐头向上</b>（规则 A1）。前一天收 104.4，抵扣价是 104.8，差一点没拐。</p>
+      <p>收盘价 105.2，高过抵扣价 103.9，<b>MA20 拐头向上</b>（规则 A1）。前一天收 104.4，抵扣价 104.8，差一点没拐。</p>
     </article>
   </section>
 
   <section class="panel read">
     <h2 style="color:var(--ink)">为什么总是 EMA 先拐、MA 后拐</h2>
-    <p>LEI 的原话：视频 C 07:30「先拐头的一定是EMA」（规则 A4）。门槛不同，先后就定了：</p>
+    <p>视频 C 07:30「先拐头的一定是EMA」（规则 A4）。原因是门槛不同：</p>
     <div class="two">
-      <div><h3>EMA 的门槛：线本身</h3><p>价格一越过线，当天就拐。门槛跟着价格走，越近的收盘权重越大。视频 M 02:11「收盘价在EMA20均线上方,EMA20均线就往上走」。</p></div>
-      <div><h3>MA 的门槛：抵扣价</h3><p>要扣的是 20 天前的收盘。跌了一段之后，20 天前的价格往往还在高处（图上是 107、108），反弹得先涨过它们。<b>解读</b>：这就是 MA 慢半拍的原因。</p></div>
+      <div><h3>EMA 的门槛：线本身</h3><p>收盘价越过线，当天就拐。</p></div>
+      <div><h3>MA 的门槛：抵扣价</h3><p>抵扣价是 20 天前的收盘价。跌了一段后，它常在高处（图上是 107、108）。<b>解读</b>：所以 MA 慢半拍。</p></div>
     </div>
-    <p>两个拐头各有用处：MA 的抵扣价今天就在图上，能事先算出"收到多少 MA 就拐"，是预判；EMA 用来验证这个拐头是不是真的，视频 G 13:53「用EMA均线 来验证这个拐头是否有效」。单根线是 EMA 先拐，交叉谁先就不一定了（见 <a href="cross.html">交叉</a>）。</p>
+    <p>MA 的抵扣价今天就在图上，用来预判拐头。EMA 用来验证：视频 G 13:53「用EMA均线 来验证这个拐头是否有效」。交叉谁先不一定，见 <a href="cross.html">交叉</a>。</p>
   </section>
 
   <section class="panel read">
     <h2 style="color:var(--ink)">工作台里的这句话怎么读</h2>
     <p class="quote">"明天收盘站上 EMA20 <span class="num">674.24</span>，EMA20 就拐头向上；站上 MA20 抵扣价 <span class="num">712.20</span>，MA20 就拐头向上"</p>
-    <p>这是 QQQ 2026-11-20 的读数，收盘 <span class="num">608.45</span>，两条线都在往下。句子分两半，各说一条线的门槛：</p>
+    <p>QQQ 2026-11-20，收盘价 <span class="num">608.45</span>，两条线都往下。前后半句各说一条线的门槛。</p>
     <ul style="margin:0;padding-left:18px;display:grid;gap:6px">
-      <li><b>前半句</b>：674.24 是今天的 EMA20。明天收在它上面，EMA20 明天就往上。离现价 +10.8%。</li>
-      <li><b>后半句</b>：712.20 不是 MA20 线（MA20 今天是 678.53），是 MA20 明天要扣掉的那根收盘。明天收在它上面，MA20 才往上。离现价 +17.1%。</li>
-      <li>两个价位都离现价很远，说明明天两条线都不会拐。门槛每天变：EMA 的跟着价格走，MA 的每天换一根。脚本按收盘持平推演，最早约 9 个交易日后，收盘站上 674.24 两条线就能一起拐头，那时要扣的老价格已经低下来了。这个数是推演求解，只当辅助。</li>
-      <li>20 线组两条线一起拐头，就是<a href="key-move.html">关键性波动</a>，加速下跌里等的就是它（还要先有底部构造）。</li>
+      <li><b>前半句</b>：674.24 是今天的 EMA20，离现价 +10.8%。</li>
+      <li><b>后半句</b>：712.20 是 MA20 的抵扣价，不是 MA20 线（678.53）。离现价 +17.1%。</li>
+      <li>两个价位都很远，明天两条线都不拐。脚本按收盘价持平推演：最早约 9 个交易日后，收盘价站上 674.24，两条线能一起拐头。这是推演求解，只当辅助。</li>
+      <li>20 线组两条线一起拐头，就是<a href="key-move.html">关键性波动</a>。加速下跌里等的就是它，前提是先有底部构造。</li>
     </ul>
   </section>
 
-  <p class="mirror"><b>往下拐反过来读</b>：收盘跌破昨天的 EMA，EMA 拐头向下；收盘低于抵扣价，MA 拐头向下。进度表里 EMA 拐头、MA 拐头是两个进度点，排在破线之后（规则 J15）。破线说的是价格穿过线，拐头说的是线换方向，两件事分开看。</p>
+  <p class="mirror"><b>往下拐反过来读</b>：收盘价跌破昨天的 EMA，EMA 拐头向下。收盘价低于抵扣价，MA 拐头向下。进度表里 EMA 拐头、MA 拐头是两个进度点，排在破线之后（规则 J15）。</p>
   <footer class="src">
     <div><b>规则</b>：<span class="tag">A3</span> 收盘高于 EMA(n)，EMA(n) 当天上行，低于则下行。视频 L 03:32「叫做：破缐即拐头」。<span class="tag">A1</span> 收盘高于 MA(n) 的抵扣价，MA(n) 当天上行。<span class="tag">A4</span> 单根线 EMA 先拐、MA 后拐。</div>
-    <div><b>工作台</b>：看大局第 ④ 问进度表的「EMA 拐头」「MA 拐头」两列；② 找打法「等什么」一格；③ 做推演「最近的关键变化」；K 线图「图层 → 着色」的破线拐头信号着色。</div>
+    <div><b>工作台</b>：看大局第 ④ 问进度表「EMA 拐头」「MA 拐头」列；② 找打法「等什么」；③ 做推演「最近的关键变化」；K 线图「图层 → 着色」。</div>
     <div><b>相关</b>：<a href="deduction-price.html">抵扣价</a> · <a href="break-line.html">破线</a> · <a href="five-steps.html">五个进度点</a> · <a href="key-move.html">关键性波动</a></div>
   </footer>
 </div>

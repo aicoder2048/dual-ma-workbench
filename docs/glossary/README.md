@@ -11,3 +11,11 @@
   ```
 
 - 图都是示意，不是真实行情；坐标按同一个价格刻度算。
+
+## 打印版 PDF
+
+```bash
+bun docs/glossary/tools/build-pdf.ts   # 生成 docs/glossary/双均线概念图解.pdf（US Letter，封面 + 目录 + 每个术语一节，带页码）
+```
+
+每页单独渲染再合并，各页自带的样式互不干扰。PDF 约 10MB，不进仓库。

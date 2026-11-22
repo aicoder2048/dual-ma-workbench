@@ -29,7 +29,7 @@
   <nav class="crumb" aria-label="导航"><a href="index.html">← 概念图解目录</a><span>线和线的关系</span></nav>
   <header style="display:grid;gap:8px">
     <h1>交叉和双交叉</h1>
-    <p class="lede">短周期的线穿过长周期的线叫交叉：往上穿是<b>金叉</b>，往下穿是<b>死叉</b>。同一对周期里 MA 和 EMA <b>都穿过去</b>，才叫双交叉，交叉才算确认。只穿了一组，工作台判"不一致"。</p>
+    <p class="lede">短周期的线穿过长周期的线叫交叉。往上穿是<b>金叉</b>，往下穿是<b>死叉</b>。同一对周期的 MA 和 EMA <b>都穿过去</b>，才是双交叉。</p>
   </header>
 
   <section class="panel">
@@ -92,21 +92,21 @@
   <section class="cases" aria-label="三种情况">
     <article class="case">
       <h3><span class="n">1</span>只有一组交叉 <span class="verdict no">不一致</span></h3>
-      <p>MA20 穿过了 MA60，EMA20 还在 EMA60 上面。这是<b>第一个交叉</b>，还不算确认。哪一组先穿不一定，图里是 MA 先。</p>
+      <p>MA20 穿过了 MA60，EMA20 还没穿。这是<b>第一个交叉</b>，不算确认。</p>
     </article>
     <article class="case">
       <h3><span class="n">2</span>两组都交叉 <span class="verdict yes">双死叉</span></h3>
-      <p>EMA20 也穿过了 EMA60。同一对周期的 <b>MA 和 EMA 都交叉</b>，就是双交叉，转折的第三步算确认了。</p>
+      <p>EMA20 也穿过了 EMA60。<b>MA 和 EMA 都交叉</b>，转折第三步确认。</p>
     </article>
     <article class="case">
       <h3>两对周期都交叉 <span class="verdict no">不是双交叉</span></h3>
-      <p>"双"说的是 MA 和 EMA 两种算法，不是两对周期。20/60 交叉、60/120 也交叉，是<b>两对</b>各自的事，要各看各的 MA 和 EMA。</p>
+      <p>"双"指 MA 和 EMA，不指两对周期。20/60 和 60/120 <b>各看各的</b>。</p>
     </article>
   </section>
 
   <section class="panel">
     <h2>看大局第 ④ 问下面的交叉表</h2>
-    <p>表里每行一对周期，写 MA 和 EMA <b>最近一次</b>交叉是金叉还是死叉、哪天、几根前。两边是同一种就判双金叉或双死叉，不是同一种就判<b>不一致</b>。QQQ 2026-11-20：</p>
+    <p>每行一对周期，列 MA 和 EMA <b>最近一次</b>交叉。同向判双金叉或双死叉，不同向判<b>不一致</b>。QQQ 2026-11-20：</p>
     <div class="tbl">
       <table class="qt">
         <thead><tr><th>交叉</th><th>MA 最近</th><th>EMA 最近</th><th>判定</th></tr></thead>
@@ -117,15 +117,14 @@
       </table>
     </div>
     <ul style="margin-top:10px">
-      <li><b>20/60</b>：EMA 10-30 先死叉，MA 11-03 跟上，11-03 起是双死叉。</li>
-      <li><b>60/120</b>：MA60 11-18 下穿 MA120；EMA 那边最近一次交叉还是 2025-05-29 的金叉，EMA60 一直在 EMA120 上面。只有一组交叉，所以判"不一致"。</li>
+      <li><b>60/120</b>：只有 MA 交叉。EMA60 从 2025-05-29 起一直在 EMA120 上面，所以判"不一致"。</li>
     </ul>
   </section>
 
-  <p class="mirror"><b>交叉不是买卖信号</b>。"金叉买、死叉卖"视频里没有这条。交叉在这套方法里有三个用处：转折的第三步（前两步是破线、拐头）、横盘埋伏仓位的底线（20/60 交叉就止损，P3）、分辨真假动作（一组快交叉、另一组离得很远，短期成不了双交叉，J17）。已经双死叉以后的反弹，LEI 看作离场的机会：视频 A 05:34「他已经无法挽回双交叉的命运」（P16）。</p>
+  <p class="mirror"><b>交叉不是买卖信号</b>，视频里没有"金叉买、死叉卖"。交叉有三个用处：转折的第三步（J15），横盘埋伏仓位的止损线（P3），分辨真假动作（J17）。双死叉后的反弹是离场机会：视频 A 05:34「他已经无法挽回双交叉的命运」（P16）。</p>
   <footer class="src">
-    <div><b>规则</b>：<span class="tag">J16</span> 同一对周期的 MA 和 EMA 都交叉才是双交叉，只有一组不算。LEI 讲 TSLA 时就是这么分的：视频 A 10:21「红蓝已经交叉了」，视频 A 10:24「但是EMA的红蓝还没有交叉」。<span class="tag">J15</span> 交叉是转折第三步。<span class="tag">A4</span> 单根线 EMA 先拐，交叉谁先不一定。</div>
-    <div><b>工作台</b>：看大局第 ④ 问的交叉表（判定一列）和进度表的「第一个交叉」「双交叉」两列；② 找打法的格子里写到的「20/60 双死叉」。</div>
+    <div><b>规则</b>：<span class="tag">J16</span> 同一对周期的 MA 和 EMA 都交叉才是双交叉：视频 A 10:21「红蓝已经交叉了」，视频 A 10:24「但是EMA的红蓝还没有交叉」。<span class="tag">J15</span> 交叉是转折第三步。<span class="tag">A4</span> 单根线 EMA 先拐，交叉谁先不一定。</div>
+    <div><b>工作台</b>：看大局第 ④ 问交叉表，进度表「第一个交叉」「双交叉」两列，② 找打法的格子。</div>
     <div><b>相关</b>：<a href="five-steps.html">五个进度点</a> · <a href="arrangement.html">排列</a> · <a href="turning.html">拐头</a> · <a href="break-line.html">破线</a></div>
   </footer>
 </div>
