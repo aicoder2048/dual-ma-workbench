@@ -25,6 +25,11 @@
 .kv th{color:var(--muted);font-weight:600;white-space:nowrap}
 .kv td.num{font-family:var(--mono);font-variant-numeric:tabular-nums;white-space:nowrap}
 .tblwrap{overflow-x:auto}
+.dedl{fill:none;stroke:var(--ma);stroke-width:2.4}
+.dedp{fill:var(--panel);stroke:var(--ma);stroke-width:2} .dedp.hit{fill:var(--ma)}
+.lv{stroke:var(--ema);stroke-width:2} .lv-l{fill:var(--ema)}
+.now{stroke:var(--muted);stroke-width:1.4;stroke-dasharray:6 4} .now-l{fill:var(--muted)}
+.ded-l{fill:var(--ma)} .day9{fill:var(--ma);fill-opacity:.08}
 </style>
 </head>
 <body>
@@ -131,7 +136,53 @@
         <tr><th>MA60 扣价</th><td class="num">716.43</td><td class="num">+17.7%</td><td>过了抵扣价，MA60 跟着拐（第 2 个动作），转多</td></tr>
       </table>
     </div>
-    <p style="margin-top:10px">最近的门槛在 10% 以外，眼下的涨跌都是随机波动。712.20 只是<b>明天</b>的门槛。抵扣价每天后移一根，几天后就扣到低价。按收盘持平推演，最早约 9 个交易日后收盘站上 674.24，20 线组才一起拐头（<span class="tag">ADR 0026</span>）。</p>
+    <p style="margin-top:10px">最近的门槛在 10% 以外，眼下的涨跌都是随机波动。712.20 只是<b>明天</b>的门槛：MA20 每天扣掉一根旧收盘价，要扣的价天天在变（下图）。图里的推演假设<b>收盘持平</b>：价格先涨到 674.24，之后每天收盘都停在这个价不动，只用来算门槛，不是预测（<span class="tag">ADR 0026</span>）。</p>
+  </section>
+
+  <section class="panel">
+    <h2>往后 10 天 MA20 要扣的价（QQQ 2026-11-20，真实收盘价）：第 9 天才低于 674.24</h2>
+    <div class="chart">
+      <svg viewBox="0 10 940 300" role="img" aria-label="折线：往后 10 个交易日 MA20 每天要扣掉的收盘价，从明天的 712.20 起，前 8 天都在 674.24 上方，第 9 天降到 647.05，第一次低于 674.24。水平线 674.24 是 EMA20，也是推演用的持平价；最下面水平线是现价 608.45">
+<line class="grid" x1="60" y1="210.4" x2="880" y2="210.4"/><text class="tick" x="54" y="214.4" text-anchor="end">620</text>
+<line class="grid" x1="60" y1="151.1" x2="880" y2="151.1"/><text class="tick" x="54" y="155.1" text-anchor="end">660</text>
+<line class="grid" x1="60" y1="91.9" x2="880" y2="91.9"/><text class="tick" x="54" y="95.9" text-anchor="end">700</text>
+<rect class="day9" x="722" y="36" width="60" height="204.0" rx="4"/>
+<line class="lv" x1="60" y1="130.0" x2="880" y2="130.0"/>
+<text class="lbl lv-l" x="884" y="134.0">674.24</text>
+<line class="now" x1="60" y1="227.5" x2="880" y2="227.5"/>
+<text class="lbl now-l" x="884" y="231.5">608.45</text>
+<polyline class="dedl" points="80.0,73.8 164.0,60.4 248.0,53.9 332.0,69.1 416.0,105.9 500.0,119.9 584.0,113.7 668.0,103.8 752.0,170.3 836.0,156.9"/>
+<circle class="dedp" cx="80.0" cy="73.8" r="4"/>
+<text class="tick" x="80.0" y="260.0" text-anchor="middle">1</text>
+<circle class="dedp" cx="164.0" cy="60.4" r="4"/>
+<text class="tick" x="164.0" y="260.0" text-anchor="middle">2</text>
+<circle class="dedp" cx="248.0" cy="53.9" r="4"/>
+<text class="tick" x="248.0" y="260.0" text-anchor="middle">3</text>
+<circle class="dedp" cx="332.0" cy="69.1" r="4"/>
+<text class="tick" x="332.0" y="260.0" text-anchor="middle">4</text>
+<circle class="dedp" cx="416.0" cy="105.9" r="4"/>
+<text class="tick" x="416.0" y="260.0" text-anchor="middle">5</text>
+<circle class="dedp" cx="500.0" cy="119.9" r="4"/>
+<text class="tick" x="500.0" y="260.0" text-anchor="middle">6</text>
+<circle class="dedp" cx="584.0" cy="113.7" r="4"/>
+<text class="tick" x="584.0" y="260.0" text-anchor="middle">7</text>
+<circle class="dedp" cx="668.0" cy="103.8" r="4"/>
+<text class="tick" x="668.0" y="260.0" text-anchor="middle">8</text>
+<circle class="dedp hit" cx="752.0" cy="170.3" r="5"/>
+<text class="tick" x="752.0" y="260.0" text-anchor="middle">9</text>
+<circle class="dedp" cx="836.0" cy="156.9" r="4"/>
+<text class="tick" x="836.0" y="260.0" text-anchor="middle">10</text>
+<text class="lbl ded-l" x="80.0" y="63.8" text-anchor="middle">712.20（明天）</text>
+<text class="lbl ded-l" x="752.0" y="190.3" text-anchor="middle">647.05</text>
+<text class="note" x="716.0" y="30" text-anchor="end">第 9 天：要扣的价第一次低于 674.24 → MA20 也向上</text>
+<text class="note" x="470" y="280.0" text-anchor="middle">往后第几个交易日</text>
+      </svg>
+    </div>
+    <div class="legend">
+      <span><i style="border-color:var(--ma)"></i>MA20 每天要扣的收盘价（抵扣价，20 个交易日前的收盘）</span>
+      <span><i style="border-color:var(--ema)"></i>674.24：EMA20，也是推演的持平价</span>
+      <span><i style="border-color:var(--muted);border-top-style:dashed"></i>现价 608.45</span>
+    </div>
   </section>
 
   <p class="mirror"><b>上涨里反过来</b>：收盘跌破 EMA20，EMA20 先拐向下；再跌破 MA20 抵扣价，MA20 跟着向下。<b>为什么叫"关键"</b>：顶底构造只是路牌，进出都等这一下（P9）。出现了就盯紧。动手还要满足打法的其他条件，比如加速下跌要先有底部构造。</p>

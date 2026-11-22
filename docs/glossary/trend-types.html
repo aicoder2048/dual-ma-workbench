@@ -8,19 +8,27 @@
 <link rel="stylesheet" href="glossary.css">
 <style>
 .wrap{grid-template-columns:minmax(0,1fr)} /* glossary.css 的 .wrap 没设列宽，图的 min-width 会把窄屏撑宽 */
-:root{--l60:#2f5fd0;--l120:#0f8a8a}
-@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--l60:#7ea2ff;--l120:#4cc9c9}}
-:root[data-theme="dark"]{--l60:#7ea2ff;--l120:#4cc9c9}
+:root{--l60:#2f5fd0;--l120:#0f8a8a;--l20:#8a4fd0}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--l60:#7ea2ff;--l120:#4cc9c9;--l20:#c4a0ff}}
+:root[data-theme="dark"]{--l60:#7ea2ff;--l120:#4cc9c9;--l20:#c4a0ff}
 .cell{fill:none;stroke:var(--line);stroke-width:1}
 .cell-t{fill:var(--ink);font:700 15px var(--font)}
 .cell-c{fill:var(--ink);font:600 13px var(--font)}
+.cell-c2{fill:var(--ink);font:600 12px var(--font)} .note2{fill:var(--muted);font-size:12px}
 .l60{fill:none;stroke:var(--l60);stroke-width:3.2;stroke-linecap:round}
 .l120{fill:none;stroke:var(--l120);stroke-width:3.2;stroke-linecap:round;stroke-dasharray:8 4}
-.l60-l{fill:var(--l60)} .l120-l{fill:var(--l120)}
+.l60-l{fill:var(--l60)} .l120-l{fill:var(--l120)} .l20-l{fill:var(--l20)}
+.l20{fill:none;stroke:var(--l20);stroke-width:1.8;stroke-linecap:round}
 .clock{fill:none;stroke:var(--muted);stroke-width:1.2}
 .clock-tk{stroke:var(--muted);stroke-width:1.2}
 .hand{stroke:var(--ink);stroke-width:2.5;stroke-linecap:round}
 .hub{fill:var(--ink)}
+.fl-q{fill:var(--panel);stroke:var(--muted);stroke-width:1.2}
+.fl-r{fill:var(--bg);stroke:var(--ma);stroke-width:1.6}
+.fl-qt{fill:var(--ink);font:600 14px var(--font)} .fl-qs{fill:var(--muted);font-size:13px}
+.fl-rt{fill:var(--ink);font:700 15px var(--font)} .fl-rs{fill:var(--muted);font-size:13px}
+.fl-arr{stroke:var(--muted);stroke-width:1.5} .fl-headp{fill:var(--muted)}
+.fl-yes{fill:var(--ink);font:600 13px var(--font)}
 .cases.five{grid-template-columns:repeat(auto-fill,minmax(260px,1fr))}
 .tt-tbl{width:100%;border-collapse:collapse;font-size:14px}
 .tt-tbl th,.tt-tbl td{padding:8px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
@@ -192,13 +200,112 @@
   </section>
 
   <section class="panel">
-    <h2>"类型·阶段"怎么读</h2>
-    <div class="read"><span class="t">加速下跌</span><span class="dot-sep">·</span><span class="s">延伸</span><small>QQQ 2026-11-20 顶上「趋势类型」小格</small></div>
+    <h2>五种过渡状态里 20、60、120 三条线的样子（示意）</h2>
+    <div class="chart">
+      <svg viewBox="0 58 910 284" role="img" aria-label="五个小图：空头结构反弹中，60 在 120 上方但已向下，20 跌破 60 后往上弹；多头结构回撤中是它的镜像；顶部转折中，60 在 120 上方向下，20 一路往下；底部转折中是它的镜像；失序，60 和 120 交叉缠绕、方向说不清">
+<rect class="cell" x="6" y="66" width="170" height="268" rx="8"/>
+<text class="cell-t" x="91.0" y="92" text-anchor="middle">空头结构反弹中</text>
+<path class="l120" d="M20.0,215 Q80.0,195 142.0,190"/><path class="l60" d="M20.0,190 Q75.0,132 142.0,165"/><path class="l20" d="M20.0,172 C52.0,112 84.0,186 114.0,214 Q130.0,224 142.0,206"/>
+<text class="lbl l60-l" x="146" y="169">60</text><text class="lbl l120-l" x="146" y="194">120</text><text class="lbl l20-l" x="146" y="210">20</text>
+<text class="cell-c2" x="91.0" y="288" text-anchor="middle">60 在 120 上方，60 向下</text><text class="note2" x="91.0" y="308" text-anchor="middle">20/60 双死叉后往上弹</text>
+<rect class="cell" x="188" y="66" width="170" height="268" rx="8"/>
+<text class="cell-t" x="273.0" y="92" text-anchor="middle">多头结构回撤中</text>
+<path class="l120" d="M202.0,145 Q262.0,165 324.0,170"/><path class="l60" d="M202.0,170 Q257.0,228 324.0,195"/><path class="l20" d="M202.0,188 C234.0,248 266.0,174 296.0,146 Q312.0,136 324.0,154"/>
+<text class="lbl l60-l" x="328" y="199">60</text><text class="lbl l120-l" x="328" y="174">120</text><text class="lbl l20-l" x="328" y="158">20</text>
+<text class="cell-c2" x="273.0" y="288" text-anchor="middle">60 在 120 下方，60 向上</text><text class="note2" x="273.0" y="308" text-anchor="middle">20/60 双金叉后往下回</text>
+<rect class="cell" x="370" y="66" width="170" height="268" rx="8"/>
+<text class="cell-t" x="455.0" y="92" text-anchor="middle">顶部转折中</text>
+<path class="l120" d="M384.0,215 Q444.0,190 506.0,182"/><path class="l60" d="M384.0,186 Q436.0,128 506.0,158"/><path class="l20" d="M384.0,162 C416.0,108 456.0,150 506.0,216"/>
+<text class="lbl l60-l" x="510" y="162">60</text><text class="lbl l120-l" x="510" y="186">120</text><text class="lbl l20-l" x="510" y="220">20</text>
+<text class="cell-c2" x="455.0" y="288" text-anchor="middle">60 在 120 上方，60 向下</text><text class="note2" x="455.0" y="308" text-anchor="middle">20 还在往下，没有反弹</text>
+<rect class="cell" x="552" y="66" width="170" height="268" rx="8"/>
+<text class="cell-t" x="637.0" y="92" text-anchor="middle">底部转折中</text>
+<path class="l120" d="M566.0,145 Q626.0,170 688.0,178"/><path class="l60" d="M566.0,174 Q618.0,232 688.0,202"/><path class="l20" d="M566.0,198 C598.0,252 638.0,210 688.0,144"/>
+<text class="lbl l60-l" x="692" y="206">60</text><text class="lbl l120-l" x="692" y="182">120</text><text class="lbl l20-l" x="692" y="148">20</text>
+<text class="cell-c2" x="637.0" y="288" text-anchor="middle">60 在 120 下方，60 向上</text><text class="note2" x="637.0" y="308" text-anchor="middle">20 还在往上，没有回撤</text>
+<rect class="cell" x="734" y="66" width="170" height="268" rx="8"/>
+<text class="cell-t" x="819.0" y="92" text-anchor="middle">失序</text>
+<path class="l120" d="M748.0,206 Q808.0,186 870.0,150"/><path class="l60" d="M748.0,150 Q798.0,238 870.0,186"/><path class="l20" d="M748.0,176 Q783.0,138 816.0,196 T870.0,214"/>
+<text class="lbl l60-l" x="874" y="190">60</text><text class="lbl l120-l" x="874" y="154">120</text><text class="lbl l20-l" x="874" y="218">20</text>
+<text class="cell-c2" x="819.0" y="288" text-anchor="middle">60/120 次序、方向对不上</text><text class="note2" x="819.0" y="308" text-anchor="middle">不够平、不够密，不算横盘</text>
+      </svg>
+    </div>
+    <div class="legend">
+      <span><i style="border-color:var(--l20)"></i>20 线组（细线）</span>
+      <span><i style="border-color:var(--l60)"></i>60 线组（实线）</span>
+      <span><i style="border-color:var(--l120);border-top-style:dashed"></i>120 线组（虚线）</span>
+      <span>顶部、底部转折中还有一种：60 已到 120 另一边、跟着走了，只差 120 拐过来</span>
+    </div>
+  </section>
+
+  <section class="panel" data-section="&quot;类型·阶段&quot;怎么读">
+    <h2>"类型·阶段"里的阶段怎么定：看 20/60，按顺序问三个问题</h2>
+    <div class="chart">
+      <svg viewBox="0 10 910 246" role="img" aria-label="决策树：① 20 线组走出反向的一步了吗（破线或拐头）？否：延伸。是：② 20/60 交叉了或 20 到了 60 另一边？否：回撤中（下跌叫反弹中），再写穿到哪组线。是：③ 类型是稳定还是加速？稳定：仍叫回撤中（下跌叫反弹中），是深回撤（深反弹）；加速：上涨叫顶部转折中，下跌叫底部转折中">
+<defs><marker id="fl-head" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="fl-headp" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="fl-q" x="10" y="20" width="230" height="70" rx="8"/>
+<text class="fl-qt" x="125.0" y="50.0" text-anchor="middle">① 20 线组走出反向的一步了吗？</text>
+<text class="fl-qs" x="125.0" y="70.0" text-anchor="middle">（破线或拐头）</text>
+<rect class="fl-q" x="300" y="20" width="230" height="70" rx="8"/>
+<text class="fl-qt" x="415.0" y="50.0" text-anchor="middle">② 20/60 交叉了，</text>
+<text class="fl-qt" x="415.0" y="70.0" text-anchor="middle">或 20 到了 60 另一边？</text>
+<rect class="fl-q" x="590" y="20" width="310" height="70" rx="8"/>
+<text class="fl-qt" x="745.0" y="60.0" text-anchor="middle">③ 类型是稳定还是加速？</text>
+<line class="fl-arr" x1="240" y1="55" x2="296" y2="55" marker-end="url(#fl-head)"/><text class="fl-yes" x="268" y="47" text-anchor="middle">是</text>
+<line class="fl-arr" x1="530" y1="55" x2="586" y2="55" marker-end="url(#fl-head)"/><text class="fl-yes" x="558" y="47" text-anchor="middle">是</text>
+<line class="fl-arr" x1="125" y1="90" x2="125" y2="146" marker-end="url(#fl-head)"/><text class="fl-yes" x="133" y="123" text-anchor="start">否</text>
+<line class="fl-arr" x1="415" y1="90" x2="415" y2="146" marker-end="url(#fl-head)"/><text class="fl-yes" x="423" y="123" text-anchor="start">否</text>
+<line class="fl-arr" x1="667" y1="90" x2="667" y2="146" marker-end="url(#fl-head)"/><text class="fl-yes" x="675" y="123" text-anchor="start">稳定</text>
+<line class="fl-arr" x1="822" y1="90" x2="822" y2="146" marker-end="url(#fl-head)"/><text class="fl-yes" x="830" y="123" text-anchor="start">加速</text>
+<rect class="fl-r" x="10" y="150" width="230" height="96" rx="8"/>
+<text class="fl-rt" x="125.0" y="183.0" text-anchor="middle">延伸</text>
+<text class="fl-rs" x="125.0" y="203.0" text-anchor="middle">20 线组还在类型那一边</text>
+<text class="fl-rs" x="125.0" y="223.0" text-anchor="middle">（不等于趋势刚开始）</text>
+<rect class="fl-r" x="300" y="150" width="230" height="96" rx="8"/>
+<text class="fl-rt" x="415.0" y="183.0" text-anchor="middle">回撤中（下跌叫反弹中）</text>
+<text class="fl-rs" x="415.0" y="203.0" text-anchor="middle">再写穿到哪组线：</text>
+<text class="fl-rs" x="415.0" y="223.0" text-anchor="middle">跌破 20 → 跌破 60 → 击穿 120</text>
+<rect class="fl-r" x="590" y="150" width="150" height="96" rx="8"/>
+<text class="fl-rt" x="665.0" y="176.0" text-anchor="middle">仍叫回撤中</text>
+<text class="fl-rs" x="665.0" y="195.0" text-anchor="middle">（下跌叫反弹中）</text>
+<text class="fl-rs" x="665.0" y="214.0" text-anchor="middle">是深回撤（深反弹）</text>
+<text class="fl-rs" x="665.0" y="233.0" text-anchor="middle">类型还由 60/120 定</text>
+<rect class="fl-r" x="750" y="150" width="150" height="96" rx="8"/>
+<text class="fl-rt" x="825.0" y="183.0" text-anchor="middle">转折中</text>
+<text class="fl-rs" x="825.0" y="203.0" text-anchor="middle">上涨叫顶部转折中</text>
+<text class="fl-rs" x="825.0" y="223.0" text-anchor="middle">下跌叫底部转折中</text>
+      </svg>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>"延伸"不等于刚开始：加速另写出现在趋势哪一头（示意）</h2>
+    <div class="chart">
+      <svg viewBox="0 0 900 246" role="img" aria-label="两个小图：左边起点，60 刚翻到 120 上方就陡起来，最近 60/120 还没排好；右边末端，60/120 早已平行向上，后来 60 才突然变陡">
+<rect class="cell" x="10" y="8" width="430" height="230" rx="8"/>
+<text class="cell-t" x="225" y="32" text-anchor="middle">加速出现在趋势刚开始（起点）</text>
+<path class="l120" d="M30,150 Q120,168 230,150 Q300,138 400,120"/><path class="l60" d="M30,175 Q150,190 250,150 Q330,110 400,40"/>
+<text class="cell-c2" x="225" y="208" text-anchor="middle">60 刚翻到 120 上方就陡起来</text><text class="note2" x="225" y="226" text-anchor="middle">最近 60/120 还没排好</text>
+<rect class="cell" x="470" y="8" width="430" height="230" rx="8"/>
+<text class="cell-t" x="685" y="32" text-anchor="middle">加速出现在趋势即将结束（末端）</text>
+<path class="l120" d="M480,180 L850,90"/><path class="l60" d="M480,160 L760,90 Q820,72 850,30"/>
+<text class="cell-c2" x="685" y="208" text-anchor="middle">60/120 早已平行向上</text><text class="note2" x="685" y="226" text-anchor="middle">后来 60 才突然变陡</text>
+<text class="lbl l60-l" x="404" y="44">60</text><text class="lbl l120-l" x="404" y="124">120</text>
+<text class="lbl l60-l" x="854" y="34">60</text><text class="lbl l120-l" x="854" y="94">120</text>
+      </svg>
+    </div>
+    <div class="legend">
+      <span><i style="border-color:var(--l60)"></i>60 线组（实线）</span>
+      <span><i style="border-color:var(--l120);border-top-style:dashed"></i>120 线组（虚线）</span>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h3>例子：QQQ 2026-11-20</h3>
+    <div class="read"><span class="t">加速下跌</span><span class="dot-sep">·</span><span class="s">延伸</span><small>顶上「趋势类型」小格</small></div>
     <ul>
-      <li><b>点前面是类型</b>。QQQ 的 MA60 是 −9°，约 3 点半，没到 5 点钟。但离 20 线 −10.3%，乖离在自身历史 0% 分位，算加速下跌。</li>
-      <li><b>点后面是阶段</b>，看 20/60。没走出反向的一步是<b>延伸</b>。走了破线或拐头是<b>回撤中</b>（下跌叫<b>反弹中</b>），并写出穿到哪组线。QQQ 的 20/60 进度 0/5，是延伸。</li>
-      <li>20/60 已交叉或到了另一边：稳定类型里仍叫回撤中（反弹中），是深回撤。加速类型里叫<b>顶部转折中</b>或<b>底部转折中</b>。</li>
-      <li>"延伸"不等于趋势刚开始。加速在哪一头另写成"加速出现在趋势刚开始 / 即将结束"。</li>
+      <li><b>类型</b>：MA60 −9°，约 3 点半，没到 5 点钟；但离 20 线 −10.3%，乖离在自身历史 0% 分位，所以算加速下跌。</li>
+      <li><b>阶段</b>：20/60 转折进度 0/5，问题 ① 答"否"，所以是延伸。</li>
     </ul>
   </section>
 

@@ -29,6 +29,9 @@ md = md.replace(/\n(#{1,2} )/g, (m, h, off) => {
   const prev = md.slice(Math.max(0, off - 200), off);
   return /\n# [^\n]*\n\s*$/.test(prev) ? m : `\n${BREAK}${h}`;
 });
+// 图和紧跟的图注包进一个 minipage，不让图注一个人掉到下一页顶上
+md = md.replace(/^(!\[\]\([^)]+\))\n\n(图 \d+　[^\n]*)$/gm,
+  "```{=latex}\n\\par\\noindent\\begin{minipage}{\\linewidth}\n```\n\n$1\n\n$2\n\n```{=latex}\n\\end{minipage}\\par\\medskip\n```");
 // 中西文交界的自动间距（xCJKecglue）会在「（P25）」「0.74，」里多出空格；源文本该有的空格已经写了，这里关掉。
 // techdoc 说关它会和代码高亮冲突，这份文档没有代码块。
 md = "```{=latex}\n\\xeCJKsetup{CJKecglue={\\hskip 0pt}}\n```\n\n" + md;
