@@ -810,6 +810,42 @@ function checkAccel(v) {
 /** 稳定类型里 20/60 已交叉（regime.crossed，J7）：仍叫回撤中 / 反弹中，是深回撤 / 深反弹。 */
 export const deepWord = (r) => (r.crossed && (r.stage === "回撤中" || r.stage === "反弹中") ? (r.stage === "回撤中" ? "深回撤" : "深反弹") : null);
 
+/**
+ * 阶段决策树（J7、J15）：三问，高亮当天走的那条路。和概念图解「五种趋势类型」页的树同一套问法。
+ * 结果：延伸 / 回撤中（反弹中） / 深回撤（深反弹） / 转折中。横盘、过渡状态没有阶段，不画。
+ */
+export function stageTree(r) {
+  if (!r.stage) return "";
+  const down = r.direction < 0;
+  const deep = deepWord(r);
+  const res = r.stage === "延伸" ? "延伸" : r.stage === "转折中" ? "转折中" : deep ? "深回撤" : "回撤中";
+  const lit = { q1: res !== "延伸", q2: res === "深回撤" || res === "转折中", st: res === "深回撤", ac: res === "转折中" };
+  const box = (x, y, w, h, cls, on, lines) => `<rect class="${cls}${on ? " on" : ""}" x="${x}" y="${y}" width="${w}" height="${h}" rx="7"/>`
+    + lines.map((t, i) => `<text class="${i ? "st-sub" : "st-tt"}" x="${x + w / 2}" y="${y + h / 2 - (lines.length - 1) * 8 + i * 16 + 5}" text-anchor="middle">${t}</text>`).join("");
+  const arrow = (x1, y1, x2, y2, on, label, lx, ly) => `<line class="st-arr${on ? " on" : ""}" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" marker-end="url(#st-head${on ? "-on" : ""})"/>`
+    + `<text class="st-lab${on ? " on" : ""}" x="${lx}" y="${ly}">${label}</text>`;
+  const back = down ? "反弹中" : "回撤中";
+  const svg = `<svg class="stage-tree" data-result="${res}" viewBox="0 0 640 190" role="img" aria-label="阶段决策树，今天落在 ${res}">
+    <defs><marker id="st-head" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path class="st-hd" d="M0,0 L10,5 L0,10 z"/></marker>
+    <marker id="st-head-on" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path class="st-hd on" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+    ${box(4, 6, 180, 54, "st-q", true, ["① 20 线组走出反向一步？", "破线或拐头"])}
+    ${box(230, 6, 180, 54, "st-q", lit.q1, ["② 20/60 交叉了？", "或 20 到了 60 另一边"])}
+    ${box(456, 6, 180, 54, "st-q", lit.q2, ["③ 稳定还是加速？"])}
+    ${arrow(184, 33, 228, 33, lit.q1, "是", 199, 26)}
+    ${arrow(410, 33, 454, 33, lit.q2, "是", 425, 26)}
+    ${arrow(94, 60, 94, 112, res === "延伸", "否", 100, 90)}
+    ${arrow(320, 60, 320, 112, res === "回撤中", "否", 326, 90)}
+    ${arrow(500, 60, 500, 112, lit.st, "稳定", 506, 90)}
+    ${arrow(592, 60, 592, 112, lit.ac, "加速", 598, 90)}
+    ${box(4, 114, 180, 66, "st-res", res === "延伸", ["延伸", "还在类型那一边"])}
+    ${box(230, 114, 180, 66, "st-res", res === "回撤中", [back, "写穿到哪组线"])}
+    ${box(456, 114, 88, 66, "st-res", lit.st, [down ? "深反弹" : "深回撤", "类型不变"])}
+    ${box(548, 114, 88, 66, "st-res", lit.ac, ["转折中", down ? "底部转折" : "顶部转折"])}
+  </svg>`;
+  const landed = { 延伸: "延伸", 回撤中: back, 深回撤: deep, 转折中: r.name.split("·")[1] }[res];
+  return `<figure class="viz stagetree">${svg}<figcaption>今天走的路高亮：落在「${landed}」</figcaption></figure>`;
+}
+
 function checkStage(v) {
   const r = v.regime;
   const d = DOWN_UP[r.direction] ?? "";
@@ -821,10 +857,10 @@ function checkStage(v) {
     回撤中: deep ? `${back}，20/60 已交叉，但 60/120 还平行、类型不变：是${deep}。` : `${back}，但还没交叉，算回撤，不算转折。`,
     反弹中: deep ? `${back}，20/60 已交叉，但 60/120 还平行、类型不变：是${deep}。` : `${back}，但还没交叉，算反弹，不算转折。`,
     转折中: `加速类型里 20 线组已经交叉，算转折，不再是普通的回撤 / 反弹。`,
-  }[r.stage] ?? "类型没定，阶段按过渡状态看。";
+  }[r.stage] ?? (r.why ? `「${esc(r.name)}」：${esc(r.why)}。60/120 定不出五种类型，打法按这种过渡状态给（J6）。` : "类型没定，阶段按过渡状态看。");
   const rule = r.stage ? `破线、拐头算${word}；交叉以后，稳定类型仍叫${word}（深${word}），加速类型才叫转折（J7、J15）。` : "";
-  return check("④", "20 线组走到哪一步？", `<b>${r.stage ? esc(r.stage) : esc(r.name)}</b>${deep ? `（${deep}）` : ""}${r.depth ? `（${esc(r.depth)}）` : ""}`,
-    leiFiveSteps(v) + `<p class="sub-title">转折进度：第 1–3 步的细账</p>` + fiveSteps(v) + crossTable(v)
+  return check("④", "20 线组走到哪一步？", `<b>${r.stage ? esc(r.stage) : esc(r.name)}</b>${[deep, r.depth && esc(r.depth)].some(Boolean) ? `（${[deep, r.depth && esc(r.depth)].filter(Boolean).join("，")}）` : ""}`,
+    stageTree(r) + leiFiveSteps(v) + `<p class="sub-title">转折进度：第 1–3 步的细账</p>` + fiveSteps(v) + crossTable(v)
     + soLine(`${so}${rule}`));
 }
 

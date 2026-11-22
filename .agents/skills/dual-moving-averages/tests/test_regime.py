@@ -140,3 +140,36 @@ def test_steady_down_with_20_60_crossed_is_flagged_deep():
 def test_ordinary_pullback_is_not_flagged_deep():
     r = regime_of("SPY", "2024-04-19")
     assert (r["stage"], r["crossed"]) == ("回撤中", False)
+
+
+# ---------- 过渡状态写明为什么（照 classify 的条件） ----------
+
+from regime import Transition, transition_why
+
+
+def test_bounce_why_names_the_broken_structure():
+    w = transition_why(Transition.BEAR_BOUNCE, order=1, dir60=-1, dir120=1)
+    assert "60 线组已经向下" in w and "反弹" in w
+
+
+def test_topping_has_two_variants():
+    a = transition_why(Transition.TOPPING, order=1, dir60=-1, dir120=1)
+    b = transition_why(Transition.TOPPING, order=-1, dir60=-1, dir120=1)
+    assert "60 线组已经向下" in a and "最后一段" not in a
+    assert "只差 120" in b and "最后一段" in b
+
+
+def test_bottoming_mirrors_topping():
+    assert "只差 120" in transition_why(Transition.BOTTOMING, order=1, dir60=1, dir120=-1)
+    assert "60 线组已经向上" in transition_why(Transition.BOTTOMING, order=-1, dir60=1, dir120=-1)
+
+
+def test_disorder_says_which_condition_fails():
+    assert "次序不一致" in transition_why(Transition.DISORDER, order=0, dir60=1, dir120=1)
+    assert "方向不一致" in transition_why(Transition.DISORDER, order=1, dir60=0, dir120=1)
+
+
+def test_real_bounce_carries_why_and_typed_regimes_do_not():
+    r = regime_of("TSLA", "2021-04-13")
+    assert r["transition"] == "空头结构反弹中" and "反弹" in r["why"]
+    assert regime_of("SPY", "2024-04-19")["why"] is None

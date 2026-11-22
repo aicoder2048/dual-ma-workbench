@@ -307,6 +307,25 @@ def _accel(df: pd.DataFrame, d: int, angle60: float, bias_pctl: float) -> Accel 
     return Accel(phase="末端" if ordered else "起点", by="钟表" if steep else "乖离")
 
 
+def transition_why(t: Transition, order: int, dir60: int, dir120: int) -> str:
+    """过渡状态为什么叫这个名字，照 classify 的条件写（J6，名字是脚本自定的）。"""
+    above = {UP: "60 在 120 上方", DOWN: "60 在 120 下方"}
+    way = {UP: "向上", DOWN: "向下"}
+    if t in (Transition.BEAR_BOUNCE, Transition.BULL_PULLBACK):
+        side, move = ("空头", "往上走：结构已经坏了，这是反弹") if order == UP else ("多头", "往下走：结构已经理顺，这是回撤")
+        return f"{above[order]}，但 60 线组已经{way[-order]}；20/60 已是{side}、20 线组正{move}"
+    if t in (Transition.TOPPING, Transition.BOTTOMING):
+        if dir60 == -order:
+            return f"{above[order]}，但 60 线组已经{way[-order]}：60 先转了向，20/60 不是反弹 / 回撤的样子"
+        return f"{above[order]}、60 线组跟着{way[order]}，只差 120 线组拐过来：转折的最后一段"
+    parts = []
+    if not order:
+        parts.append("MA、EMA 两对的 60/120 次序不一致（一对 60 在上，一对 120 在上）")
+    if not dir60:
+        parts.append("MA60、EMA60 方向不一致，60 线组说不清往哪走")
+    return "；".join(parts) or "60/120 的次序和方向对不上"
+
+
 def classify(df: pd.DataFrame, structure: Structure | None, bias_pctl: float) -> tuple[Regime, PairProgress]:
     row = df.iloc[-1]
     c60, c20 = clock(df, "MA60"), clock(df, "MA20")
@@ -353,5 +372,5 @@ def classify(df: pd.DataFrame, structure: Structure | None, bias_pctl: float) ->
     else:
         t = Transition.DISORDER
     d = {Transition.BULL_PULLBACK: UP, Transition.BEAR_BOUNCE: DOWN}.get(t, 0)
-    return Regime(type=None, stage=None, transition=t, name=t.value, direction=d,
+    return Regime(type=None, stage=None, transition=t, name=t.value, direction=d, why=transition_why(t, order, dir60, dir120),
                   depth=_depth(row, d) if d else None, range=None, accel=None, **common), p20
