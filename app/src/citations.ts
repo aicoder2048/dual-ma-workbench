@@ -301,7 +301,7 @@ export function buildFacts(a: Analysis): Facts {
   put("模糊判断.10天后", `价格不变 ${ln.after.days} 天后的大方向`, `${ln.after.label}（${ln.after.up} 上 · ${ln.after.down} 下）`);
   for (const f of ln.flips) put(`改变判断.${f.line}`, `什么会改变判断（转${f.toward}）：${f.line}`, f.text);
   for (const r of a.rules) put(`规则.${r.id}`, `规则 ${r.id} ${r.name}`, `${r.status}${r.yields_to ? `，${r.yields_to} 优先` : ""}：${r.basis}`);
-  for (const p of a.steps) put(`五步.${p.pair}`, `${p.pair} 的五个进度点（破线、EMA 拐头、MA 拐头、第一个交叉、双交叉）`, stepsText(p));
+  for (const p of a.steps) put(`五步.${p.pair}`, `${p.pair} 的转折进度（破线、EMA 拐头、MA 拐头、第一个交叉、双交叉）`, stepsText(p));
   put("周线.排列", "周线 MA、EMA 排列", a.weekly.available ? `MA ${a.weekly.arr_ma}，EMA ${a.weekly.arr_ema}` : a.weekly.reason);
   put("小时线.排列", "小时线 MA、EMA 排列", a.hourly.available ? `MA ${a.hourly.arr_ma}，EMA ${a.hourly.arr_ema}（到 ${a.hourly.last}）` : a.hourly.reason);
   put("排列.MA", "MA 排列", a.arr_ma);
