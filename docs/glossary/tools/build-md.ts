@@ -149,6 +149,9 @@ for (const g of groups) {
           blocks.push("### 出处", [...c.children].map((d) => `- ${text(d)}`).join("\n"));
           continue;
         }
+        // 插图面板开了新话题时，用 data-section 给合订本补一个小节标题（网页上面板自己的 h2 就是标题）
+        const sec = (c as HTMLElement).dataset?.section;
+        if (sec) blocks.push(`### ${sec}`);
         const parts = flow(c);
         // 只有标题 + 图 + 图例的面板是插图：标题当图注；别的内容照常排，标题当小节
         const figOnly = parts.every((x) => /^(###|⟦FIG|LEGEND:)/.test(x)) && parts.some((x) => x.startsWith("⟦FIG"));
