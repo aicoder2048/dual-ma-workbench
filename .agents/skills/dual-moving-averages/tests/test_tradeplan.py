@@ -47,6 +47,27 @@ def test_without_an_account_only_shares_per_10k_of_risk():
     assert size.shares is None and size.risk_amount is None and size.per_10k == 5000
 
 
+# 仓位占账户 = 每笔愿意亏的比例 ÷ 止损幅度（不需要账户总额）
+def test_account_pct_from_risk_pct_without_an_account():
+    size, _ = tp.size_position(100.0, 98.0, tp.Sizing(risk_pct=1))
+    assert size.stop_pct == pytest.approx(2.0) and size.risk_pct == 1 and size.account_pct == pytest.approx(50.0)
+
+
+def test_account_pct_converts_a_fixed_amount_when_the_account_is_known():
+    size, _ = tp.size_position(100.0, 98.0, tp.Sizing(account=100_000, risk_amount=1000))
+    assert size.risk_pct == pytest.approx(1.0) and size.account_pct == pytest.approx(50.0)
+
+
+def test_no_account_pct_for_a_fixed_amount_without_an_account():
+    size, _ = tp.size_position(100.0, 98.0, tp.Sizing(risk_amount=1000))
+    assert size.shares == 500 and size.risk_pct is None and size.account_pct is None
+
+
+def test_account_pct_can_exceed_100_when_the_stop_is_tight():
+    size, _ = tp.size_position(100.0, 99.6, tp.Sizing(risk_pct=1))
+    assert size.account_pct == pytest.approx(250.0)
+
+
 def test_shares_capped_by_what_the_account_can_buy():
     # 风险 1000 ÷ 0.05 = 20000 股，要 200 万；账户只有 10 万 → 1000 股
     size, _ = tp.size_position(100.0, 99.95, tp.Sizing(account=100_000))

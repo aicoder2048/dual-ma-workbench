@@ -92,6 +92,9 @@ class Size:
     unit_risk: float       # 进场 − 止损
     capped: bool           # 按风险算的股数买不起，按账户能买的最多股数给
     basis: str
+    stop_pct: float        # 止损幅度 %：(进场 − 止损) ÷ 进场
+    risk_pct: float | None     # 每笔愿意亏账户的百分之几；按固定金额又没填账户时算不出，为 None
+    account_pct: float | None  # 仓位占账户 % = risk_pct ÷ stop_pct（不需要账户总额，ADR 0039）；可能超过 100
 
 
 @dataclass(frozen=True)
@@ -162,10 +165,14 @@ def size_position(entry: float | None, stop: float | None, sizing: Sizing) -> tu
     if unit < TICK:
         return None, f"进场 {_f(entry)} 和止损 {_f(stop)} 相差不到 1 分钱，止损没法执行"
     per_10k = math.floor(RISK_UNIT / unit + 1e-9)
+    stop_pct = unit / entry * 100
+    risk_pct = sizing.risk_pct if not sizing.risk_amount else (sizing.risk_amount / sizing.account * 100 if sizing.account else None)
+    account_pct = risk_pct / stop_pct * 100 if risk_pct is not None else None
+    pct = (stop_pct, risk_pct, account_pct)
     amount = sizing.amount()
     if amount is None:
         return Size(None, None, per_10k, unit, False,
-                    f"单位亏损 {_f(unit)}；没填账户，每 1 万元风险对应 {per_10k} 股"), None
+                    f"单位亏损 {_f(unit)}；没填账户，每 1 万元风险对应 {per_10k} 股", *pct), None
     shares = math.floor(amount / unit + 1e-9)
     capped = bool(sizing.account) and shares * entry > sizing.account
     if capped:
@@ -173,7 +180,7 @@ def size_position(entry: float | None, stop: float | None, sizing: Sizing) -> tu
     basis = f"{amount:.0f} ÷ 单位亏损 {_f(unit)} = {shares} 股"
     if capped:
         basis = f"按风险能买 {math.floor(amount / unit + 1e-9)} 股，账户只够 {shares} 股（止损离进场很近）"
-    return Size(shares, amount, per_10k, unit, capped, basis), None
+    return Size(shares, amount, per_10k, unit, capped, basis, *pct), None
 
 
 # ---------- 目标位（P25） ----------
