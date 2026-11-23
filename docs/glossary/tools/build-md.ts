@@ -1,5 +1,5 @@
 /**
- * 从 16 个概念图解页生成一份结构统一的 markdown：docs/glossary/双均线概念图解.md，图存成矢量 PDF 放 figures/。
+ * 从 17 个概念图解页生成一份结构统一的 markdown：docs/glossary/双均线概念图解.md，图存成矢量 PDF 放 figures/。
  * 每个术语同一个模板：一句话定义（引用块）→ 主图和图注 → 怎么判断（对照卡变成一张表）→ 其余说明 → 出处。
  * 用法（仓库根目录）：bun docs/glossary/tools/build-md.ts
  * 注意：会覆盖 双均线概念图解.md。改了 .md 又想保留手改，就别再跑这一步，直接 build-pdf。

@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>什么叫跳空</title>
+<link rel="stylesheet" href="glossary.css">
+<style>
+.wrap{grid-template-columns:minmax(0,1fr)}
+.cell{fill:none;stroke:var(--line);stroke-width:1}
+.cell-t{fill:var(--ink);font:700 15px var(--font)}
+.cell-c2{fill:var(--ink);font:600 13px var(--font)} .note2{fill:var(--muted);font-size:13px}
+.blank{fill:var(--close);fill-opacity:.16}
+.ref{stroke:var(--muted);stroke-width:1.2;stroke-dasharray:5 4;fill:none}
+.rl{fill:var(--muted);font:13px var(--font)} .rl.b{font-weight:600;fill:var(--ink)}
+.panel p{margin:0 0 8px;font-size:14px;color:var(--muted)} .panel p b{color:var(--ink)} .panel p:last-child{margin-bottom:0}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <nav class="crumb" aria-label="导航"><a href="index.html">← 概念图解目录</a><span>交易计划里的价位 · K 线和 K 线的关系</span></nav>
+  <header style="display:grid;gap:8px">
+    <h1>什么叫跳空</h1>
+    <p class="lede">跳空看<b>最高价和最低价</b>：这一根和前一根的价格范围<b>完全不重叠</b>，中间空出一段没成交过的价格。"空"是空白，不是空头：往上、往下都叫跳空。</p>
+  </header>
+
+  <section class="panel">
+    <h2>向下跳空和向上跳空（示意，不是真实行情）</h2>
+    <div class="chart">
+      <svg viewBox="0 0 826 302" role="img" aria-label="左图向下跳空：前一根最低 102，这一根最高 99，中间空出 99 到 102；右图向上跳空：前一根最高 100，这一根最低 103，中间空出 100 到 103">
+<rect class="cell" x="6" y="6" width="400" height="290" rx="8"/><text class="cell-t" x="206" y="30" text-anchor="middle">向下跳空</text>
+<rect class="blank" x="118" y="112.0" width="274" height="36"/>
+<g class="k down"><line class="wick" x1="60" x2="60" y1="52.0" y2="94.0"/><rect x="49" y="58.0" width="22" height="30.0" rx="1.5"/></g>
+<g class="k down"><line class="wick" x1="130" x2="130" y1="70.0" y2="112.0"/><rect x="119" y="76.0" width="22" height="28.8" rx="1.5"/></g>
+<g class="k down"><line class="wick" x1="200" x2="200" y1="148.0" y2="190.0"/><rect x="189" y="152.8" width="22" height="31.2" rx="1.5"/></g>
+<line class="ref" x1="130" x2="392" y1="112.0" y2="112.0"/><line class="ref" x1="200" x2="392" y1="148.0" y2="148.0"/>
+<text class="rl" x="250" y="106.0">前一根最低 102</text><text class="rl" x="250" y="164.0">这一根最高 99</text>
+<text class="rl b" x="250" y="135.0">空白 99–102</text>
+<text class="cell-c2" x="206" y="262" text-anchor="middle">这一根最高价 &lt; 前一根最低价</text><text class="note2" x="206" y="282" text-anchor="middle">空白在上方，没补上的叫缺口</text>
+<rect class="cell" x="420" y="6" width="400" height="290" rx="8"/><text class="cell-t" x="620" y="30" text-anchor="middle">向上跳空</text>
+<rect class="blank" x="532" y="100.0" width="274" height="36"/>
+<g class="k up"><line class="wick" x1="474" x2="474" y1="148.0" y2="190.0"/><rect x="463" y="152.8" width="22" height="31.2" rx="1.5"/></g>
+<g class="k up"><line class="wick" x1="544" x2="544" y1="136.0" y2="172.0"/><rect x="533" y="140.8" width="22" height="26.4" rx="1.5"/></g>
+<g class="k up"><line class="wick" x1="614" x2="614" y1="58.0" y2="100.0"/><rect x="603" y="64.0" width="22" height="30.0" rx="1.5"/></g>
+<line class="ref" x1="544" x2="806" y1="136.0" y2="136.0"/><line class="ref" x1="614" x2="806" y1="100.0" y2="100.0"/>
+<text class="rl" x="664" y="152.0">前一根最高 100</text><text class="rl" x="664" y="94.0">这一根最低 103</text>
+<text class="rl b" x="664" y="123.0">空白 100–103</text>
+<text class="cell-c2" x="620" y="262" text-anchor="middle">这一根最低价 &gt; 前一根最高价</text><text class="note2" x="620" y="282" text-anchor="middle">空白在下方，工作台不画</text>
+      </svg>
+    </div>
+    <div class="legend">
+      <span><i style="border-color:var(--close);opacity:.4;border-top-width:8px;width:14px"></i>空出的那段价格</span>
+      <span><i style="border-color:var(--muted);border-top-style:dashed;border-top-width:2px"></i>两根 K 线各自的边</span>
+    </div>
+  </section>
+
+  <section class="cases" aria-label="三种情况算不算跳空">
+    <article class="case">
+      <h3><span class="n">1</span>低开，但碰到了前一根 <span class="verdict no">不算</span></h3>
+      <p>开盘比前一天收盘低，盘中最高价又回到前一根的最低价以上。<b>开盘价不算数</b>，只看最高价、最低价之间有没有空出一段。</p>
+    </article>
+    <article class="case">
+      <h3><span class="n">2</span>只重叠一点 <span class="verdict no">不算</span></h3>
+      <p>这一根的最高价比前一根的最低价高一点点，两根的影线有重叠。<b>没有空白</b>，就不是跳空。</p>
+    </article>
+    <article class="case">
+      <h3><span class="n">3</span>完全不重叠 <span class="verdict yes">跳空</span></h3>
+      <p>向下：这一根最高价 &lt; 前一根最低价。向上：这一根最低价 &gt; 前一根最高价。空出的那段就是缺口。</p>
+    </article>
+  </section>
+
+  <section class="panel">
+    <h2>工作台怎么用</h2>
+    <p><b>向下跳空</b>：空白留在现价上方。之后价格涨回这段空白叫补；没补上的部分叫<a href="gap.html">缺口</a>，交易计划拿上方最近的那个的下沿当第一阻力（P25）。</p>
+    <p><b>向上跳空</b>：空白留在下方。交易计划只找上方的阻力，所以工作台不画它，规则里也不拿它当支撑或止损。</p>
+    <p><b>两种都是标志性动作</b>：趋势转折、发展、阶段交接时，常出现大量、缺口、假动作（J41，需看图）。视频 I 23:57「任何一个趋势的改变他必须要有标志性动作」。</p>
+  </section>
+
+  <p class="mirror"><b>没有"跳多"的说法</b>：跳空的"空"是空白，和"空头""做空"的"空"不是一个意思。看涨看跌说多头、空头；价格跳过去留下空白，说跳空。</p>
+  <footer class="src">
+    <div><b>规则</b>：<span class="tag">J41</span> 趋势改变要有标志性动作（大量、缺口、假动作）· <span class="tag">P25</span> 第一阻力看缺口或均线密集。</div>
+    <div><b>工作台</b>：K 线图「图层 ▾ → 缺口」画没补的向下缺口，向上缺口不画。</div>
+    <div><b>相关</b>：<a href="gap.html">缺口</a> · <a href="resistance-rr.html">第一阻力 / 目标位和盈亏比</a> · <a href="break-line.html">破线</a></div>
+  </footer>
+</div>
+</body>
+</html>
