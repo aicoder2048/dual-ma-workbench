@@ -40,7 +40,7 @@ md = BREAK + md;
 const dir = mkdtempSync(join(tmpdir(), "glossary-pdf-"));
 const tmp = join(dir, "glossary.md");
 writeFileSync(tmp, md);
-const r = spawnSync("python3", [TECHDOC, OUT, tmp, "--title", "双均线概念图解", "--subtitle", "归雁工作台 · 16 个术语的示意图、判断方法和出处",
+const r = spawnSync("python3", [TECHDOC, OUT, tmp, "--title", "双均线概念图解", "--subtitle", "归雁工作台 · 17 个术语的示意图、判断方法和出处",
   "--meta", `${DATE} 版 · 图都是示意，不是真实行情`, "--toc", "--paper", "letter"], { encoding: "utf8" });
 process.stdout.write(r.stdout); process.stderr.write(r.stderr);
 rmSync(dir, { recursive: true, force: true });
