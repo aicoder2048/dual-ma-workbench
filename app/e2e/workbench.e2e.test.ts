@@ -152,6 +152,11 @@ beforeAll(async () => {
         const a = structuredClone(spy) as Analysis;
         const z = a.trade_plan.flat.size!;
         if (args.includes("--account")) a.trade_plan.flat.size = { ...z, shares: Math.floor(1000 / z.unit_risk), risk_amount: 1000, basis: `1000 ÷ 单位亏损 ${z.unit_risk.toFixed(2)}` };
+        const rp = args.indexOf("--risk-pct"); // 替身照脚本算仓位比例：比例 ÷ 止损幅度（ADR 0039）
+        if (rp >= 0) {
+          const risk = Number(args[rp + 1]), stop = (z.unit_risk / a.trade_plan.flat.entry!.price!) * 100;
+          a.trade_plan.flat.size = { ...a.trade_plan.flat.size!, risk_pct: risk, stop_pct: stop, account_pct: (risk / stop) * 100 };
+        }
         return JSON.stringify({ analysis: a, chart: CHART });
       }
       if (args[0] === "DEEP") { // 稳定上涨里 20/60 已交叉：仍叫回撤中，是深回撤（J7）
@@ -1747,6 +1752,17 @@ describe("中栏：结论 → 看大局 → 找打法 → 做推演", () => {
     await page.click(`${card} [data-pos="holding"]`);
     await shown(["拿着还是走", "盯什么信号", "止损 / 离场价", "第一阻力/目标位", "浮盈 / 浮亏怎么办"]);
     expect(await page.textContent(`${card} .pcell[data-cell="go"] .pc-main`)).toContain("减仓");
+    expect(errors).toEqual([]);
+    await page.close();
+  }, 30_000);
+
+  test("找打法的仓位格：股数后面一行仓位比例，没填账户也有；默认视图看得见、没被挡（ADR 0039）", async () => {
+    const { page, errors } = await open(undefined, "SPY@2024-04-19");
+    expect(analyzeCalls.some((a) => a[0] === "SPY" && a.join(" ").includes("--risk-pct 1") && !a.includes("--account"))).toBe(true);
+    const cell = '[data-step="play"] .pcell[data-cell="size"] .pc-main';
+    await scrollIntoCenter(page, cell);
+    expect(await notCovered(page, cell)).toBe(true);
+    expect((await page.textContent(cell))!.replace(/\s+/g, " ")).toMatch(/用账户的 \d+(\.\d)?%（止损幅度 [\d.]+%，每笔亏账户的 1%）/);
     expect(errors).toEqual([]);
     await page.close();
   }, 30_000);

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { Analysis } from "../src/citations.ts";
-import { buildChecklist, buildForecast, buildPlans, LEAN_CALL, LEAN_EVIDENCE, ma20Claim, planFacts, planLine, playKey, rrText, sizeText, SOLVER_EVIDENCE } from "../src/plan.ts";
+import { buildChecklist, buildForecast, buildPlans, LEAN_CALL, LEAN_EVIDENCE, ma20Claim, planFacts, planLine, playKey, positionPctText, rrText, sizeText, SOLVER_EVIDENCE } from "../src/plan.ts";
 import nvda from "./fixtures/nvda-analysis.json";
 import spyJson from "./fixtures/spy-2024-04-19-analysis.json";
 
@@ -757,6 +757,42 @@ describe("触发价离现价还远（ADR 0026）：盈亏比到时重算，不�
   test("不远时照旧：NVDA 原样还是不做", () => {
     expect(buildPlans(bear).flat.action).toBe("不做：盈亏比 0.57:1，不到 3:1。");
     expect(buildPlans(bear).flat.items.some((i) => i.label === "触发价")).toBe(false);
+  });
+});
+
+describe("仓位比例：用账户的百分之几（ADR 0039）", () => {
+  const withSize = (size: Record<string, unknown>, far = false) => {
+    const t = structuredClone(bear.trade_plan.flat);
+    t.size = { ...t.size!, ...size } as typeof t.size;
+    if (far) t.entry = { ...t.entry!, far: { level: 190, day: 6, days: 30 } };
+    return t;
+  };
+  test("按比例：每笔亏账户的 1%、止损幅度 2% → 用账户的 50%", () => {
+    expect(positionPctText(withSize({ risk_pct: 1, stop_pct: 2, account_pct: 50 }))).toBe("用账户的 50%（止损幅度 2%，每笔亏账户的 1%）。");
+  });
+  test("固定金额换算出来的比例照样写，小数保留到有意义的位数", () => {
+    expect(positionPctText(withSize({ risk_pct: 0.8, stop_pct: 3.2, account_pct: 25 }))).toBe("用账户的 25%（止损幅度 3.2%，每笔亏账户的 0.8%）。");
+  });
+  test("固定金额又没填账户：算不出比例，不写这一行", () => {
+    expect(positionPctText(withSize({ risk_pct: null, stop_pct: 2, account_pct: null }))).toBeNull();
+  });
+  test("超过 100%：如实写，按买得起的最多股数", () => {
+    expect(positionPctText(withSize({ risk_pct: 1, stop_pct: 0.4, account_pct: 250 })))
+      .toBe("要用账户的 250%（止损幅度 0.4%，每笔亏账户的 1%），超过账户：按买得起的最多股数。");
+  });
+  test("触发价离现价还远：和股数一样到时重算", () => {
+    expect(positionPctText(withSize({ risk_pct: 1, stop_pct: 2, account_pct: 50 }, true))).toBe("触发价离现价还远，到时重算。");
+  });
+  test("没有止损（没有仓位）：不写", () => {
+    const t = structuredClone(bear.trade_plan.flat);
+    t.size = null;
+    expect(positionPctText(t)).toBeNull();
+  });
+  test("计划里股数后面紧跟一条「仓位比例」", () => {
+    const a = structuredClone(bear);
+    a.trade_plan.flat.size = { ...a.trade_plan.flat.size!, risk_pct: 1, stop_pct: 2, account_pct: 50 } as typeof a.trade_plan.flat.size;
+    const labels = buildPlans(a).flat.items.map((i) => i.label);
+    expect(labels[labels.indexOf("股数") + 1]).toBe("仓位比例");
   });
 });
 

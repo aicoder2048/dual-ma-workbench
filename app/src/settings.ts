@@ -56,13 +56,13 @@ export const DEFAULT_SETTINGS: Settings = {
 };
 
 /**
- * 设置里的仓位 → 脚本参数（交易计划的股数按它算）。按比例时没填账户就什么都不传（脚本只给每 1 万元风险的股数）；
+ * 设置里的仓位 → 脚本参数（交易计划的股数按它算）。按比例时没填账户也传比例：股数只给每 1 万元风险的，但仓位占账户的比例照样算得出（ADR 0039）；
  * 按金额时金额本身就够算股数（视频 F：最大亏损用金额），账户只用来封顶。
  */
 export function sizingArgs(s: Pick<Settings, "account" | "riskMode" | "riskPct" | "riskAmount">): string[] {
   const account = s.account ? ["--account", String(s.account)] : [];
   if (s.riskMode === "amount" && s.riskAmount) return [...account, "--risk-amount", String(s.riskAmount)];
-  return s.account ? [...account, "--risk-pct", String(s.riskPct)] : [];
+  return [...account, "--risk-pct", String(s.riskPct)];
 }
 
 /** 设置里的数据源 → 脚本的 --source 参数。Polygon 允许回退，否则回放早年日期会失败。 */

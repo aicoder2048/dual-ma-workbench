@@ -103,7 +103,9 @@ describe("仓位设置：账户规模和每笔可承受亏损", () => {
     expect(DEFAULT_SETTINGS).toMatchObject({ account: null, riskMode: "pct", riskPct: 1, riskAmount: null });
   });
   test("按比例：填了账户才传给脚本；没填就什么都不传（脚本只给每 1 万元风险的股数）", () => {
-    expect(sizingArgs(DEFAULT_SETTINGS)).toEqual([]);
+    // 没填账户也传比例：仓位占账户 = 比例 ÷ 止损幅度，不需要账户总额（ADR 0039）
+    expect(sizingArgs(DEFAULT_SETTINGS)).toEqual(["--risk-pct", "1"]);
+    expect(sizingArgs({ ...DEFAULT_SETTINGS, riskPct: 0.5 })).toEqual(["--risk-pct", "0.5"]);
     expect(sizingArgs({ ...DEFAULT_SETTINGS, account: 50000 })).toEqual(["--account", "50000", "--risk-pct", "1"]);
     expect(sizingArgs({ ...DEFAULT_SETTINGS, account: 50000, riskPct: 0.5 })).toEqual(["--account", "50000", "--risk-pct", "0.5"]);
   });

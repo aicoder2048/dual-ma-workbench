@@ -653,7 +653,7 @@ const CELLS = {
       lead: (c) => priceLine("止损价", c.plan.stop, c.close, riskNote(c)), empty: () => "不进场，没有止损。" },
     { key: "target", title: "第一阻力/目标位和盈亏比", main: ["阻力位/目标位", "到第一阻力", "盈亏比"], basis: ["参考"],
       empty: (c) => (c.buys ? `算不了：${c.plan.trade.notes.join("；") || "第一阻力算不出"}。` : "不进场，不算阻力位和盈亏比。") },
-    { key: "size", title: "仓位", main: ["股数"],
+    { key: "size", title: "仓位", main: ["股数", "仓位比例"],
       empty: (c) => (c.buys ? `算不了：${c.plan.trade.notes.join("；") || "没有止损价"}。` : "不进场，不算股数。") },
   ],
   holding: [

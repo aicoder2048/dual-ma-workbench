@@ -461,6 +461,23 @@ export function sizeText(t: TradePlan): string | null {
   return `${z.shares} 股：${z.basis}。`;
 }
 
+/** 百分比：去掉没意义的尾零（50、3.2、0.4）。 */
+const pctNum = (x: number) => String(Number(x.toFixed(x >= 10 ? 0 : 1)));
+
+/**
+ * 仓位比例一句（ADR 0039）：用账户的百分之几 = 每笔愿意亏的比例 ÷ 止损幅度，不需要账户总额。
+ * 按固定金额又没填账户时算不出比例，不写；超过 100% 如实写，按买得起的最多股数；触发价离现价还远时到时重算。
+ */
+export function positionPctText(t: TradePlan): string | null {
+  const z = t.size;
+  if (!z || z.account_pct == null || z.risk_pct == null || z.stop_pct == null) return null;
+  if (t.entry?.far) return `${RR_FAR}。`;
+  const why = `止损幅度 ${pctNum(z.stop_pct)}%，每笔亏账户的 ${pctNum(z.risk_pct)}%`;
+  return z.account_pct > 100
+    ? `要用账户的 ${pctNum(z.account_pct)}%（${why}），超过账户：按买得起的最多股数。`
+    : `用账户的 ${pctNum(z.account_pct)}%（${why}）。`;
+}
+
 /** 触发价离现价还远：按收盘持平推演，最早哪天、站上哪个价位 20 线组一起拐头，和明天要站上的触发价。 */
 function farText(far: PlanFar, tomorrow: number, close: number, dates: string[]): string {
   return `按收盘持平推演，20 线组最早约 ${far.day} 个交易日后（${dates[far.day - 1]}）、收盘站上 ${at(far.level, close)}才会一起拐头；` +
@@ -481,6 +498,8 @@ function tradeItems(t: TradePlan, close: number, flat: boolean, dates: string[])
   if (rr) out.push({ label: "盈亏比", text: rr, rules: ["P24"] });
   const size = flat ? sizeText(t) : null;
   if (size) out.push({ label: "股数", text: size, rules: ["A6"] });
+  const pct = flat ? positionPctText(t) : null;
+  if (pct) out.push({ label: "仓位比例", text: pct, rules: ["A6"] });
   if (t.mountain) out.push({ label: "参考", text: mountainText(t.mountain, close), rules: ["P38"] });
   return out;
 }
@@ -562,6 +581,7 @@ export function planFacts(tp: PlanSet, close: number): [string, string, string][
       ["计划.到目标", "空仓进场后到了第一阻力怎么办（P25）", f.at_target ?? "没有阻力位"],
       ["计划.盈亏比", "盈亏比：(第一阻力 − 进场) ÷ (进场 − 止损)，不到 3:1 不做（P24）；触发价离现价还远时到时重算", rrText(f) ?? `算不了：${why}`],
       ["计划.股数", "建议股数：每笔可承受亏损 ÷ (进场 − 止损)，向下取整（A6）", sizeText(f) ?? `算不了：${why}`],
+      ["计划.仓位比例", "仓位占账户 = 每笔愿意亏的比例 ÷ 止损幅度（ADR 0039）", positionPctText(f) ?? "算不出：按固定金额又没填账户，或没有止损"],
     );
   }
   out.push(

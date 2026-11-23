@@ -189,7 +189,11 @@ export interface PlanTarget { price: number; kind: string; rule: string; source:
 /** 上方最近的整座筹码山（P38）：只作参考价位，不是目标（docs/adr/0018.md）。foot 山脚、top 山顶，date 是统计区间"开始~结束"。 */
 export interface PlanMountain { foot: number; top: number; date: string }
 /** shares 为 null 时没填账户，看 per_10k（每 1 万元风险对应多少股）。 */
-export interface PlanSize { shares: number | null; risk_amount: number | null; per_10k: number; unit_risk: number; capped: boolean; basis: string }
+/** stop_pct：止损幅度 %；risk_pct：每笔亏账户的 %（固定金额又没填账户时 null）；account_pct：仓位占账户 % = risk_pct ÷ stop_pct，可能超过 100（ADR 0039）。 */
+export interface PlanSize {
+  shares: number | null; risk_amount: number | null; per_10k: number; unit_risk: number; capped: boolean; basis: string;
+  stop_pct?: number; risk_pct?: number | null; account_pct?: number | null;
+}
 export type RrVerdict = "不做" | "可做" | "理想";
 export interface TradePlan {
   entry: PlanEntry | null;
